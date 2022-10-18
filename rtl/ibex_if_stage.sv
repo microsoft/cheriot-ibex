@@ -1,3 +1,7 @@
+// Copyright Microsoft Corporation
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+
 // Copyright lowRISC contributors.
 // Copyright 2018 ETH Zurich and University of Bologna, see also CREDITS.md.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
@@ -12,7 +16,7 @@
 
 `include "prim_assert.sv"
 
-module ibex_if_stage import ibex_pkg::*; #(
+module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
   parameter int unsigned DmHaltAddr        = 32'h1A110800,
   parameter int unsigned DmExceptionAddr   = 32'h1A110808,
   parameter bit          DummyInstructions = 1'b0,
@@ -25,13 +29,16 @@ module ibex_if_stage import ibex_pkg::*; #(
   parameter bit          ResetAll          = 1'b0,
   parameter lfsr_seed_t  RndCnstLfsrSeed   = RndCnstLfsrSeedDefault,
   parameter lfsr_perm_t  RndCnstLfsrPerm   = RndCnstLfsrPermDefault,
-  parameter bit          BranchPredictor   = 1'b0
+  parameter bit          BranchPredictor   = 1'b0,
+  parameter bit          Cheri32E          = 1'b1
 ) (
   input  logic                         clk_i,
   input  logic                         rst_ni,
 
+  input  logic                         cheri_pmode_i,
   input  logic [31:0]                  boot_addr_i,              // also used for mtvec
   input  logic                         req_i,                    // instruction request control
+  input  logic                         debug_mode_i,
 
   // instruction cache interface
   output logic                        instr_req_o,
@@ -42,17 +49,17 @@ module ibex_if_stage import ibex_pkg::*; #(
   input  logic                        instr_err_i,
 
   // ICache RAM IO
-  output logic [IC_NUM_WAYS-1:0]      ic_tag_req_o,
-  output logic                        ic_tag_write_o,
-  output logic [IC_INDEX_W-1:0]       ic_tag_addr_o,
-  output logic [TagSizeECC-1:0]       ic_tag_wdata_o,
-  input  logic [TagSizeECC-1:0]       ic_tag_rdata_i [IC_NUM_WAYS],
-  output logic [IC_NUM_WAYS-1:0]      ic_data_req_o,
-  output logic                        ic_data_write_o,
-  output logic [IC_INDEX_W-1:0]       ic_data_addr_o,
-  output logic [LineSizeECC-1:0]      ic_data_wdata_o,
-  input  logic [LineSizeECC-1:0]      ic_data_rdata_i [IC_NUM_WAYS],
-  input  logic                        ic_scr_key_valid_i,
+//  output logic [IC_NUM_WAYS-1:0]      ic_tag_req_o,
+//  output logic                        ic_tag_write_o,
+//  output logic [IC_INDEX_W-1:0]       ic_tag_addr_o,
+//  output logic [TagSizeECC-1:0]       ic_tag_wdata_o,
+//  input  logic [TagSizeECC-1:0]       ic_tag_rdata_i [IC_NUM_WAYS],
+//  output logic [IC_NUM_WAYS-1:0]      ic_data_req_o,
+//  output logic                        ic_data_write_o,
+//  output logic [IC_INDEX_W-1:0]       ic_data_addr_o,
+//  output logic [LineSizeECC-1:0]      ic_data_wdata_o,
+//  input  logic [LineSizeECC-1:0]      ic_data_rdata_i [IC_NUM_WAYS],
+//  input  logic                        ic_scr_key_valid_i,
 
   // output of ID stage
   output logic                        instr_valid_id_o,         // instr in IF-ID is valid
@@ -110,7 +117,8 @@ module ibex_if_stage import ibex_pkg::*; #(
 
   // misc signals
   output logic                        pc_mismatch_alert_o,
-  output logic                        if_busy_o                 // IF stage is busy fetching instr
+  output logic                        if_busy_o,                // IF stage is busy fetching instr
+  input  full_cap_t                   pcc_fullcap_i
 );
 
   logic              instr_valid_id_d, instr_valid_id_q;
@@ -163,6 +171,8 @@ module ibex_if_stage import ibex_pkg::*; #(
   logic        [7:0] unused_boot_addr;
   logic        [7:0] unused_csr_mtvec;
 
+  logic              cheri_acc_vio;
+
   assign unused_boot_addr = boot_addr_i[7:0];
   assign unused_csr_mtvec = csr_mtvec_i[7:0];
 
@@ -173,8 +183,8 @@ module ibex_if_stage import ibex_pkg::*; #(
   // exception PC selection mux
   always_comb begin : exc_pc_mux
     unique case (exc_pc_mux_i)
-      EXC_PC_EXC:     exc_pc = { csr_mtvec_i[31:8], 8'h00                    };
-      EXC_PC_IRQ:     exc_pc = { csr_mtvec_i[31:8], 1'b0, irq_id[4:0], 2'b00 };
+      EXC_PC_EXC:     exc_pc = csr_mtvec_i[0] ? { csr_mtvec_i[31:8], 8'h00 } : {csr_mtvec_i[31:2], 2'b00};
+      EXC_PC_IRQ:     exc_pc = csr_mtvec_i[0] ? { csr_mtvec_i[31:8], 1'b0, irq_id[4:0], 2'b00 } : {csr_mtvec_i[31:2], 2'b00};
       EXC_PC_DBD:     exc_pc = DmHaltAddr;
       EXC_PC_DBG_EXC: exc_pc = DmExceptionAddr;
       default:        exc_pc = { csr_mtvec_i[31:8], 8'h00                    };
@@ -204,56 +214,6 @@ module ibex_if_stage import ibex_pkg::*; #(
   // tell CS register file to initialize mtvec on boot
   assign csr_mtvec_init_o = (pc_mux_i == PC_BOOT) & pc_set_i;
 
-  if (ICache) begin : gen_icache
-    // Full I-Cache option
-    ibex_icache #(
-      .ICacheECC       (ICacheECC),
-      .ResetAll        (ResetAll),
-      .BusSizeECC      (BusSizeECC),
-      .TagSizeECC      (TagSizeECC),
-      .LineSizeECC     (LineSizeECC)
-    ) icache_i (
-        .clk_i               ( clk_i                      ),
-        .rst_ni              ( rst_ni                     ),
-
-        .req_i               ( req_i                      ),
-
-        .branch_i            ( branch_req                 ),
-        .branch_mispredict_i ( nt_branch_mispredict_i     ),
-        .mispredict_addr_i   ( nt_branch_addr_i           ),
-        .addr_i              ( {fetch_addr_n[31:1], 1'b0} ),
-
-        .ready_i             ( fetch_ready                ),
-        .valid_o             ( fetch_valid                ),
-        .rdata_o             ( fetch_rdata                ),
-        .addr_o              ( fetch_addr                 ),
-        .err_o               ( fetch_err                  ),
-        .err_plus2_o         ( fetch_err_plus2            ),
-
-        .instr_req_o         ( instr_req_o                ),
-        .instr_addr_o        ( instr_addr_o               ),
-        .instr_gnt_i         ( instr_gnt_i                ),
-        .instr_rvalid_i      ( instr_rvalid_i             ),
-        .instr_rdata_i       ( instr_rdata_i              ),
-        .instr_err_i         ( instr_err_i                ),
-
-        .ic_tag_req_o        ( ic_tag_req_o               ),
-        .ic_tag_write_o      ( ic_tag_write_o             ),
-        .ic_tag_addr_o       ( ic_tag_addr_o              ),
-        .ic_tag_wdata_o      ( ic_tag_wdata_o             ),
-        .ic_tag_rdata_i      ( ic_tag_rdata_i             ),
-        .ic_data_req_o       ( ic_data_req_o              ),
-        .ic_data_write_o     ( ic_data_write_o            ),
-        .ic_data_addr_o      ( ic_data_addr_o             ),
-        .ic_data_wdata_o     ( ic_data_wdata_o            ),
-        .ic_data_rdata_i     ( ic_data_rdata_i            ),
-        .ic_scr_key_valid_i  ( ic_scr_key_valid_i         ),
-
-        .icache_enable_i     ( icache_enable_i            ),
-        .icache_inval_i      ( icache_inval_i             ),
-        .busy_o              ( prefetch_busy              )
-    );
-  end else begin : gen_prefetch_buffer
     // prefetch buffer, caches a fixed number of instructions
     ibex_prefetch_buffer #(
       .ResetAll        (ResetAll)
@@ -284,24 +244,22 @@ module ibex_if_stage import ibex_pkg::*; #(
 
         .busy_o              ( prefetch_busy              )
     );
-    // ICache tieoffs
-    logic                   unused_icen, unused_icinv, unused_scr_key_valid;
-    logic [TagSizeECC-1:0]  unused_tag_ram_input [IC_NUM_WAYS];
-    logic [LineSizeECC-1:0] unused_data_ram_input [IC_NUM_WAYS];
-    assign unused_icen           = icache_enable_i;
-    assign unused_icinv          = icache_inval_i;
-    assign unused_tag_ram_input  = ic_tag_rdata_i;
-    assign unused_data_ram_input = ic_data_rdata_i;
-    assign unused_scr_key_valid  = ic_scr_key_valid_i;
-    assign ic_tag_req_o          = 'b0;
-    assign ic_tag_write_o        = 'b0;
-    assign ic_tag_addr_o         = 'b0;
-    assign ic_tag_wdata_o        = 'b0;
-    assign ic_data_req_o         = 'b0;
-    assign ic_data_write_o       = 'b0;
-    assign ic_data_addr_o        = 'b0;
-    assign ic_data_wdata_o       = 'b0;
-  end
+`ifndef SYNTHESIS
+    // If we don't instantiate an icache and this is a simulation then we have a problem because the
+    // simulator might discard the icache module entirely, including some DPI exports that it
+    // implies. This then causes problems for linking against C++ testbench code that expected them.
+    // As a slightly ugly hack, let's define the DPI functions here (the real versions are defined
+    // in prim_util_get_scramble_params.svh)
+    export "DPI-C" function simutil_get_scramble_key;
+    export "DPI-C" function simutil_get_scramble_nonce;
+    function automatic int simutil_get_scramble_key(output bit [127:0] val);
+      return 0;
+    endfunction
+    function automatic int simutil_get_scramble_nonce(output bit [319:0] nonce);
+      return 0;
+    endfunction
+`endif
+
 
   assign unused_fetch_addr_n0 = fetch_addr_n[0];
 
@@ -317,22 +275,42 @@ module ibex_if_stage import ibex_pkg::*; #(
                             (if_instr_addr[2] & ~instr_is_compressed & pmp_err_if_plus2_i);
 
   // Combine bus errors and pmp errors
-  assign if_instr_err = if_instr_bus_err | if_instr_pmp_err;
+  assign if_instr_err = if_instr_bus_err | if_instr_pmp_err | cheri_acc_vio;
 
   // Capture the second half of the address for errors on the second part of an instruction
   assign if_instr_err_plus2 = ((if_instr_addr[2] & ~instr_is_compressed & pmp_err_if_plus2_i) |
                                fetch_err_plus2) & ~pmp_err_if_i;
+
+  // let's only check this in pure-cap mode. otherwise jalr/ret gives so much headache
+  // pre-calculate headroom to improve memory read timing
+  logic [2:0]  instr_len;
+  logic [32:0] instr_hdrm;
+  logic        hdrm_ge4, hdrm_ge2, hdrm_ok;
+
+  assign instr_len  = (fetch_valid & ~fetch_err & instr_is_compressed) ? 2 : 4;
+  assign instr_hdrm = pcc_fullcap_i.top33 - if_instr_addr;
+  assign hdrm_ge4   = (instr_hdrm >= 4);
+  assign hdrm_ge2   = (instr_hdrm >= 2);
+  assign hdrm_ok    = instr_is_compressed ? hdrm_ge2 : hdrm_ge4;
+
+  // only issue cheri_acc_vio on valid fetches
+  assign cheri_acc_vio = cheri_pmode_i & ~debug_mode_i & fetch_valid & ~fetch_err &
+                        ((if_instr_addr < pcc_fullcap_i.base32) || instr_hdrm[32] || ~hdrm_ok  ||
+                         ~pcc_fullcap_i.perms[PERM_EX] || ~pcc_fullcap_i.valid);
 
   // compressed instruction decoding, or more precisely compressed instruction
   // expander
   //
   // since it does not matter where we decompress instructions, we do it here
   // to ease timing closure
-  ibex_compressed_decoder compressed_decoder_i (
+  ibex_compressed_decoder #(
+    .Cheri32E (Cheri32E)
+  ) compressed_decoder_i (
     .clk_i          (clk_i),
     .rst_ni         (rst_ni),
     .valid_i        (fetch_valid & ~fetch_err),
     .instr_i        (if_instr_rdata),
+    .cheri_pmode_i  (cheri_pmode_i),
     .instr_o        (instr_decompressed),
     .is_compressed_o(instr_is_compressed),
     .illegal_instr_o(illegal_c_insn)
@@ -480,11 +458,15 @@ module ibex_if_stage import ibex_pkg::*; #(
 
     assign prev_instr_addr_incr = pc_id_o + (instr_is_compressed_id_o ? 32'd2 : 32'd4);
 
+    `ifdef FPGA
     // Buffer anticipated next PC address to ensure optimiser cannot remove the check.
     prim_buf #(.Width(32)) u_prev_instr_addr_incr_buf (
       .in_i (prev_instr_addr_incr),
       .out_o(prev_instr_addr_incr_buf)
     );
+    `else
+      assign prev_instr_addr_incr_buf = prev_instr_addr_incr;
+    `endif
 
     // Check that the address equals the previous address +2/+4
     assign pc_mismatch_alert_o = prev_instr_seq_q & (pc_if_o != prev_instr_addr_incr_buf);

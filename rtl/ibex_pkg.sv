@@ -1,3 +1,7 @@
+// Copyright Microsoft Corporation
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+
 // Copyright lowRISC contributors.
 // Copyright 2017 ETH Zurich and University of Bologna, see also CREDITS.md.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
@@ -66,7 +70,9 @@ package ibex_pkg;
     OPCODE_BRANCH   = 7'h63,
     OPCODE_JALR     = 7'h67,
     OPCODE_JAL      = 7'h6f,
-    OPCODE_SYSTEM   = 7'h73
+    OPCODE_SYSTEM   = 7'h73,
+    OPCODE_CHERI    = 7'h5b,
+    OPCODE_AUICGP   = 7'h7b
   } opcode_e;
 
 
@@ -255,9 +261,11 @@ package ibex_pkg;
   } op_b_sel_e;
 
   // Immediate b selection
-  typedef enum logic [2:0] {
+  typedef enum logic [3:0] {
     IMM_B_I,
+    IMM_B_I_CHERI_EXT,
     IMM_B_S,
+    IMM_B_S_CHERI_EXT,
     IMM_B_B,
     IMM_B_U,
     IMM_B_J,
@@ -317,7 +325,8 @@ package ibex_pkg;
     EXC_CAUSE_LOAD_ACCESS_FAULT  = {1'b0, 5'd05},
     EXC_CAUSE_STORE_ACCESS_FAULT = {1'b0, 5'd07},
     EXC_CAUSE_ECALL_UMODE        = {1'b0, 5'd08},
-    EXC_CAUSE_ECALL_MMODE        = {1'b0, 5'd11}
+    EXC_CAUSE_ECALL_MMODE        = {1'b0, 5'd11},
+    EXC_CAUSE_CHERI_FAULT        = {1'b0, 5'd28}
   } exc_cause_e;
 
   // Debug cause

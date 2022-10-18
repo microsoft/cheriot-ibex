@@ -1,3 +1,7 @@
+// Copyright Microsoft Corporation
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+
 // Copyright lowRISC contributors.
 // Copyright 2018 ETH Zurich and University of Bologna, see also CREDITS.md.
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
@@ -12,7 +16,7 @@
 
 `include "prim_assert.sv"
 
-module ibex_cs_registers #(
+module ibex_cs_registers import cheri_pkg::*;  #(
   parameter bit               DbgTriggerEn      = 0,
   parameter int unsigned      DbgHwBreakNum     = 1,
   parameter bit               DataIndTiming     = 1'b0,
@@ -32,6 +36,7 @@ module ibex_cs_registers #(
   input  logic                 clk_i,
   input  logic                 rst_ni,
 
+  input  logic                 cheri_pmode_i,
   // Hart ID
   input  logic [31:0]          hart_id_i,
 
@@ -52,6 +57,18 @@ module ibex_cs_registers #(
   input  ibex_pkg::csr_op_e    csr_op_i,
   input                        csr_op_en_i,
   output logic [31:0]          csr_rdata_o,
+
+  input  logic                 cheri_csr_access_i,
+  input  logic [4:0]           cheri_csr_addr_i,
+  input  logic [31:0]          cheri_csr_wdata_i,
+  input  reg_cap_t             cheri_csr_wcap_i,
+  input  cheri_csr_op_e        cheri_csr_op_i,
+  input  logic                 cheri_csr_op_en_i,
+  input  logic                 cheri_csr_set_mie_i,
+  input  logic                 cheri_csr_clr_mie_i,
+
+  output logic [31:0]          cheri_csr_rdata_o,
+  output reg_cap_t             cheri_csr_rcap_o,
 
   // interrupts
   input  logic                 irq_software_i,
@@ -118,7 +135,14 @@ module ibex_cs_registers #(
   input  logic                 mem_store_i,                 // store to memory in this cycle
   input  logic                 dside_wait_i,                // core waiting for the dside
   input  logic                 mul_wait_i,                  // core waiting for multiply
-  input  logic                 div_wait_i                   // core waiting for divide
+  input  logic                 div_wait_i,                   // core waiting for divide
+
+  input  logic                 cheri_branch_req_i,
+  input  logic [31:0]          cheri_branch_target_i,
+  input  full_cap_t            pcc_fullcap_i,
+  output full_cap_t            pcc_fullcap_o,
+
+  output logic                 csr_dbg_tclr_fault_o
 );
 
   import ibex_pkg::*;
@@ -198,11 +222,13 @@ module ibex_cs_registers #(
   logic        mscratch_en;
   logic [31:0] mepc_q, mepc_d;
   logic        mepc_en;
+  reg_cap_t    mepc_cap;
   logic  [5:0] mcause_q, mcause_d;
   logic        mcause_en;
   logic [31:0] mtval_q, mtval_d;
   logic        mtval_en;
   logic [31:0] mtvec_q, mtvec_d;
+  reg_cap_t    mtvec_cap;
   logic        mtvec_err;
   logic        mtvec_en;
   irqs_t       mip;
@@ -210,9 +236,11 @@ module ibex_cs_registers #(
   logic        dcsr_en;
   logic [31:0] depc_q, depc_d;
   logic        depc_en;
+  reg_cap_t    depc_cap;
   logic [31:0] dscratch0_q;
   logic [31:0] dscratch1_q;
   logic        dscratch0_en, dscratch1_en;
+  reg_cap_t    dscratch0_cap, dscratch1_cap;
 
   // CSRs for recoverable NMIs
   // NOTE: these CSRS are nonstandard, see https://github.com/riscv/riscv-isa-manual/issues/261
@@ -271,6 +299,20 @@ module ibex_cs_registers #(
 
   logic [7:0]  unused_boot_addr;
   logic [2:0]  unused_csr_addr;
+
+  logic        mepc_en_combi, mepc_en_cheri;
+  logic [31:0] mepc_d_combi;
+
+  logic        mtvec_en_combi, mtvec_en_cheri;
+  logic [31:0] mtvec_d_combi;
+
+  logic        depc_en_combi, depc_en_cheri;
+  logic [31:0] depc_d_combi;
+
+  logic        dscratch0_en_combi, dscratch0_en_cheri;
+  logic [31:0] dscratch0_d_combi;
+  logic        dscratch1_en_combi, dscratch1_en_cheri;
+  logic [31:0] dscratch1_d_combi;
 
   assign unused_boot_addr = boot_addr_i[7:0];
 
@@ -568,7 +610,7 @@ module ibex_cs_registers #(
         CSR_MSCRATCH: mscratch_en = 1'b1;
 
         // mepc: exception program counter
-        CSR_MEPC: mepc_en = 1'b1;
+        CSR_MEPC: mepc_en = ~cheri_pmode_i;   // disabled for pure cap mode (only allow cap writes)
 
         // mcause
         CSR_MCAUSE: mcause_en = 1'b1;
@@ -577,7 +619,7 @@ module ibex_cs_registers #(
         CSR_MTVAL: mtval_en = 1'b1;
 
         // mtvec
-        CSR_MTVEC: mtvec_en = 1'b1;
+        CSR_MTVEC: mtvec_en = ~cheri_pmode_i;  // disabled for pure cap mode (only allow cap writes)
 
         CSR_DCSR: begin
           dcsr_d = csr_wdata_int;
@@ -767,9 +809,17 @@ module ibex_cs_registers #(
   assign csr_wr = (csr_op_i inside {CSR_OP_WRITE, CSR_OP_SET, CSR_OP_CLEAR});
 
   // only write CSRs during one clock cycle
-  assign csr_we_int  = csr_wr & csr_op_en_i & ~illegal_csr_insn_o;
 
-  assign csr_rdata_o = csr_rdata_int;
+  // enforcing the CHERI CSR access policy. QQQ
+  //  -- is reading zero back ok? or do we need to generate illegal access exception??
+  //  -- also note IBEX didn't implement user-mode TIME/counters.
+  //     for now we are allowing reading the M-mode counters (assuming only use single priv level)
+
+  logic read_ok;
+  assign read_ok = ~cheri_pmode_i || debug_mode_i || pcc_fullcap_o.perms[PERM_SR] || ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<=CSR_MHPMCOUNTER31H));
+
+  assign csr_we_int  = csr_wr & csr_op_en_i & (~cheri_pmode_i | debug_mode_i | pcc_fullcap_o.perms[PERM_SR]) & ~illegal_csr_insn_o;
+  assign csr_rdata_o = read_ok ? csr_rdata_int : 0;
 
   // directly output some registers
   assign csr_mepc_o  = mepc_q;
@@ -797,6 +847,18 @@ module ibex_cs_registers #(
                                           mpp:  PRIV_LVL_U,
                                           mprv: 1'b0,
                                           tw:   1'b0};
+
+  // adding set/clr of mie - it's a bit of a hack now let's just worry about it later.. kliu QQQ
+  logic    mstatus_en_combi;
+  status_t mstatus_d_combi;
+
+  assign mstatus_en_combi = mstatus_en | cheri_csr_clr_mie_i | cheri_csr_set_mie_i;
+
+  always_comb begin
+   mstatus_d_combi      = mstatus_d;
+   mstatus_d_combi.mie  = (mstatus_d.mie & ~cheri_csr_clr_mie_i) | cheri_csr_set_mie_i;
+  end
+
   ibex_csr #(
     .Width     ($bits(status_t)),
     .ShadowCopy(ShadowCSR),
@@ -804,11 +866,14 @@ module ibex_cs_registers #(
   ) u_mstatus_csr (
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),
-    .wr_data_i ({mstatus_d}),
-    .wr_en_i   (mstatus_en),
+    .wr_data_i ({mstatus_d_combi}),
+    .wr_en_i   (mstatus_en_combi),
     .rd_data_o (mstatus_q),
     .rd_error_o(mstatus_err)
   );
+
+  assign mepc_en_combi = mepc_en | mepc_en_cheri;
+  assign mepc_d_combi = ({32{mepc_en}} & mepc_d) | ({32{mepc_en_cheri}} & cheri_csr_wdata_i);
 
   // MEPC
   ibex_csr #(
@@ -818,8 +883,8 @@ module ibex_cs_registers #(
   ) u_mepc_csr (
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),
-    .wr_data_i (mepc_d),
-    .wr_en_i   (mepc_en),
+    .wr_data_i (mepc_d_combi),
+    .wr_en_i   (mepc_en_combi),
     .rd_data_o (mepc_q),
     .rd_error_o()
   );
@@ -884,6 +949,11 @@ module ibex_cs_registers #(
     .rd_error_o()
   );
 
+
+  assign mtvec_en_combi = mtvec_en | mtvec_en_cheri;
+
+  assign mtvec_d_combi = ({32{mtvec_en}} & mtvec_d) | ({32{mtvec_en_cheri}} & cheri_csr_wdata_i[31:0]);
+
   // MTVEC
   ibex_csr #(
     .Width     (32),
@@ -892,8 +962,8 @@ module ibex_cs_registers #(
   ) u_mtvec_csr (
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),
-    .wr_data_i (mtvec_d),
-    .wr_en_i   (mtvec_en),
+    .wr_data_i (mtvec_d_combi),
+    .wr_en_i   (mtvec_en_combi),
     .rd_data_o (mtvec_q),
     .rd_error_o(mtvec_err)
   );
@@ -918,6 +988,9 @@ module ibex_cs_registers #(
     .rd_error_o()
   );
 
+  assign depc_en_combi = depc_en | depc_en_cheri;
+  assign depc_d_combi = ({32{depc_en}} & depc_d) | ({32{depc_en_cheri}} & cheri_csr_wdata_i);
+
   // DEPC
   ibex_csr #(
     .Width     (32),
@@ -926,11 +999,14 @@ module ibex_cs_registers #(
   ) u_depc_csr (
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),
-    .wr_data_i (depc_d),
-    .wr_en_i   (depc_en),
+    .wr_data_i (depc_d_combi),
+    .wr_en_i   (depc_en_combi),
     .rd_data_o (depc_q),
     .rd_error_o()
   );
+
+  assign dscratch0_en_combi = dscratch0_en | dscratch0_en_cheri;
+  assign dscratch0_d_combi = ({32{dscratch0_en}} & csr_wdata_int) | ({32{dscratch0_en_cheri}} & cheri_csr_wdata_i);
 
   // DSCRATCH0
   ibex_csr #(
@@ -940,13 +1016,16 @@ module ibex_cs_registers #(
   ) u_dscratch0_csr (
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),
-    .wr_data_i (csr_wdata_int),
-    .wr_en_i   (dscratch0_en),
+    .wr_data_i (dscratch0_d_combi),
+    .wr_en_i   (dscratch0_en_combi),
     .rd_data_o (dscratch0_q),
     .rd_error_o()
   );
 
-  // DSCRATCH1
+  assign dscratch1_en_combi = dscratch1_en | dscratch1_en_cheri;
+  assign dscratch1_d_combi = ({32{dscratch1_en}} & csr_wdata_int) | ({32{dscratch1_en_cheri}} & cheri_csr_wdata_i);
+
+  // DSCRATCH0
   ibex_csr #(
     .Width     (32),
     .ShadowCopy(1'b0),
@@ -954,8 +1033,8 @@ module ibex_cs_registers #(
   ) u_dscratch1_csr (
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),
-    .wr_data_i (csr_wdata_int),
-    .wr_en_i   (dscratch1_en),
+    .wr_data_i (dscratch1_d_combi),
+    .wr_en_i   (dscratch1_en_combi),
     .rd_data_o (dscratch1_q),
     .rd_error_o()
   );
@@ -1578,5 +1657,187 @@ module ibex_cs_registers #(
   ////////////////
 
   `ASSERT(IbexCsrOpEnRequiresAccess, csr_op_en_i |-> csr_access_i)
+
+  //////////////////////
+  // Cheri CSR's
+  //////////////////////
+
+  pcc_cap_t    pcc_cap_q, pcc_cap_d;
+
+  reg_cap_t     mtdc_cap;
+  logic [31:0]  mtdc_data;
+  reg_cap_t     mscratchc_cap;
+  logic [31:0]  mscratchc_data;  // QQQ - note this is separate from legacy mscratch
+
+  logic [3:0]   mdbg_ctrl;
+
+  logic mtdc_en_cheri, mscratchc_en_cheri;
+
+  always_comb begin
+    case (cheri_csr_addr_i)
+      5'd24:
+        begin
+          cheri_csr_rdata_o = debug_mode_i ? depc_q : 0;
+          cheri_csr_rcap_o  = debug_mode_i ? depc_cap : NULL_REG_CAP;
+        end
+      5'd25:
+        begin
+          cheri_csr_rdata_o = debug_mode_i ? dscratch0_q : 0;
+          cheri_csr_rcap_o  = debug_mode_i ? dscratch0_cap : NULL_REG_CAP;
+        end
+      5'd26:
+        begin
+          cheri_csr_rdata_o = debug_mode_i ? dscratch1_q : 0;
+          cheri_csr_rcap_o  = debug_mode_i ? dscratch1_cap : NULL_REG_CAP;
+        end
+      5'd27:
+        begin
+          cheri_csr_rdata_o = {28'h0, mdbg_ctrl};
+          cheri_csr_rcap_o  = NULL_REG_CAP;
+        end
+      5'd28:
+        begin
+          cheri_csr_rdata_o = mtvec_q;
+          cheri_csr_rcap_o  = mtvec_cap;
+        end
+      5'd29:
+        begin
+          cheri_csr_rdata_o = mtdc_data;
+          cheri_csr_rcap_o  = mtdc_cap;
+        end
+      5'd30:
+        begin
+          cheri_csr_rdata_o = mscratchc_data;
+          cheri_csr_rcap_o  = mscratchc_cap;
+        end
+      5'd31:
+        begin
+          cheri_csr_rdata_o = mepc_q;
+          cheri_csr_rcap_o  = mepc_cap;
+        end
+      default:
+        begin
+          cheri_csr_rdata_o = 32'h0;
+          cheri_csr_rcap_o  = NULL_REG_CAP;
+        end
+    endcase
+  end
+
+  assign pcc_fullcap_o  = pcc2fullcap(pcc_cap_q, pc_id_i);
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      pcc_cap_q  <= PCC_RESET_CAP;
+    end else begin
+      pcc_cap_q  <= pcc_cap_d;
+    end
+  end
+
+  // PCC updating
+  //  -- PC address range checking is always against the pcc_cap, which is only updated with
+  //     CHER CJALR or exceptions. Legacy RV32 jumps/branches can change PC but not the PCC
+  //     bounds/perms, so they are still limited by the orginal bounds in IF stage checking
+  always_comb begin
+    if (csr_save_cause_i) begin              // Exception cases
+      pcc_cap_d = full2pcap(reg2fullcap(mtvec_cap, mtvec_q));
+    end else if (csr_restore_mret_i) begin
+      pcc_cap_d = full2pcap(reg2fullcap(mepc_cap, mepc_q));
+    end else if (csr_restore_dret_i & debug_mode_i) begin
+      pcc_cap_d = full2pcap(reg2fullcap(depc_cap, depc_q));
+    end else if (cheri_branch_req_i) begin
+      pcc_cap_d = full2pcap(pcc_fullcap_i);
+    end else begin
+      pcc_cap_d = pcc_cap_q;
+    end
+  end
+
+  // mtvec extended capability
+  assign mtvec_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd28) && (cheri_csr_op_i == CHERI_CSR_RW);
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni)
+      mtvec_cap <= MTVEC_RESET_CAP;
+    else if (mtvec_en_cheri)
+      mtvec_cap <= cheri_csr_wcap_i;
+  end
+
+  // mepc extended capability
+  assign mepc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd31) && (cheri_csr_op_i == CHERI_CSR_RW);
+
+  // let's not worry about non-stanard recoverable NMI/mstack for now QQQ
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni)
+      mepc_cap <= MEPC_RESET_CAP;
+    else if (csr_save_cause_i & (~debug_csr_save_i) & (~debug_mode_i))
+      mepc_cap <= full2regcap(pcc2fullcap(pcc_cap_q, exception_pc));
+    else if (cheri_pmode_i & mepc_en)            // legacy cssrw; NMI recover
+      mepc_cap <= NULL_REG_CAP;
+    else if (mepc_en_cheri)
+      mepc_cap <= cheri_csr_wcap_i;
+  end
+
+  // MTDC capability
+  assign mtdc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd29) && (cheri_csr_op_i == CHERI_CSR_RW);
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      mtdc_cap  <= MTDC_RESET_CAP;
+      mtdc_data <= 32'h0;
+    end else if (mtdc_en_cheri) begin
+      mtdc_cap  <= cheri_csr_wcap_i;
+      mtdc_data <= cheri_csr_wdata_i;
+    end
+  end
+
+  // MSCRATCHC capability
+  assign mscratchc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd30) && (cheri_csr_op_i == CHERI_CSR_RW);
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      mscratchc_cap  <= MSCRATCHC_RESET_CAP;
+      mscratchc_data <= 32'h0;
+    end else if (mscratchc_en_cheri) begin
+      mscratchc_cap  <= cheri_csr_wcap_i;
+      mscratchc_data <= cheri_csr_wdata_i;
+    end
+  end
+
+  // depc extended capability
+  assign depc_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd24) && (cheri_csr_op_i == CHERI_CSR_RW);
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni)
+      depc_cap <= NULL_REG_CAP;
+    else if (csr_save_cause_i & debug_csr_save_i)
+      depc_cap <= full2regcap(pcc2fullcap(pcc_cap_q, exception_pc));
+    else if (depc_en_cheri)
+      depc_cap <= cheri_csr_wcap_i;
+  end
+
+  // dscratch0/1 extended capability
+  assign dscratch0_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd25) && (cheri_csr_op_i == CHERI_CSR_RW);
+  assign dscratch1_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd26) && (cheri_csr_op_i == CHERI_CSR_RW);
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      dscratch0_cap <= NULL_REG_CAP;
+      dscratch1_cap <= NULL_REG_CAP;
+    end else if (dscratch0_en_cheri)
+      dscratch0_cap <= cheri_csr_wcap_i;
+    else if (dscratch1_en_cheri)
+      dscratch1_cap <= cheri_csr_wcap_i;
+
+  end
+
+
+  // cheri debug feature control
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni)
+      mdbg_ctrl <= 4'h0;
+    else if (cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd27) && (cheri_csr_op_i == CHERI_CSR_RW))
+      mdbg_ctrl <= cheri_csr_wdata_i[3:0];
+  end
+
+  assign csr_dbg_tclr_fault_o = mdbg_ctrl[0];
 
 endmodule
