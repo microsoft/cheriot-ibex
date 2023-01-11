@@ -1,102 +1,105 @@
-[![Build Status](https://dev.azure.com/lowrisc/ibex/_apis/build/status/lowRISC.ibex?branchName=master)](https://dev.azure.com/lowrisc/ibex/_build/latest?definitionId=3&branchName=master)
+## Project
 
-# Ibex RISC-V Core
+This project welcomes contributions and suggestions.  Most contributions require you to agree to a
+Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
+the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
 
-Ibex is a production-quality open source 32-bit RISC-V CPU core written in
-SystemVerilog. The CPU core is heavily parametrizable and well suited for
-embedded control applications. Ibex is being extensively verified and has
-seen multiple tape-outs. Ibex supports the Integer (I) or Embedded (E),
-Integer Multiplication and Division (M), Compressed (C), and B (Bit
-Manipulation) extensions.
+When you submit a pull request, a CLA bot will automatically determine whether you need to provide
+a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
+provided by the bot. You will only need to do this once across all repos using our CLA.
 
-The block diagram below shows the *small* parametrization with a 2-stage
-pipeline.
-<p align="center"><img src="doc/03_reference/images/blockdiagram.svg" width="650"></p>
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
+For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
+contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
 
-Ibex was initially developed as part of the [PULP platform](https://www.pulp-platform.org)
-under the name ["Zero-riscy"](https://doi.org/10.1109/PATMOS.2017.8106976), and has been
-contributed to [lowRISC](https://www.lowrisc.org) who maintains it and develops it further. It is
-under active development.
+## Trademarks
 
-## Configuration
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
+trademarks or logos is subject to and must follow
+[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
+Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
+Any use of third-party trademarks or logos are subject to those third-party's policies.
 
-Ibex offers several configuration parameters to meet the needs of various application scenarios.
-The options include different choices for the architecture of the multiplier unit, as well as a range of performance and security features.
-The table below indicates performance, area and verification status for a few selected configurations.
-These are configurations on which lowRISC is focusing for performance evaluation and design verification (see [supported configs](ibex_configs.yaml)).
+## Introduction
+cheri-ibex is 32-bit RISC-V microcontroller which implements the CheriIoT ISA extension in addition to RV32IMCB. Same as the original ibex core, the design can be configured either with a 2-stage or a 3-stage pipeline. It has passed preliminary simulation and FPGA validation, and is currently undergoing  further verification as well as PPA analysis at Microsoft.
 
-| Config | "micro" | "small" | "maxperf" | "maxperf-pmp-bmfull" |
-| ------ | ------- | --------| ----------| -------------------- |
-| Features | RV32EC | RV32IMC, 3 cycle mult | RV32IMC, 1 cycle mult, Branch target ALU, Writeback stage | RV32IMCB, 1 cycle mult, Branch target ALU, Writeback stage, 16 PMP regions |
-| Performance (CoreMark/MHz) | 0.904 | 2.47 | 3.13 | 3.13 |
-| Area - Yosys (kGE) | 16.85 | 26.60 | 32.48 | 66.02 |
-| Area - Commercial (estimated kGE) | ~15 | ~24 | ~30 | ~61 |
-| Verification status | Red | Green | Amber | Amber |
+## CheriIoT ISA support
 
-Notes:
+cheri-ibex supports all 30 instructions listed in the CheriIoT ISA specification, including
 
-* Performance numbers are based on CoreMark running on the Ibex Simple System [platform](examples/simple_system/README.md).
-  Note that different ISAs (use of B and C extensions) give the best results for different configurations.
-  See the [Benchmarks README](examples/sw/benchmarks/README.md) for more information.
-* Yosys synthesis area numbers are based on the Ibex basic synthesis [flow](syn/README.md) using the latch-based register file.
-* Commercial synthesis area numbers are a rough estimate of what might be achievable with a commercial synthesis flow and technology library.
-* For comparison, the original "Zero-riscy" core yields an area of 23.14kGE using our Yosys synthesis flow.
-* Verification status is a rough guide to the overall maturity of a particular configuration.
-  Green indicates that verification is close to complete.
-  Amber indicates that some verification has been performed, but the configuration is still experimental.
-  Red indicates a configuration with minimal/no verification.
-  Users must make their own assessment of verification readiness for any tapeout.
-* v.1.0.0 of the RISC-V Bit-Manipulation Extension is supported as well as the remaining sub-extensions of draft v.0.93 of the bitmanip spec.
-  The latter are *not ratified* and there may be changes before ratification.
-  See [Standards Compliance](https://ibex-core.readthedocs.io/en/latest/01_overview/compliance.html) in the Ibex documentation for more information.
+- To query or test capabilities: cgetaddr, cgetbase, cgetlen, cgetperm, cgettag, cgettop, cgettype, ctestsubset, csetequalexact, csub
+- To modify or derive capabilities: auicgp, auipcc, candperm, ccleartag, cincaddr, cincaddrimm, cmove, cram, crrl, csetaddr, csetbounds, csetboundsexact, csetboundsimm, cseal, cunseal
+- To load/store capabilities from memory: clc, csc
+- To control the program flow: cjal, cjalr
+- To access special capability registers (SCR): cspecialrw
 
-## Documentation
+Certain compressed instructions are also extended for capabilities, for example c.incaddr4cspn, c.incaddr16csp, c.jal, c.jalr. Also the RV64 c.ld and c.sd instructions are reused for c.clc and c.csc instructions
 
-The Ibex user manual can be
-[read online at ReadTheDocs](https://ibex-core.readthedocs.io/en/latest/). It is also contained in
-the `doc` folder of this repository.
+## Register file
 
-## Contributing
+cheri-ibex contains a register file implementation (cheri_regfile.sv) which extends a configurable number of the general purpose registers into CherIoT capabilities.
 
-We highly appreciate community contributions. To ease our work of reviewing your contributions,
-please:
+## Load-store unit
 
-* Create your own branch to commit your changes and then open a Pull Request.
-* Split large contributions into smaller commits addressing individual changes or bug fixes. Do not
-  mix unrelated changes into the same commit!
-* Write meaningful commit messages. For more information, please check out the [contribution
-  guide](https://github.com/lowrisc/ibex/blob/master/CONTRIBUTING.md).
-* If asked to modify your changes, do fixup your commits and rebase your branch to maintain a
-  clean history.
+cheri-ibex extends its data bus to 33-bit, where the MSB 1-bit is used as a valid tag to differentiate between capabilities and normal integer data. The load-store unit is modified to support atomic capability load and store transactions according to the CherIoT ISA specification.
 
-When contributing SystemVerilog source code, please try to be consistent and adhere to [our Verilog
-coding style guide](https://github.com/lowRISC/style-guides/blob/master/VerilogCodingStyle.md).
+## Configuration and status registers
 
-When contributing C or C++ source code, please try to adhere to [the OpenTitan C++ coding style
-guide](https://docs.opentitan.org/doc/rm/c_cpp_coding_style/).
-All C and C++ code should be formatted with clang-format before committing.
-Either run `clang-format -i filename.cc` or `git clang-format` on added files.
+Per CherIoT specification, the following SCR's are implemented,
+- MTCC (address 28), which replaces mtvec
+- MTDC (address 29)
+- MScratchC (address 30)
+- MEPCC (address 31), which replaces mepc.
 
-To get started, please check out the ["Good First Issue"
- list](https://github.com/lowrisc/ibex/issues?q=is%3Aissue+is%3Aopen+label%3A%22Good+First+Issue%22).
+In addition, the following SCR's are added for debug support
+- CDPC (address 24)
+- CDScratch0 (address 25)
+- CDScratch1 (address 26)
+- CDBGCTRL (address 27)
 
-## Issues and Troubleshooting
+The PC capability register (PCC) is also implemented as part of the CSR module.
 
-If you find any problems or issues with Ibex or the documentation, please check out the [issue
- tracker](https://github.com/lowrisc/ibex/issues) and create a new issue if your problem is
-not yet tracked.
+## CherIoT memory access rule checking
 
-## Questions?
+cheri-ibex performs capability-based memory access rule checking including
+- data load/store accesses
+- capability load/store accesses
+- Instruction fetch (PCC-based)
+- jump target calculation (cjal and cjalr)
 
-Do not hesitate to contact us, e.g., on our public [Ibex channel on
-Zulip](https://lowrisc.zulipchat.com/#narrow/stream/198227-ibex)!
+Exceptions are generated in the case of access rule violations.
 
-## License
+## Temporal memory safety support
 
-Unless otherwise noted, everything in this repository is covered by the Apache
-License, Version 2.0 (see LICENSE for full text).
+The cheri-ibex CLC implementation provides an optional load-barrier feature. When enabled (cheri_tsafe_en_i == 1), CLC checks a memory area which contains shadow flag bits for all memory data blocks at 8-byte granularity. The tag bit of the loaded capability is cleared if the corresponding shadow bits == 1 (revoked).
 
-## Credits
+## Backward compatibility
 
-Many people have contributed to Ibex through the years. Please have a look at
-the [credits file](CREDITS.md) and the commit history for more information.
+cheri-ibex provides a backward-compatibility mode which is enabled by setting the input cheri_pmode_i = 1. In this mode, the CheirIoT instructions can still execute, however all access rules are disabled and any binary code generated by non-Cheri RV32 compilers can run unmodified in cheri-ibex.
+
+## Design configuration parameters
+
+cheri-ibex design added the following configuration parameters,
+
+| Parameter | Description |
+| ----------- | ----------- |
+| CheriPPLBC | pipelined implementation of load-barrier CLC. <br />  0: non-pipelined implementation <br />  1: pipelined implementation (better performance but needs a separate memory read interface).|
+| CheriSBND2 | Select number of cycles taken by csetbounds* instructions. <br /> 0: csetbounds* takes 1 cycle. <br /> 1: csetbounds* takes 2 cycle (better fmax timing). |
+| MemCapFmt | Select the format used to store capabilities in memory. <br /> 0: use canonical memory capbility format. <br /> 1: use the alternative memory capability format (better memory access timing). |
+|HeapBase|32-bit starting address of the system heap memory. <br /> only capabilities whose base pointing to an address in the heap space are subject to load-barrier checks during CLC.|
+|TSMapSize|size of the shadow bits memory (in 32-bit words) used by the load-barrier operation. <br /> e.g., 1024 = 32k bits which covers 256kB heap memory. <br />This parameter is only used when CheriPPLSBC == 1.|
+|TSMapBase|Starting address of the shadow bits memory <br /> This parameter is only used when CheriPPLSBC == 0.|
+|TSMapTop|Ending address of the shadow bits memory <br /> This parameter is only used when CheriPPLSBC == 0.|
+
+
+## Debug support
+
+cheri-ibex supports cheri-aware RISC-V debugging via JTAG interface. The debug module is published separately at (link). General-purpose capability registers and SCR's can both be accessed via the JTAG interface. SBA accesses are supported as well.
+
+To debug capability-related software issues, cheri-ibex also provides a debug feature which when enabled, escalates tag-clearing events defined in the CherIoT ISA spec (e.g, csetbounds length violations) into exceptions. Writing a 0x1 to the CDBGCTRL SCR (address 27) to enable this feature.
+
+## Timing and area
+
+cheri-ibex (with 3-stage pipeline) has been synthesized at 330MHz using TSMC 28nm HPC+ libraries (HVT only) and > 1GHz using TSMC n5 libraries (SVT only). The design size is ~70k gate equivalents.
+
+A detailed PPA analysis is under way at Microsoft.
