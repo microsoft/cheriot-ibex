@@ -399,7 +399,7 @@ package cheri_pkg;
 
 
   // set address of a capability
-  function automatic full_cap_t set_address(full_cap_t in_cap, logic [31:0] newptr, logic checktop);
+  function automatic full_cap_t set_address_old(full_cap_t in_cap, logic [31:0] newptr, logic checktop);
     full_cap_t        out_cap;
     logic [33:0]      tmp34;
     logic [33-TOP_W:0] tmp25, mask1;
@@ -417,6 +417,34 @@ package cheri_pkg;
     top_ge   =  (newptr >= in_cap.top33);
     // if ((newptr < in_cap.base32) || (checktop & top_ge))
     if ((tmp25 != 0) || (checktop & top_ge))
+      out_cap.valid = 1'b0;
+
+    ptrmi9           = newptr >> in_cap.exp;
+    tmp4             = update_temp_fields(out_cap.top, out_cap.base, ptrmi9);
+    out_cap.top_cor  = tmp4[3:2];
+    out_cap.base_cor = tmp4[1:0];
+
+    return out_cap;
+  endfunction
+
+  // set address of a capability
+  function automatic full_cap_t set_address (full_cap_t in_cap, logic [31:0] newptr, logic checktop);
+    full_cap_t        out_cap;
+    logic [32:0]      tmp33;
+    logic [32-TOP_W:0] tmp24, mask24;
+    logic  [3:0]      tmp4;
+    logic [BOT_W-1:0] ptrmi9;
+    logic             top_ge;
+
+    out_cap = in_cap;
+    mask24  = {(33-TOP_W){1'b1}} << in_cap.exp;          // mask24 = 0 if exp == 24
+
+    tmp33   = {1'b0, newptr} - {1'b0, in_cap.base32};  // extend to make sure we can see carry from MSB
+    tmp24   = tmp33[32:TOP_W] & mask24;
+
+    top_ge   =  (newptr >= in_cap.top33);
+    // if ((newptr < in_cap.base32) || (checktop & top_ge))
+    if ((tmp24 != 0) || (checktop & top_ge))
       out_cap.valid = 1'b0;
 
     ptrmi9           = newptr >> in_cap.exp;
@@ -456,6 +484,7 @@ package cheri_pkg;
 
   // set bounds (top/base/exp/addr) of a capability
 
+  // break up into 2 parts to enable 2-cycle option
   function automatic bound_req_t prep_bound_req (logic [31:0] addr, logic [31:0] length);
     bound_req_t result;
     result.top33req = {1'b0, addr} + {1'b0, length};    // "requested" 33-bit top
