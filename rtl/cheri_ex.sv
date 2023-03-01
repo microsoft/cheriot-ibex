@@ -578,45 +578,53 @@ module cheri_ex import cheri_pkg::*; #(
     full_cap_t   tfcap1, tfcap2;
     logic [31:0] taddr1, taddr2;
     logic        cktop1, cktop2;
+    logic        ckbase1, ckbase2;
 
     // set_addr operation 1
     if (cheri_operator_i[CJAL] | cheri_operator_i[CJALR]) begin
-      tfcap1 = pcc_fullcap_i;
-      taddr1 = pc_id_nxt;
-      cktop1 = 1'b1;
+      tfcap1  = pcc_fullcap_i;
+      taddr1  = pc_id_nxt;
+      cktop1  = 1'b1;
+      ckbase1 = 1'b1;
     end else if (cheri_operator_i[CAUIPCC]) begin
-      tfcap1 = pcc_fullcap_i;
-      taddr1 = addr_result;
-      cktop1 = 1'b0;
+      tfcap1  = pcc_fullcap_i;
+      taddr1  = addr_result;
+      cktop1  = 1'b0;
+      ckbase1 = 1'b0;
     end else if (cheri_operator_i[CSET_ADDR] | cheri_operator_i[CINC_ADDR] |
                  cheri_operator_i[CINC_ADDR_IMM] | cheri_operator_i[CAUICGP]) begin
-      tfcap1 = rf_fullcap_a;
-      taddr1 = addr_result;
-      cktop1 = 1'b0;
+      tfcap1  = rf_fullcap_a;
+      taddr1  = addr_result;
+      cktop1  = 1'b0;
+      ckbase1 = 1'b0;
     end else begin
-      tfcap1 = NULL_FULL_CAP;
-      taddr1 = 32'h0;
-      cktop1 = 1'b0;
+      tfcap1  = NULL_FULL_CAP;
+      taddr1  = 32'h0;
+      cktop1  = 1'b0;
+      ckbase1 = 1'b0;
     end
 
-    setaddr1_outcap = set_address(tfcap1, taddr1, cktop1);
+    setaddr1_outcap = set_address(tfcap1, taddr1, cktop1, ckbase1);
 
     // set_addr operation 2 (jump target).
     if (cheri_operator_i[CJAL]) begin
-      tfcap2 = pcc_fullcap_i;
-      taddr2 = branch_target_o;
-      cktop2 = 1'b1;
+      tfcap2  = pcc_fullcap_i;
+      taddr2  = branch_target_o;
+      cktop2  = 1'b1;
+      ckbase2 = 1'b1;
     end else if (cheri_operator_i[CJALR]) begin
-      tfcap2 = unseal_cap(rf_fullcap_a);
-      taddr2 = branch_target_o;
-      cktop2 = 1'b0;
+      tfcap2  = unseal_cap(rf_fullcap_a);
+      taddr2  = branch_target_o;
+      cktop2  = 1'b1;
+      ckbase2 = 1'b1;
     end else begin
-      tfcap2 = NULL_FULL_CAP;
-      taddr2 = 32'h0;
-      cktop2 = 1'b0;
+      tfcap2  = NULL_FULL_CAP;
+      taddr2  = 32'h0;
+      cktop2  = 1'b0;
+      ckbase2 = 1'b0;
     end
 
-    setaddr2_outcap = set_address(tfcap2, taddr2, cktop2);
+    setaddr2_outcap = set_address(tfcap2, taddr2, cktop2, ckbase2);
   end
 
   bound_req_t bound_req1, bound_req2;

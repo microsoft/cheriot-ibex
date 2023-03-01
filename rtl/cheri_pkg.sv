@@ -399,7 +399,7 @@ package cheri_pkg;
 
 
   // set address of a capability
-  function automatic full_cap_t set_address_old(full_cap_t in_cap, logic [31:0] newptr, logic checktop);
+  function automatic full_cap_t set_address_old(full_cap_t in_cap, logic [31:0] newptr, logic checktop, logic checkbase);
     full_cap_t        out_cap;
     logic [33:0]      tmp34;
     logic [33-TOP_W:0] tmp25, mask1;
@@ -428,7 +428,11 @@ package cheri_pkg;
   endfunction
 
   // set address of a capability
-  function automatic full_cap_t set_address (full_cap_t in_cap, logic [31:0] newptr, logic checktop);
+  //   by default we check for representability only. 
+  //   use checktop/checkbase to check explicitly against top33/base32 bounds
+  //   * note, representability check in most cases (other than exp=24) covers the base32 check 
+
+  function automatic full_cap_t set_address (full_cap_t in_cap, logic [31:0] newptr, logic checktop,logic checkbase);
     full_cap_t        out_cap;
     logic [32:0]      tmp33;
     logic [32-TOP_W:0] tmp24, mask24;
@@ -444,7 +448,7 @@ package cheri_pkg;
 
     top_ge   =  (newptr >= in_cap.top33);
     // if ((newptr < in_cap.base32) || (checktop & top_ge))
-    if ((tmp24 != 0) || (checktop & top_ge))
+    if ((tmp24 != 0) || (checktop & top_ge) || (checkbase & tmp33[32]))
       out_cap.valid = 1'b0;
 
     ptrmi9           = newptr >> in_cap.exp;
