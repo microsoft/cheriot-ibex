@@ -432,7 +432,7 @@ package cheri_pkg;
   //   use checktop/checkbase to check explicitly against top33/base32 bounds
   //   * note, representability check in most cases (other than exp=24) covers the base32 check 
 
-  function automatic full_cap_t set_address (full_cap_t in_cap, logic [31:0] newptr, logic checktop,logic checkbase);
+  function automatic full_cap_t set_address (full_cap_t in_cap, logic [31:0] newptr, logic chktop, logic chkbase, logic chkbounds16);
     full_cap_t        out_cap;
     logic [32:0]      tmp33;
     logic [32-TOP_W:0] tmp24, mask24;
@@ -445,10 +445,10 @@ package cheri_pkg;
 
     tmp33   = {1'b0, newptr} - {1'b0, in_cap.base32};  // extend to make sure we can see carry from MSB
     tmp24   = tmp33[32:TOP_W] & mask24;
-
     top_ge   =  (newptr >= in_cap.top33);
-    // if ((newptr < in_cap.base32) || (checktop & top_ge))
-    if ((tmp24 != 0) || (checktop & top_ge) || (checkbase & tmp33[32]))
+
+    if ((tmp24 != 0) || (chktop & top_ge) || (chkbase & tmp33[32]) ||
+        (chkbounds16 & (in_cap.top33[0] | in_cap.base32[0])))
       out_cap.valid = 1'b0;
 
     ptrmi9           = newptr >> in_cap.exp;
@@ -860,6 +860,18 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
                 (cap_a.exp    == cap_b.exp) && (cap_a.otype  == cap_b.otype);
     return is_equal;
 
+  endfunction
+
+  // clear tags if the top/base are not 16-bit aligned
+  // used to check cspecialrw of mtvec and mepc 
+  function automatic reg_cap_t chk_bounds_align16 (reg_cap_t in_cap);
+    reg_cap_t out_cap;
+   
+    out_cap       = in_cap;
+    if ((in_cap.exp == 0) && (in_cap.top[0] | in_cap.base[0]))
+      out_cap.valid = 1'b0;
+
+    return out_cap;
   endfunction
 
   // parameters and constants
