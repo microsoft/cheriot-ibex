@@ -103,3 +103,6 @@ To debug capability-related software issues, cheri-ibex also provides a debug fe
 cheri-ibex (with 3-stage pipeline) has been synthesized at 330MHz using TSMC 28nm HPC+ libraries (HVT only) and > 1GHz using TSMC n5 libraries (SVT only). The design size is ~70k gate equivalents.
 
 A detailed PPA analysis is under way at Microsoft.
+
+## Build the design
+See [README-CHERI.md](https://github.com/microsoft/cheriot-ibex/blob/main/README-CHERI.md) for the list of RTL files need to compile/simulate/synthesize the cheriot_ibex design.
