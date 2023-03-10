@@ -8,7 +8,7 @@
   - CheriSBND2 = 1'b0
   - All other parameters at default
 
-### List of files
+### List of design files
 -  $rtl/cheri_decoder.sv
 -  $rtl/cheri_ex.sv
 -  $rtl/cheri_pkg.sv
@@ -40,7 +40,11 @@
 -  $rtl/ibexc_top.sv
 -  $rtl/ibexc_top_tracing.sv
 
-### Dependency on prim* files
+### Dependencies
+-  dv_fcov_macros.svh 
 -  prim_cipher_pkg.sv
 -  prim_lfsr.sv
 -  prim_ram_1p_pkg.sv
+-  prim_assert.sv
+-  prim_assert_dummy_macros.svh
+-  prim_assert_standard_macros.svh
