@@ -581,7 +581,7 @@ module cheri_ex import cheri_pkg::*; #(
     // set_addr operation 1
     if (cheri_operator_i[CJAL] | cheri_operator_i[CJALR]) begin
       tfcap1  = pcc_fullcap_i;        // link register
-      taddr1  = pc_id_nxt;            
+      taddr1  = pc_id_nxt;
     end else if (cheri_operator_i[CAUIPCC]) begin
       tfcap1  = pcc_fullcap_i;
       taddr1  = addr_result;
@@ -594,7 +594,8 @@ module cheri_ex import cheri_pkg::*; #(
       taddr1  = 32'h0;
     end
 
-    setaddr1_outcap = set_address(tfcap1, taddr1, 0, 0, 0);
+    // representability check only
+    setaddr1_outcap = set_address(tfcap1, taddr1, 0, 0);
 
     // set_addr operation 2 (jump target).
     if (cheri_operator_i[CJAL]) begin
@@ -608,9 +609,12 @@ module cheri_ex import cheri_pkg::*; #(
       taddr2  = 32'h0;
     end
 
-    // we only do address bound check and bound alignment check for jump targets (updating pcc), 
+    // we only do address bound check for jump targets (updating pcc), 
     //   - no need to check when forming the link register
-    setaddr2_outcap = set_address(tfcap2, taddr2, 1, 1, 1);
+    //   - note we can't simply depend on the IF stage fetch address checking
+    //     since that would defer exceptions to the fetched instruction.
+
+    setaddr2_outcap = set_address(tfcap2, taddr2, 1, 1);
   end
 
   bound_req_t bound_req1, bound_req2;
@@ -734,10 +738,8 @@ module cheri_ex import cheri_pkg::*; #(
     logic [32:0] top_chkaddr, base_chkaddr;
     logic        top_vio, base_vio, top_equal;
 
-    // CJAL/CJALR instructions (new PC address):
-    //  - use set_addr checking, no need to do it here.
-    //  - note we can't simply depend on the IF stage fetch address checking
-    //    since that would defer exceptions to the fetched instruction.
+    // CSEAL/CUNSEAL, CIS_SUBSET, CLC/CSC checks are done here
+    // CJAL/CJALR use separate set_addr checking for timing
 
     // generate the address used to check top bound violation
     if (cheri_operator_i[CSEAL] | cheri_operator_i[CUNSEAL])

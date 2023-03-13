@@ -1758,7 +1758,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     if (!rst_ni)
       mtvec_cap <= MTVEC_RESET_CAP;
     else if (mtvec_en_cheri)
-      mtvec_cap <= chk_bounds_align16(cheri_csr_wcap_i);
+      mtvec_cap <= cheri_csr_wcap_i;
   end
 
   // mepc extended capability
@@ -1773,7 +1773,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     else if (cheri_pmode_i & mepc_en)            // legacy cssrw; NMI recover
       mepc_cap <= NULL_REG_CAP;
     else if (mepc_en_cheri)
-      mepc_cap <= chk_bounds_align16(cheri_csr_wcap_i);
+      mepc_cap <= cheri_csr_wcap_i;
   end
 
   // MTDC capability

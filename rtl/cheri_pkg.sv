@@ -397,58 +397,27 @@ package cheri_pkg;
     return res4;
   endfunction
 
-
-  // set address of a capability
-  function automatic full_cap_t set_address_old(full_cap_t in_cap, logic [31:0] newptr, logic checktop, logic checkbase);
-    full_cap_t        out_cap;
-    logic [33:0]      tmp34;
-    logic [33-TOP_W:0] tmp25, mask1;
-    logic  [3:0]      tmp4;
-    logic [BOT_W-1:0] ptrmi9;
-    logic             top_ge;
-
-    out_cap = in_cap;
-    mask1    = {(34-TOP_W){1'b1}} << in_cap.exp;
-
-    tmp34   = {2'b00, newptr} - {2'b00, in_cap.base32};  // extend to make sure we can see carry from MSB
-    //tmp34   = tmp34 >> in_cap.exp >> TOP_W;              // representability check
-    tmp25   = tmp34[33:TOP_W] & mask1;
-
-    top_ge   =  (newptr >= in_cap.top33);
-    // if ((newptr < in_cap.base32) || (checktop & top_ge))
-    if ((tmp25 != 0) || (checktop & top_ge))
-      out_cap.valid = 1'b0;
-
-    ptrmi9           = newptr >> in_cap.exp;
-    tmp4             = update_temp_fields(out_cap.top, out_cap.base, ptrmi9);
-    out_cap.top_cor  = tmp4[3:2];
-    out_cap.base_cor = tmp4[1:0];
-
-    return out_cap;
-  endfunction
-
   // set address of a capability
   //   by default we check for representability only. 
-  //   use checktop/checkbase to check explicitly against top33/base32 bounds
+  //   use checktop/checkbase to check explicitly against top33/base32 bounds (pcc updates)
   //   * note, representability check in most cases (other than exp=24) covers the base32 check 
 
-  function automatic full_cap_t set_address (full_cap_t in_cap, logic [31:0] newptr, logic chktop, logic chkbase, logic chkbounds16);
+  function automatic full_cap_t set_address (full_cap_t in_cap, logic [31:0] newptr, logic chktop, logic chkbase);
     full_cap_t        out_cap;
     logic [32:0]      tmp33;
     logic [32-TOP_W:0] tmp24, mask24;
     logic  [3:0]      tmp4;
     logic [BOT_W-1:0] ptrmi9;
-    logic             top_ge;
+    logic             top_lt;
 
     out_cap = in_cap;
     mask24  = {(33-TOP_W){1'b1}} << in_cap.exp;          // mask24 = 0 if exp == 24
 
     tmp33   = {1'b0, newptr} - {1'b0, in_cap.base32};  // extend to make sure we can see carry from MSB
     tmp24   = tmp33[32:TOP_W] & mask24;
-    top_ge   =  (newptr >= in_cap.top33);
+    top_lt  =  (newptr < {in_cap.top33[32:1], 1'b0});
 
-    if ((tmp24 != 0) || (chktop & top_ge) || (chkbase & tmp33[32]) ||
-        (chkbounds16 & (in_cap.top33[0] | in_cap.base32[0])))
+    if ((tmp24 != 0) || (chktop & ~top_lt) || (chkbase & tmp33[32]))
       out_cap.valid = 1'b0;
 
     ptrmi9           = newptr >> in_cap.exp;
@@ -860,18 +829,6 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
                 (cap_a.exp    == cap_b.exp) && (cap_a.otype  == cap_b.otype);
     return is_equal;
 
-  endfunction
-
-  // clear tags if the top/base are not 16-bit aligned
-  // used to check cspecialrw of mtvec and mepc 
-  function automatic reg_cap_t chk_bounds_align16 (reg_cap_t in_cap);
-    reg_cap_t out_cap;
-   
-    out_cap       = in_cap;
-    if ((in_cap.exp == 0) && (in_cap.top[0] | in_cap.base[0]))
-      out_cap.valid = 1'b0;
-
-    return out_cap;
   endfunction
 
   // parameters and constants
