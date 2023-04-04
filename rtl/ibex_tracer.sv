@@ -155,6 +155,7 @@ module ibex_tracer import cheri_pkg::*; # (
     end
 
     if (rvfi_trap) disp_str = $sformatf("-->%s", decoded_str);
+    else if (rvfi_intr) disp_str = $sformatf("==>%s", decoded_str);
     else           disp_str = decoded_str;
 
     $fwrite(file_handle, "%15t\t%d\t%h\t%s\t%s\t",
