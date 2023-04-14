@@ -67,9 +67,9 @@ module cheri_ex import cheri_pkg::*; #(
 
   output logic          cheri_ex_valid_o,
   output logic          cheri_ex_err_o,
-  output logic  [7:0]   cheri_ex_err_info_o,
+  output logic [10:0]   cheri_ex_err_info_o,
   output logic          cheri_wb_err_o,
-  output logic  [7:0]   cheri_wb_err_info_o,
+  output logic [10:0]   cheri_wb_err_info_o,
 
   // lsu interface
   output logic          lsu_req_o,
@@ -175,8 +175,10 @@ module cheri_ex import cheri_pkg::*; #(
   logic  [31:0]  pc_id_nxt;
 
   full_cap_t     setaddr1_outcap, setaddr2_outcap, setbounds_outcap;
-  logic  [7:0]   cheri_wb_err_info_q, cheri_ex_err_info_q;
+  logic  [10:0]  cheri_wb_err_info_q, cheri_ex_err_info_q;
   logic          set_bounds_done;
+
+  logic   [4:0]  cheri_wb_err_cause, cheri_ex_err_cause, cheri_lsu_err_cause, rv32_lsu_err_cause;
 
   // data forwarding for CHERI instructions
   //  - note address 0 is a read-only location per RISC-V
@@ -543,7 +545,7 @@ module cheri_ex import cheri_pkg::*; #(
   //
   // shared adder for address calculation
   //
-  always_comb begin
+  always_comb begin : shared_adder
     logic        [31:0] tmp32a, tmp32b;
 
     if      (cheri_operator_i[CJALR])           tmp32a = {{20{cheri_imm12_i[11]}}, cheri_imm12_i};
@@ -817,8 +819,60 @@ module cheri_ex import cheri_pkg::*; #(
   assign lsu_error = addr_bound_vio | perm_vio;
 
   // report to csr as mtval
+
   assign  cheri_ex_err_info_o = cheri_ex_err_info_q;
   assign  cheri_wb_err_info_o = cheri_wb_err_info_q;
+
+  always_comb begin : err_cause_comb 
+    if (cheri_operator_i[CCSR_RW] && perm_vio)
+      cheri_ex_err_cause = 5'h18;
+    else
+      cheri_ex_err_cause = 5'h0;
+
+    if (addr_bound_vio_rv32)
+      rv32_lsu_err_cause = 5'h01;
+    else if (~rf_fullcap_a.valid)
+      rv32_lsu_err_cause = 5'h02;
+    else if (is_cap_sealed(rf_fullcap_a))
+      rv32_lsu_err_cause = 5'h03;
+    else if ((~rv32_lsu_we_i) & (~rf_fullcap_a.perms[PERM_LD]))
+      rv32_lsu_err_cause = 5'h12;
+    else if (rv32_lsu_we_i & (~rf_fullcap_a.perms[PERM_SD]))
+      rv32_lsu_err_cause = 5'h13;
+    else
+      rv32_lsu_err_cause = 5'h0;
+
+    if (addr_bound_vio)
+      cheri_lsu_err_cause = 5'h01;
+    else if (~rf_fullcap_a.valid)
+      cheri_lsu_err_cause = 5'h02;
+    else if (is_cap_sealed(rf_fullcap_a))
+      cheri_lsu_err_cause = 5'h03;
+    else if (is_load & ~rf_fullcap_a.perms[PERM_LD])
+      cheri_lsu_err_cause = 5'h12;
+    else if (is_store & ~rf_fullcap_a.perms[PERM_SD])
+      cheri_lsu_err_cause = 5'h13;
+    else if (is_store & ~rf_fullcap_a.perms[PERM_MC] && rf_fullcap_b.valid) 
+      cheri_lsu_err_cause = 5'h15;
+    else if (is_store & ~rf_fullcap_a.perms[PERM_SL] && rf_fullcap_b.valid && ~rf_fullcap_b.perms[PERM_GL]) 
+      cheri_lsu_err_cause = 5'h16;
+    else
+      cheri_lsu_err_cause = 5'h0;
+
+    if ((cheri_operator_i[CJAL] | cheri_operator_i[CJALR])  && ~pcc_fullcap_o.valid) 
+      cheri_wb_err_cause = 5'h01;
+    else if (cheri_operator_i[CJALR] && ~rf_fullcap_a.valid)
+      cheri_wb_err_cause = 5'h02;
+    else if (cheri_operator_i[CJALR] && is_cap_sealed(rf_fullcap_a) && ~is_cap_sentry(rf_fullcap_a)) 
+      cheri_wb_err_cause = 5'h03;    // seal error 1
+    else if (cheri_operator_i[CJALR] && is_cap_sentry(rf_fullcap_a) && (cheri_imm12_i != 0))
+      cheri_wb_err_cause = 5'h03;    // seal error 2
+    else if (cheri_operator_i[CJALR] && (~rf_fullcap_a.perms[PERM_EX] || rf_fullcap_a.base32[0]))
+      cheri_wb_err_cause = 5'h11;
+    else 
+      cheri_wb_err_cause = {3'b111, addr_bound_vio, perm_vio};   // dbug escalated errors, non-standard encoding
+
+  end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
@@ -830,11 +884,17 @@ module cheri_ex import cheri_pkg::*; #(
       // QQQ for 2-stage ibex, remove the delay stage here and merge with cheri_ex_err
       cheri_wb_err_q      <= cheri_wb_err_raw & cheri_exec_id_i & ~debug_mode_i;
 
-      if (cheri_wb_err_raw & cheri_exec_id_i)
-        cheri_wb_err_info_q <= {4'h0, instr_is_rv32lsu_i &  addr_bound_vio_rv32,
-                                instr_is_rv32lsu_i & perm_vio_rv32, addr_bound_vio, perm_vio};
+      // cheri_wb_err_raw is already qualified by instr
+      if (cheri_wb_err_raw  & cheri_exec_id_i)
+        cheri_wb_err_info_q <= {1'b0, rf_raddr_a_i, cheri_wb_err_cause};
+      else if ((is_load | is_store) & cheri_lsu_err & cheri_exec_id_i)
+        cheri_wb_err_info_q <= {1'b0, rf_raddr_a_i, cheri_lsu_err_cause};
+      else if (rv32_lsu_req_i & lsu_error_rv32 & cheri_exec_id_i)
+        cheri_wb_err_info_q <= {1'b0, rf_raddr_a_i, rv32_lsu_err_cause};
+
       if (cheri_ex_err_raw & cheri_exec_id_i)
-        cheri_ex_err_info_q <= {6'h0, addr_bound_vio, perm_vio};
+        // cspecialrw traps
+        cheri_ex_err_info_q <= {1'b1, cheri_cs2_dec_i, cheri_ex_err_cause};
     end
   end
 

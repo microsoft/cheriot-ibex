@@ -62,6 +62,7 @@ module ibex_controller #(
   input  logic [31:0]           lsu_addr_last_i,         // for mtval
   input  logic                  load_err_i,
   input  logic                  store_err_i,
+  input  logic                  lsu_err_is_cheri_i,
   output logic                  wb_exception_o,          // Instruction in WB taking an exception
   output logic                  id_exception_o,          // Instruction in ID taking an exception
   output logic                  id_exception_nc_o,       // no-cheri
@@ -116,8 +117,8 @@ module ibex_controller #(
   input  logic                  cheri_ex_valid_i,        // from cheri EX
   input  logic                  cheri_ex_err_i,
   input  logic                  cheri_wb_err_i,
-  input  logic  [7:0]           cheri_ex_err_info_i,
-  input  logic  [7:0]           cheri_wb_err_info_i,
+  input  logic  [10:0]          cheri_ex_err_info_i,
+  input  logic  [10:0]          cheri_wb_err_info_i,
   input  logic                  cheri_branch_req_i,
   input  logic [31:0]           cheri_branch_target_i,
 
@@ -138,6 +139,7 @@ module ibex_controller #(
   logic debug_mode_q, debug_mode_d;
   logic load_err_q, load_err_d;
   logic store_err_q, store_err_d;
+  logic lsu_err_is_cheri_q;
   logic exc_req_q, exc_req_d, exc_req_nc, exc_req_wb;
   logic illegal_insn_q, illegal_insn_d;
   logic cheri_ex_err_q, cheri_ex_err_d;
@@ -757,12 +759,22 @@ module ibex_controller #(
               end
             end
             store_err_prio: begin
-              exc_cause_o = EXC_CAUSE_STORE_ACCESS_FAULT;
-              csr_mtval_o = lsu_addr_last_i;
+              if (lsu_err_is_cheri_q) begin
+                exc_cause_o = EXC_CAUSE_CHERI_FAULT; 
+                csr_mtval_o = cheri_wb_err_info_i;
+              end else begin
+                exc_cause_o = EXC_CAUSE_STORE_ACCESS_FAULT;
+                csr_mtval_o = lsu_addr_last_i;
+              end
             end
             load_err_prio: begin
-              exc_cause_o = EXC_CAUSE_LOAD_ACCESS_FAULT;
-              csr_mtval_o = lsu_addr_last_i;
+              if (lsu_err_is_cheri_q) begin
+                exc_cause_o = EXC_CAUSE_CHERI_FAULT;
+                csr_mtval_o = cheri_wb_err_info_i;
+              end else begin
+                exc_cause_o = EXC_CAUSE_LOAD_ACCESS_FAULT;
+                csr_mtval_o = lsu_addr_last_i;
+              end
             end
             cheri_ex_err_prio: begin
               exc_cause_o = EXC_CAUSE_CHERI_FAULT;
@@ -855,6 +867,7 @@ module ibex_controller #(
       enter_debug_mode_prio_q <= 1'b0;
       load_err_q              <= 1'b0;
       store_err_q             <= 1'b0;
+      lsu_err_is_cheri_q      <= 1'b0;
       exc_req_q               <= 1'b0;
       illegal_insn_q          <= 1'b0;
       cheri_ex_err_q          <= 1'b0;
@@ -867,6 +880,7 @@ module ibex_controller #(
       enter_debug_mode_prio_q <= enter_debug_mode_prio_d;
       load_err_q              <= load_err_d;
       store_err_q             <= store_err_d;
+      lsu_err_is_cheri_q      <= lsu_err_is_cheri_i;
       exc_req_q               <= exc_req_d;
       illegal_insn_q          <= illegal_insn_d;
       cheri_ex_err_q          <= cheri_ex_err_d;

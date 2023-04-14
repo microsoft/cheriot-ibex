@@ -140,6 +140,7 @@ module ibex_id_stage import cheri_pkg::*; #(
 
   input  logic                      lsu_load_err_i,
   input  logic                      lsu_store_err_i,
+  input  logic                      lsu_err_is_cheri_i, 
 
   // Debug Signal
   output logic                      debug_mode_o,
@@ -208,9 +209,9 @@ module ibex_id_stage import cheri_pkg::*; #(
 
   input  logic                      cheri_ex_valid_i,
   input  logic                      cheri_ex_err_i,
-  input  logic  [7:0]               cheri_ex_err_info_i,
+  input  logic [10:0]               cheri_ex_err_info_i,
   input  logic                      cheri_wb_err_i,
-  input  logic  [7:0]               cheri_wb_err_info_i,
+  input  logic [10:0]               cheri_wb_err_info_i,
   input  logic                      cheri_branch_req_i,   // from cheri EX
   input  logic [31:0]               cheri_branch_target_i,
 
@@ -661,6 +662,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     .lsu_addr_last_i(lsu_addr_last_i),
     .load_err_i     (lsu_load_err_i),
     .store_err_i    (lsu_store_err_i),
+    .lsu_err_is_cheri_i (lsu_err_is_cheri_i),
     .wb_exception_o (wb_exception),
     .id_exception_o (id_exception),
     .id_exception_nc_o (id_exception_nc),

@@ -226,6 +226,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
 
   logic        lsu_load_err;
   logic        lsu_store_err;
+  logic        lsu_err_is_cheri;
 
   // LSU signals
   logic        lsu_addr_incr_req;
@@ -410,9 +411,9 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   reg_cap_t      cheri_result_cap;
   logic          cheri_ex_valid;
   logic          cheri_ex_err;
-  logic  [7:0]   cheri_ex_err_info;
+  logic [10:0]   cheri_ex_err_info;
   logic          cheri_wb_err;
-  logic  [7:0]   cheri_wb_err_info;
+  logic [10:0]   cheri_wb_err_info;
   logic [OPDW-1:0] cheri_operator;
 
   logic          rv32_lsu_req;
@@ -670,6 +671,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
 
     .lsu_load_err_i (lsu_load_err),
     .lsu_store_err_i(lsu_store_err),
+    .lsu_err_is_cheri_i(lsu_err_is_cheri),
 
     // Interrupt Signals
     .csr_mstatus_mie_i(csr_mstatus_mie),
@@ -984,6 +986,7 @@ end
     // exception signals
     .load_err_o (lsu_load_err),
     .store_err_o(lsu_store_err),
+    .lsu_err_is_cheri_o(lsu_err_is_cheri),
     .lsu_resp_err_intl_o (lsu_resp_err_intl),
 
     .busy_o(lsu_busy),

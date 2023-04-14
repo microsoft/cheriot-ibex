@@ -72,6 +72,7 @@ module ibex_load_store_unit import cheri_pkg::*; #(
   // exception signals
   output logic         load_err_o,
   output logic         store_err_o,
+  output logic         lsu_err_is_cheri_o,
   output logic         lsu_resp_err_intl_o,
 
   output logic         busy_o,
@@ -668,6 +669,7 @@ module ibex_load_store_unit import cheri_pkg::*; #(
   assign load_err_o    = data_or_pmp_err & ~data_we_q & lsu_resp_valid & (~lsu_is_intl_q);
   assign store_err_o   = data_or_pmp_err &  data_we_q & lsu_resp_valid & (~lsu_is_intl_q);
 
+  assign lsu_err_is_cheri_o  = cheri_err_q;     // send to controller for mcause encoding
   assign lsu_resp_err_intl_o = data_or_pmp_err & lsu_resp_valid & lsu_is_intl_q;
 
   assign busy_o = (ls_fsm_cs != IDLE);
