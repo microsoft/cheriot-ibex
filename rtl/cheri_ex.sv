@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 module cheri_ex import cheri_pkg::*; #(
+  parameter bit          WritebackStage = 1'b0,
   parameter int unsigned HeapBase,
   parameter int unsigned TSMapBase,
   parameter int unsigned TSMapTop,
@@ -168,14 +169,16 @@ module cheri_ex import cheri_pkg::*; #(
   logic          csr_set_mie_raw, csr_clr_mie_raw;
   logic          cheri_ex_valid_raw, cheri_ex_err_raw;
   logic          csr_op_en_raw;
-  logic          cheri_wb_err_q, cheri_wb_err_raw;
+  logic          cheri_wb_err_raw;
+  logic          cheri_wb_err_q, cheri_wb_err_d; 
 
   logic   [3:0]  cheri_lsu_lc_clrperm;
   logic          lc_cglg, lc_csdlm, lc_ctag;
   logic  [31:0]  pc_id_nxt;
 
   full_cap_t     setaddr1_outcap, setaddr2_outcap, setbounds_outcap;
-  logic  [10:0]  cheri_wb_err_info_q, cheri_ex_err_info_q;
+  logic  [10:0]  cheri_wb_err_info_q, cheri_wb_err_info_d;
+  logic  [10:0]  cheri_ex_err_info_q, cheri_ex_err_info_d;
   logic          set_bounds_done;
 
   logic   [4:0]  cheri_wb_err_cause, cheri_ex_err_cause, cheri_lsu_err_cause, rv32_lsu_err_cause;
@@ -228,7 +231,12 @@ module cheri_ex import cheri_pkg::*; #(
   // ex_err is used for id exceptions
   assign cheri_ex_valid_o = cheri_ex_valid_raw & cheri_exec_id_i;
   assign cheri_ex_err_o   = cheri_ex_err_raw & cheri_exec_id_i & ~debug_mode_i;
-  assign cheri_wb_err_o   = cheri_wb_err_q;
+
+  if (WritebackStage) begin
+    assign cheri_wb_err_o   = cheri_wb_err_q;
+  end else begin
+    assign cheri_wb_err_o   = cheri_wb_err_d;
+  end
 
   assign cheri_lsu_lc_clrperm = debug_mode_i ? 4'h0 : {lc_ctag, 1'b0, lc_csdlm, lc_cglg};
 
@@ -444,7 +452,7 @@ module cheri_ex import cheri_pkg::*; #(
             result_data_o        = clbc_data_q;
             result_cap_o         = clbc_cap_q;
             result_cap_o.valid   = ~clbc_revoked & clbc_cap_q.valid;
-            cheri_rf_we_raw      = ~(clbc_err | lsu_error);
+            cheri_rf_we_raw      = clbc_done & ~(clbc_err | lsu_error);
             cheri_ex_valid_raw   = clbc_done;
             cheri_ex_err_raw     = clbc_err | lsu_error;
           end
@@ -820,8 +828,10 @@ module cheri_ex import cheri_pkg::*; #(
 
   // report to csr as mtval
 
-  assign  cheri_ex_err_info_o = cheri_ex_err_info_q;
-  assign  cheri_wb_err_info_o = cheri_wb_err_info_q;
+  assign cheri_ex_err_info_o = cheri_ex_err_info_q;
+  assign cheri_wb_err_info_o = cheri_wb_err_info_q;
+
+  assign cheri_wb_err_d      = cheri_wb_err_raw & cheri_exec_id_i & ~debug_mode_i;
 
   always_comb begin : err_cause_comb 
     if (cheri_operator_i[CCSR_RW] && perm_vio)
@@ -874,27 +884,39 @@ module cheri_ex import cheri_pkg::*; #(
 
   end
 
+  always_comb begin 
+    if (cheri_operator_i[CCSR_RW] & cheri_ex_err_raw & cheri_exec_id_i)
+      // cspecialrw traps
+      cheri_ex_err_info_d = {1'b1, cheri_cs2_dec_i, cheri_ex_err_cause};
+    else if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load & lsu_error)  
+      // 2-stage ppl load/store, error treated as EX error, cheri CLC check error
+      cheri_ex_err_info_d = {1'b0, rf_raddr_a_i, cheri_lsu_err_cause};
+    else if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load & clbc_err)  
+      // 2-stage ppl load/store, error treated as EX error, memory error
+      cheri_ex_err_info_d = {1'b0, rf_raddr_a_i, 5'h1f};    // QQQ
+    else 
+      cheri_ex_err_info_d = cheri_ex_err_info_q;
+
+    // cheri_wb_err_raw is already qualified by instr
+    if (cheri_wb_err_raw  & cheri_exec_id_i)
+      cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, cheri_wb_err_cause};
+    else if ((is_load | is_store) & cheri_lsu_err & cheri_exec_id_i)
+      cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, cheri_lsu_err_cause};
+    else if (rv32_lsu_req_i & lsu_error_rv32 & cheri_exec_id_i)
+      cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, rv32_lsu_err_cause};
+    else 
+      cheri_wb_err_info_d = cheri_wb_err_info_q;
+  end 
+
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       cheri_wb_err_q      <= 1'b0;
-      cheri_wb_err_info_q <= 8'h0;
-      cheri_ex_err_info_q <= 8'h0;
+      cheri_wb_err_info_q <= 'h0;
+      cheri_ex_err_info_q <= 'h0;
     end else begin
-
-      // QQQ for 2-stage ibex, remove the delay stage here and merge with cheri_ex_err
-      cheri_wb_err_q      <= cheri_wb_err_raw & cheri_exec_id_i & ~debug_mode_i;
-
-      // cheri_wb_err_raw is already qualified by instr
-      if (cheri_wb_err_raw  & cheri_exec_id_i)
-        cheri_wb_err_info_q <= {1'b0, rf_raddr_a_i, cheri_wb_err_cause};
-      else if ((is_load | is_store) & cheri_lsu_err & cheri_exec_id_i)
-        cheri_wb_err_info_q <= {1'b0, rf_raddr_a_i, cheri_lsu_err_cause};
-      else if (rv32_lsu_req_i & lsu_error_rv32 & cheri_exec_id_i)
-        cheri_wb_err_info_q <= {1'b0, rf_raddr_a_i, rv32_lsu_err_cause};
-
-      if (cheri_ex_err_raw & cheri_exec_id_i)
-        // cspecialrw traps
-        cheri_ex_err_info_q <= {1'b1, cheri_cs2_dec_i, cheri_ex_err_cause};
+      cheri_wb_err_q      <= cheri_wb_err_d;
+      cheri_wb_err_info_q <= cheri_wb_err_info_d;
+      cheri_ex_err_info_q <= cheri_ex_err_info_d;
     end
   end
 

@@ -804,6 +804,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic rf_trsv_en;
 
   cheri_ex #(
+    .WritebackStage       (WritebackStage),
     .HeapBase             (HeapBase),
     .TSMapBase            (TSMapBase),
     .TSMapTop             (TSMapTop),
