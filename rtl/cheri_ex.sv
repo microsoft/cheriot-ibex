@@ -104,6 +104,15 @@ module cheri_ex import cheri_pkg::*; #(
   output logic          rv32_addr_incr_req_o,
   output logic [31:0]   rv32_addr_last_o,
 
+  // TBRE LSU request (for muxing)
+  input  logic          lsu_tbre_sel_i,
+  input  logic          tbre_lsu_req_i,
+  input  logic          tbre_lsu_is_cap_i,
+  input  logic          tbre_lsu_we_i,
+  input  logic [31:0]   tbre_lsu_addr_i,
+  input  logic [32:0]   tbre_lsu_wdata_i,
+  output logic          cpu_lsu_dec_o,
+
   input  logic [31:0]   csr_rdata_i,
   input  reg_cap_t      csr_rcap_i,
   input  logic          csr_mstatus_mie_i,
@@ -524,7 +533,20 @@ module cheri_ex import cheri_pkg::*; #(
   assign is_intl  = is_lbc;   // for now this is the only case
 
   // muxing between "normal cheri LSU requests (clc/csc) and CLBC
-  assign cheri_lsu_req      = is_intl ? intl_lsu_req : is_cap & cheri_exec_id_i & instr_first_cycle_i;
+
+  if (WritebackStage) begin
+    // assert LSU req until instruction is retired (req_done from LSU)
+    // note if the previous instr is also a load/store, cheri_exec_id won't be asserted 
+    // till WB is ready (lsu_resp for the previous isntr)
+    assign cheri_lsu_req      = is_intl ? intl_lsu_req : is_cap & cheri_exec_id_i;
+  end else begin
+    // no WB stage, only assert req in the first_cycle phase of the instruction
+    // (consistent with the RV32 load/store instructions)
+    // Here instruction won't complete till lsu_resp_valid in this case, 
+    // keeping lsu_req asserted causes problem as LSU sees it as a new request
+    assign cheri_lsu_req      = is_intl ? intl_lsu_req : is_cap & cheri_exec_id_i & instr_first_cycle_i;
+  end
+
   assign cheri_lsu_we       = is_intl ? 1'b0 : is_store;
   assign cheri_lsu_addr     = (is_intl ? intl_lsu_addr : cs1_addr_plusimm) + {addr_incr_req_i, 2'b00};
   assign cheri_lsu_is_cap   = is_intl ? intl_lsu_is_cap : is_cap;
@@ -1027,20 +1049,26 @@ module cheri_ex import cheri_pkg::*; #(
   //
 
   assign lsu_req_o       = instr_is_cheri_i ? cheri_lsu_req     : rv32_lsu_req_i;
-  assign lsu_cheri_err_o = instr_is_cheri_i ? cheri_lsu_err     : lsu_error_rv32;
-  assign lsu_is_cap_o    = instr_is_cheri_i ? cheri_lsu_is_cap  : 1'b0;
-  assign lsu_is_intl_o   = instr_is_cheri_i ? cheri_lsu_is_intl : 1'b0;
-  assign lsu_lc_clrperm_o  = instr_is_cheri_i ? cheri_lsu_lc_clrperm : 0;
-  assign lsu_we_o        = instr_is_cheri_i ? cheri_lsu_we      : rv32_lsu_we_i;
-  assign lsu_addr_o      = instr_is_cheri_i ? cheri_lsu_addr    : rv32_lsu_addr_i;
-  assign lsu_type_o      = instr_is_cheri_i ? 2'b00             : rv32_lsu_type_i;
-  assign lsu_wdata_o     = instr_is_cheri_i ? cheri_lsu_wdata   : {1'b0, rv32_lsu_wdata_i};
-  assign lsu_wcap_o      = instr_is_cheri_i ? cheri_lsu_wcap    : NULL_REG_CAP;
-  assign lsu_sign_ext_o  = instr_is_cheri_i ? 1'b0              : rv32_lsu_sign_ext_i;
+  assign cpu_lsu_dec_o   = (instr_is_cheri_i && is_cap) | instr_is_rv32lsu_i;
+
+  // muxing tbre ctrl inputs and CPU ctrl inputs
+  assign lsu_cheri_err_o   = ~lsu_tbre_sel_i ? (instr_is_cheri_i ? cheri_lsu_err : lsu_error_rv32) : 1'b0;
+  assign lsu_is_cap_o      = ~lsu_tbre_sel_i ? (instr_is_cheri_i & cheri_lsu_is_cap) : tbre_lsu_is_cap_i;
+  assign lsu_is_intl_o     = ~lsu_tbre_sel_i & instr_is_cheri_i & cheri_lsu_is_intl;
+  assign lsu_lc_clrperm_o  = (~lsu_tbre_sel_i & instr_is_cheri_i) ? cheri_lsu_lc_clrperm : 0;
+  assign lsu_we_o          = ~lsu_tbre_sel_i ? (instr_is_cheri_i ? cheri_lsu_we : rv32_lsu_we_i) : tbre_lsu_we_i;
+  assign lsu_addr_o        = ~lsu_tbre_sel_i ? (instr_is_cheri_i ? cheri_lsu_addr : rv32_lsu_addr_i) : tbre_lsu_addr_i;
+  assign lsu_type_o        = (~lsu_tbre_sel_i & ~instr_is_cheri_i) ? rv32_lsu_type_i : 2'b00;
+  assign lsu_wdata_o       = ~lsu_tbre_sel_i ? (instr_is_cheri_i ? cheri_lsu_wdata : {1'b0, rv32_lsu_wdata_i}) : 
+                                               tbre_lsu_wdata_i;
+  assign lsu_wcap_o        = (~lsu_tbre_sel_i & instr_is_cheri_i) ? cheri_lsu_wcap    : NULL_REG_CAP;
+  assign lsu_sign_ext_o    = (~lsu_tbre_sel_i & ~instr_is_cheri_i) ? rv32_lsu_sign_ext_i : 1'b0;
+
 
   // rv32 core side signals
   // request phase: be nice and mux using the current EX instruction to select
-  assign rv32_addr_incr_req_o   = instr_is_cheri_i ? 1'b0 : addr_incr_req_i;
+  // must qualify addr_incr otherwise it goes to ALU and mess up non-LSU instructions
+  assign rv32_addr_incr_req_o   = instr_is_rv32lsu_i  ?  addr_incr_req_i : 1'b0;
   assign rv32_addr_last_o       = addr_last_i;
 
   // req_done, resp_valid, load/store_err will be directly from LSU

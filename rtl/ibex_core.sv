@@ -54,8 +54,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   parameter bit          MemCapFmt         = 1'b0,
   parameter bit          Cheri32E          = 1'b0,
   parameter bit          CheriPPLBC        = 1'b1,
-  parameter bit          CheriSBND2        = 1'b0
-
+  parameter bit          CheriSBND2        = 1'b0,
+  parameter bit          CheriTBRE         = 1'b1
 ) (
   // Clock and Reset
   input  logic                         clk_i,
@@ -108,6 +108,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   output logic                         tsmap_cs_o,
   output logic [15:0]                  tsmap_addr_o,
   input  logic [31:0]                  tsmap_rdata_i,
+  input  logic [64:0]                  tbre_ctrl_vec_i,
+  output logic                         tbre_done_o,
 
   // RAMs interface
 
@@ -243,6 +245,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic        ctrl_busy;
   logic        if_busy;
   logic        lsu_busy;
+
+  logic        lsu_busy_tbre;
 
   // Register File
   logic [4:0]  rf_raddr_a;
@@ -442,6 +446,23 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
 
   logic [15:0]   itr_id_info;
   logic          csr_dbg_tclr_fault;
+
+  logic          lsu_tbre_resp_valid;
+  logic          lsu_tbre_resp_err;
+  logic          lsu_resp_is_wr;
+  logic [32:0]   lsu_tbre_raw_lsw;   
+  logic          lsu_tbre_req_done;   
+  logic          lsu_tbre_addr_incr;
+  logic          tbre_lsu_req;
+  logic          tbre_lsu_is_cap;
+  logic          tbre_lsu_we;
+  logic [31:0]   tbre_lsu_addr;
+  logic [32:0]   tbre_lsu_wdata;
+  logic          tbre_trvk_en;
+  logic          tbre_trvk_clrtag;
+
+  logic          lsu_tbre_sel, cpu_lsu_dec;
+
 
   //////////////////////
   // Clock management //
@@ -659,12 +680,12 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .csr_pcc_perm_sr_i    (pcc_fullcap_r.perms[PERM_SR]),
 
     // LSU
-    .lsu_req_o     (rv32_lsu_req),  // to load store unit
-    .lsu_we_o      (rv32_lsu_we),  // to load store unit
-    .lsu_type_o    (rv32_lsu_type),  // to load store unit
-    .lsu_sign_ext_o(rv32_lsu_sign_ext),  // to load store unit
-    .lsu_wdata_o   (rv32_lsu_wdata),  // to load store unit
-    .lsu_req_done_i(lsu_req_done),  // from load store unit
+    .lsu_req_o        (rv32_lsu_req),  // to load store unit
+    .lsu_we_o         (rv32_lsu_we),  // to load store unit
+    .lsu_type_o       (rv32_lsu_type),  // to load store unit
+    .lsu_sign_ext_o   (rv32_lsu_sign_ext),  // to load store unit
+    .lsu_wdata_o      (rv32_lsu_wdata),  // to load store unit
+    .lsu_req_done_i   (lsu_req_done),  // from load store unit
 
     .lsu_addr_incr_req_i(rv32_lsu_addr_incr_req),
     .lsu_addr_last_i    (rv32_lsu_addr_last),
@@ -881,6 +902,13 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .rv32_lsu_addr_i      (alu_adder_result_ex),
     .rv32_addr_incr_req_o (rv32_lsu_addr_incr_req),
     .rv32_addr_last_o     (rv32_lsu_addr_last),
+    .lsu_tbre_sel_i       (lsu_tbre_sel),
+    .tbre_lsu_req_i       (tbre_lsu_req),
+    .tbre_lsu_is_cap_i    (tbre_lsu_is_cap),
+    .tbre_lsu_we_i        (tbre_lsu_we),
+    .tbre_lsu_addr_i      (tbre_lsu_addr),
+    .tbre_lsu_wdata_i     (tbre_lsu_wdata),
+    .cpu_lsu_dec_o        (cpu_lsu_dec),  
     .csr_rdata_i          (cheri_csr_rdata),
     .csr_rcap_i           (cheri_csr_rcap),
     .csr_mstatus_mie_i    (csr_mstatus_mie),
@@ -903,7 +931,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   // cheri TS pipeline stage //
   /////////////////////////////
 
-if (CheriPPLBC) begin
+if (CheriPPLBC) begin : g_trvk_stage
   cheri_trvk_stage #(
     .HeapBase  (HeapBase),
     .TSMapSize (TSMapSize)
@@ -914,12 +942,17 @@ if (CheriPPLBC) begin
   .rf_trsv_en_i      (rf_trsv_en      ),
   .rf_trsv_addr_i    (rf_trsv_addr_o  ),
   .lsu_resp_valid_i  (lsu_resp_valid  ),
-  .lsu_resp_err_i    (lsu_load_err    ),
+  .lsu_load_err_i    (lsu_load_err    ),
   .rf_wdata_lsu_i    (rf_wdata_lsu[31:0]),
   .rf_wcap_lsu_i     (rf_wcap_lsu     ),
+  .lsu_resp_is_wr_i  (lsu_resp_is_wr),
+  .lsu_tbre_resp_valid_i (lsu_tbre_resp_valid),
+  .lsu_tbre_resp_err_i   (lsu_tbre_resp_err),
   .rf_trvk_addr_o    (rf_trvk_addr_o  ),
   .rf_trvk_en_o      (rf_trvk_en_o    ),
   .rf_trvk_clrtag_o  (rf_trvk_clrtag_o),
+  .tbre_trvk_en_o    (tbre_trvk_en    ),
+  .tbre_trvk_clrtag_o(tbre_trvk_clrtag),          
   .tsmap_cs_o        (tsmap_cs_o      ),
   .tsmap_addr_o      (tsmap_addr_o    ),
   .tsmap_rdata_i     (tsmap_rdata_i   )
@@ -932,6 +965,54 @@ end else begin
   assign tsmap_addr_o     = 0;
 end
 
+  //////////////////////////////////////////
+  // cheri TS background revocation engine//
+  //////////////////////////////////////////
+
+if (CheriTBRE) begin : g_tbre
+  logic snoop_lsu_req_done;
+
+  assign snoop_lsu_req_done = lsu_req_done | lsu_req_done_intl;
+
+  cheri_tbre #(
+    .FifoSize (4), 
+    .AddrHi   (23)
+) cheri_tbre_i (
+   // Clock and Reset
+    .clk_i                   (clk_i),                 
+    .rst_ni                  (rst_ni),
+    .tbre_ctrl_vec_i         (tbre_ctrl_vec_i),
+    .tbre_done_o             (tbre_done_o),
+    .lsu_tbre_resp_valid_i   (lsu_tbre_resp_valid),
+    .lsu_tbre_resp_err_i     (lsu_tbre_resp_err),
+    .lsu_tbre_resp_is_wr_i   (lsu_resp_is_wr),
+    .lsu_tbre_raw_lsw_i      (lsu_tbre_raw_lsw),   
+    .lsu_tbre_req_done_i     (lsu_tbre_req_done),   
+    .lsu_tbre_addr_incr_i    (lsu_addr_incr_req),
+    .tbre_lsu_req_o          (tbre_lsu_req),
+    .tbre_lsu_is_cap_o       (tbre_lsu_is_cap),
+    .tbre_lsu_we_o           (tbre_lsu_we),
+    .tbre_lsu_addr_o         (tbre_lsu_addr),
+    .tbre_lsu_wdata_o        (tbre_lsu_wdata),
+    .snoop_lsu_req_done_i    (snoop_lsu_req_done),  
+    .snoop_lsu_req_i         (lsu_req),
+    .snoop_lsu_is_cap_i      (lsu_is_cap),
+    .snoop_lsu_we_i          (lsu_we),
+    .snoop_lsu_cheri_err_i   (lsu_cheri_err),
+    .snoop_lsu_addr_i        (lsu_addr),
+    .trvk_en_i               (tbre_trvk_en),
+    .trvk_clrtag_i           (tbre_trvk_clrtag)          
+);
+
+end else begin
+  assign tbre_done_o     = 1'b0;
+  assign tbre_lsu_req    = 1'b0;
+  assign tbre_lsu_is_cap = 1'b0;
+  assign tbre_lsu_we     = 1'b0;
+  assign tbre_lsu_addr   = 32'h0;
+  assign tbre_lsu_wdata  = 33'h0;
+end
+
 
   /////////////////////
   // Load/store unit //
@@ -940,7 +1021,10 @@ end
   assign data_req_o   = data_req_out & ~pmp_req_err[PMP_D];
   assign lsu_resp_err = lsu_load_err | lsu_store_err;
 
-  ibex_load_store_unit #(.MemCapFmt(MemCapFmt)) load_store_unit_i (
+  ibex_load_store_unit #(
+    .MemCapFmt(MemCapFmt),
+    .CheriTBRE(CheriTBRE)
+    ) load_store_unit_i (
     .clk_i (clk_i),
     .rst_ni(rst_ni),
 
@@ -973,8 +1057,7 @@ end
     .lsu_is_intl_i    (lsu_is_intl),
     .lsu_lc_clrperm_i (lsu_lc_clrperm),
     .lsu_cheri_err_i  (lsu_cheri_err),
-
-    .adder_result_ex_i(lsu_addr),
+    .lsu_addr_i       (lsu_addr),
 
     .addr_incr_req_o(lsu_addr_incr_req),
     .addr_last_o    (lsu_addr_last),
@@ -983,6 +1066,15 @@ end
     .lsu_req_done_intl_o (lsu_req_done_intl),
     .lsu_resp_valid_o (lsu_resp_valid),
     .lsu_resp_valid_intl_o(lsu_resp_valid_intl),
+    .lsu_resp_is_wr_o      (lsu_resp_is_wr),    
+
+    .tbre_lsu_req_i        (tbre_lsu_req),
+    .cpu_lsu_dec_i         (cpu_lsu_dec),
+    .lsu_tbre_sel_o        (lsu_tbre_sel),     
+    .lsu_tbre_raw_lsw_o    (lsu_tbre_raw_lsw),
+    .lsu_tbre_req_done_o   (lsu_tbre_req_done),
+    .lsu_tbre_resp_valid_o (lsu_tbre_resp_valid),
+    .lsu_tbre_resp_err_o   (lsu_tbre_resp_err),
 
     // exception signals
     .load_err_o (lsu_load_err),
@@ -991,6 +1083,8 @@ end
     .lsu_resp_err_intl_o (lsu_resp_err_intl),
 
     .busy_o(lsu_busy),
+
+    .busy_tbre_o(lsu_busy_tbre),
 
     .perf_load_o (perf_load),
     .perf_store_o(perf_store)
@@ -1128,11 +1222,13 @@ end
 
     `ASSERT(NoMemRFWriteWithoutPendingLoad, rf_we_lsu |-> outstanding_load_resp, clk_i, !rst_ni)
   end
-
+  
+  if (~CheriTBRE) begin
   `ASSERT(NoMemResponseWithoutPendingAccess,
     // this doesn't work for CLC since 1st data_rvalid comes back before wb
     // data_rvalid_i |-> outstanding_load_resp | outstanding_store_resp,  clk_i, !rst_ni)
     load_store_unit_i.lsu_resp_valid_o |-> outstanding_load_resp | outstanding_store_resp,  clk_i, !rst_ni)
+  end
   `endif
 
 
@@ -1861,10 +1957,10 @@ end
 
   // Capture read data from LSU when it becomes valid
   always_comb begin
-    if (load_store_unit_i.lsu_is_cap_q & lsu_resp_valid_intl) begin
+    if (load_store_unit_i.resp_is_cap_q & lsu_resp_valid_intl) begin
       rvfi_mem_rdata_d = rf_wdata_lsu;      // for clbc only capture the cap reading part
       rvfi_mem_rcap_d  = rf_wcap_lsu;
-    end else if (load_store_unit_i.lsu_is_cap_q & lsu_resp_valid) begin
+    end else if (load_store_unit_i.resp_is_cap_q & lsu_resp_valid) begin
       rvfi_mem_rdata_d = rf_wdata_lsu;      // for clbc only capture the cap reading part
       rvfi_mem_rcap_d  = rf_wcap_lsu;
     end else if (lsu_resp_valid) begin
