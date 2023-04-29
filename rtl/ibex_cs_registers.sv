@@ -70,6 +70,12 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   output logic [31:0]          cheri_csr_rdata_o,
   output reg_cap_t             cheri_csr_rcap_o,
 
+  // stack highwatermark function
+  output logic [31:0]          csr_mshwm_o,
+  output logic [31:0]          csr_mshwmb_o,
+  input  logic                 csr_mshwm_set_i,
+  input  logic [31:0]          csr_mshwm_new_i,
+
   // interrupts
   input  logic                 irq_software_i,
   input  logic                 irq_timer_i,
@@ -241,6 +247,9 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   logic [31:0] dscratch1_q;
   logic        dscratch0_en, dscratch1_en;
   reg_cap_t    dscratch0_cap, dscratch1_cap;
+  logic [31:0] mshwm_q, mshwm_d;
+  logic [31:0] mshwmb_q;
+  logic        mshwm_en, mshwmb_en;
 
   // CSRs for recoverable NMIs
   // NOTE: these CSRS are nonstandard, see https://github.com/riscv/riscv-isa-manual/issues/261
@@ -538,6 +547,11 @@ module ibex_cs_registers import cheri_pkg::*;  #(
         csr_rdata_int = '0;
       end
 
+      // MSHWM CSR (stack high watermark in cheriot)
+      CSR_MSHWM:  csr_rdata_int = mshwm_q;
+
+      CSR_MSHWMB: csr_rdata_int = mshwmb_q;
+
       default: begin
         illegal_csr = 1'b1;
       end
@@ -583,6 +597,9 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
     cpuctrl_we       = 1'b0;
     cpuctrl_d        = cpuctrl_q;
+
+    mshwm_en     = 1'b0;
+    mshwmb_en    = 1'b0;
 
     double_fault_seen_o = 1'b0;
 
@@ -687,6 +704,9 @@ module ibex_cs_registers import cheri_pkg::*;  #(
           cpuctrl_d  = cpuctrl_wdata;
           cpuctrl_we = 1'b1;
         end
+
+        CSR_MSHWM:  mshwm_en  = 1'b1;
+        CSR_MSHWMB: mshwmb_en = 1'b1;
 
         default:;
       endcase
@@ -816,7 +836,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   //     for now we are allowing reading the M-mode counters (assuming only use single priv level)
 
   logic read_ok;
-  assign read_ok = ~cheri_pmode_i || debug_mode_i || pcc_fullcap_o.perms[PERM_SR] || ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<=CSR_MHPMCOUNTER31H));
+  assign read_ok = ~cheri_pmode_i || debug_mode_i || pcc_fullcap_o.perms[PERM_SR] || ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<=CSR_MSHWMB));
 
   assign csr_we_int  = csr_wr & csr_op_en_i & (~cheri_pmode_i | debug_mode_i | pcc_fullcap_o.perms[PERM_SR]) & ~illegal_csr_insn_o;
   assign csr_rdata_o = read_ok ? csr_rdata_int : 0;
@@ -825,6 +845,9 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   assign csr_mepc_o  = mepc_q;
   assign csr_depc_o  = depc_q;
   assign csr_mtvec_o = mtvec_q;
+
+  assign csr_mshwm_o  = mshwm_q;
+  assign csr_mshwmb_o = mshwmb_q;
 
   assign csr_mstatus_mie_o   = mstatus_q.mie;
   assign csr_mstatus_tw_o    = mstatus_q.tw;
@@ -1081,6 +1104,37 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     .rd_data_o (mstack_cause_q),
     .rd_error_o()
   );
+
+  // MSHWM and HSHWMB
+  logic        mshwm_en_combi;
+  assign mshwm_en_combi = mshwm_en | csr_mshwm_set_i;
+  assign mshwm_d = csr_mshwm_set_i ? csr_mshwm_new_i : csr_wdata_int;
+
+  ibex_csr #(
+    .Width     (32),
+    .ShadowCopy(ShadowCSR),
+    .ResetValue(32'd0)
+  ) u_mshwm_csr (
+    .clk_i     (clk_i),
+    .rst_ni    (rst_ni),
+    .wr_data_i (mshwm_d),
+    .wr_en_i   (mshwm_en_combi),
+    .rd_data_o (mshwm_q),
+    .rd_error_o()
+  );
+
+  ibex_csr #(
+    .Width     (32),
+    .ShadowCopy(ShadowCSR),
+    .ResetValue(32'd0)
+  ) u_mshwmb_csr (
+    .clk_i     (clk_i),
+    .rst_ni    (rst_ni),
+    .wr_data_i (csr_wdata_int),
+    .wr_en_i   (mshwmb_en),
+    .rd_data_o (mshwmb_q),
+    .rd_error_o()
+    );
 
   // -----------------
   // PMP registers

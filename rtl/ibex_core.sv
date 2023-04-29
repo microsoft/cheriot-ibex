@@ -443,6 +443,11 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic [15:0]   itr_id_info;
   logic          csr_dbg_tclr_fault;
 
+  logic [31:0]   csr_mshwm;
+  logic [31:0]   csr_mshwmb;
+  logic          csr_mshwm_set;
+  logic [31:0]   csr_mshwm_new;
+
   //////////////////////
   // Clock management //
   //////////////////////
@@ -892,6 +897,10 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .csr_op_en_o          (cheri_csr_op_en),
     .csr_set_mie_o        (cheri_csr_set_mie),
     .csr_clr_mie_o        (cheri_csr_clr_mie),
+    .csr_mshwm_i          (csr_mshwm),
+    .csr_mshwmb_i         (csr_mshwmb),
+    .csr_mshwm_set_o      (csr_mshwm_set),
+    .csr_mshwm_new_o      (csr_mshwm_new),
     .csr_dbg_tclr_fault_i (csr_dbg_tclr_fault)
   );
 
@@ -1224,6 +1233,11 @@ end
     .cheri_csr_clr_mie_i  (cheri_csr_clr_mie),
     .cheri_csr_rdata_o    (cheri_csr_rdata),
     .cheri_csr_rcap_o     (cheri_csr_rcap),
+
+    .csr_mshwm_o          (csr_mshwm),
+    .csr_mshwmb_o         (csr_mshwmb),
+    .csr_mshwm_set_i      (csr_mshwm_set),
+    .csr_mshwm_new_i      (csr_mshwm_new),
 
     // Interrupt related control signals
     .irq_software_i   (irq_software_i),

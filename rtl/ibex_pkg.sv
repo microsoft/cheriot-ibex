@@ -554,6 +554,8 @@ package ibex_pkg;
     CSR_MHPMCOUNTER29H = 12'hB9D,
     CSR_MHPMCOUNTER30H = 12'hB9E,
     CSR_MHPMCOUNTER31H = 12'hB9F,
+    CSR_MSHWM          = 12'hBC1,
+    CSR_MSHWMB         = 12'hBC2,
     CSR_CPUCTRL        = 12'h7C0,
     CSR_SECURESEED     = 12'h7C1
   } csr_num_e;

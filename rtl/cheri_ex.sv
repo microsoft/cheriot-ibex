@@ -116,6 +116,12 @@ module cheri_ex import cheri_pkg::*; #(
   output logic          csr_set_mie_o,
   output logic          csr_clr_mie_o,
 
+  // stack highwater mark updates
+  input  logic [31:0]   csr_mshwm_i,
+  input  logic [31:0]   csr_mshwmb_i,
+  output logic          csr_mshwm_set_o,
+  output logic [31:0]   csr_mshwm_new_o,
+
   // debug feature
   input  logic          csr_dbg_tclr_fault_i
 );
@@ -1044,6 +1050,22 @@ module cheri_ex import cheri_pkg::*; #(
   assign rv32_addr_last_o       = addr_last_i;
 
   // req_done, resp_valid, load/store_err will be directly from LSU
+
+  //
+  // Stack high watermark CSR update
+  //
+  
+  // Notes,
+  //  - this should also take care of unaligned access (which increases addr only)
+  //    (although stack access should not have any)
+  //  - it's also ok if the prev instr gets faulted in WB, since stall_mem/data_req_allowed logic  ensures 
+  //    that lsu_req won't be issued till memory response/error comes back
+  //  - what if the instruction gets faulted later in WB stage? Also fine since worst case even if HM is 
+  //    too aggressive we will just have to spend more time zeroing out more stack area.
+  
+  assign csr_mshwm_set_o = lsu_req_o & ~lsu_cheri_err_o & lsu_we_o & 
+                           (lsu_addr_o[31:4] >= csr_mshwmb_i[31:4]) & (lsu_addr_o[31:4] < csr_mshwm_i[31:4]);
+  assign csr_mshwm_new_o = {lsu_addr_o[31:4], 4'h0};
 
   //
   // debug signal for FPGA only
