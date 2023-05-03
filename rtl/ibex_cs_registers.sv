@@ -836,7 +836,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   //     for now we are allowing reading the M-mode counters (assuming only use single priv level)
 
   logic read_ok;
-  assign read_ok = ~cheri_pmode_i || debug_mode_i || pcc_fullcap_o.perms[PERM_SR] || ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<=CSR_MSHWMB));
+  assign read_ok = ~cheri_pmode_i || debug_mode_i || pcc_fullcap_o.perms[PERM_SR] || ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<CSR_MSHWM));
 
   assign csr_we_int  = csr_wr & csr_op_en_i & (~cheri_pmode_i | debug_mode_i | pcc_fullcap_o.perms[PERM_SR]) & ~illegal_csr_insn_o;
   assign csr_rdata_o = read_ok ? csr_rdata_int : 0;
