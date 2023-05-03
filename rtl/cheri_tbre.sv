@@ -143,9 +143,9 @@ module cheri_tbre #(
         else if (load_gnt & (load_stall || (tbre_fsm_d == TBRE_WAIT)))
           tbre_sch_d = SCH_NONE;
       SCH_STORE:
-        if (store_gnt & (tbre_fsm_q == TBRE_LOAD))
+        if ((store_gnt | ~store_req_valid) & (tbre_fsm_q == TBRE_LOAD))
           tbre_sch_d = SCH_LOAD;     // no need to check req_fifo_full, since we are dequeing from it
-        else if (store_gnt)          // go back to NONE to allow updaing the fifo head (store_req_valid)   
+        else if (store_gnt|~store_req_valid)    // go back to NONE to allow reading fifo further
           tbre_sch_d = SCH_NONE;     // no bandwidth loss here since the load req will move ahead anyway
       default:;
     endcase
