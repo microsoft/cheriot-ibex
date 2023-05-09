@@ -703,8 +703,13 @@ module cheri_ex import cheri_pkg::*; #(
         set_bounds_done <= 1'b0;
       end else begin
         bound_req2      <= bound_req1;
-        set_bounds_done <= cheri_exec_id_i & (cheri_operator_i[CSET_BOUNDS] | cheri_operator_i[CSET_BOUNDS_IMM] |
-                           cheri_operator_i[CSET_BOUNDS_EX] | cheri_operator_i[CRRL] | cheri_operator_i[CRAM]);
+        // set_bounds_done is asserted in the 2nd cycle of execution when SBD2 == 1
+        // note in ibex it actaully is ok to hold set_bounds_done high for both cycles
+        // since the multicycle control logic won't look at ex_valid till the 2nd cycle
+        // however this is the cleaner solution.
+        set_bounds_done <= (cheri_operator_i[CSET_BOUNDS] | cheri_operator_i[CSET_BOUNDS_IMM] |
+                            cheri_operator_i[CSET_BOUNDS_EX] | cheri_operator_i[CRRL] | 
+                            cheri_operator_i[CRAM]) & cheri_exec_id_i & ~set_bounds_done ;
       end
     end
   end else begin
