@@ -80,11 +80,7 @@ module ibex_tracer import cheri_pkg::*; # (
   input logic [32:0] rvfi_mem_wdata,
   input logic        rvfi_mem_is_cap,
   input reg_cap_t    rvfi_mem_rcap,
-  input reg_cap_t    rvfi_mem_wcap,
-  input logic [31:0] rvfi_mem2_addr,
-  input logic        rvfi_mem2_we,
-  input logic [65:0] rvfi_mem2_rdata,
-  input logic [65:0] rvfi_mem2_wdata
+  input reg_cap_t    rvfi_mem_wcap
 );
 
   // These signals are part of RVFI, but not used in this module currently.
@@ -207,17 +203,6 @@ module ibex_tracer import cheri_pkg::*; # (
         $fwrite(file_handle, " load:0x%09x+0x%09x", rvfi_mem_rdata, reg2memcap_fmt0(rvfi_mem_rcap));
     end
 
-//    if ((data_accessed & MEM2) != 0) begin
-//      $fwrite(file_handle, " PA2:0x%08x", rvfi_mem2_addr);
-//
-//      if (rvfi_mem2_we) begin
-//        $fwrite(file_handle, " store:0x%09x+%09x", rvfi_mem2_wdata[32:0], rvfi_mem2_wdata[65:33]);
-//      end
-//      if (~rvfi_mem2_we) begin
-//       $fwrite(file_handle, " load:0x%09x+%09x", rvfi_mem2_rdata[32:0], rvfi_mem2_rdata[65:33]);
-//      end
-//    end
-
     $fwrite(file_handle, "\n");
   endfunction
 
@@ -229,6 +214,18 @@ module ibex_tracer import cheri_pkg::*; # (
     end else begin
       return $sformatf("x%0d", addr);
     end
+  endfunction
+
+  // Get a SCR name for a CHERI SCR address.
+  function automatic string get_scr_name(input logic [4:0] scr_addr);
+    unique case (scr_addr)
+      5'd27:   return "mdbgctrl";
+      5'd28:   return "mtcc";
+      5'd29:   return "mtdc";
+      5'd30:   return "mscratchc";
+      5'd31:   return "mepcc";
+      default: return $sformatf("scr%d", scr_addr);
+    endcase
   endfunction
 
   // Get a CSR name for a CSR address.
@@ -923,6 +920,11 @@ module ibex_tracer import cheri_pkg::*; # (
     decoded_str = $sformatf("fence\t%s,%s", predecessor, successor);
   endfunction
 
+  function automatic void decode_cheri_rd_rs1_insn(input string mnemonic);
+    data_accessed = RS1 | RD;
+    decoded_str = $sformatf("%s\tx%0d,x%0d", mnemonic, rvfi_rd_addr, rvfi_rs1_addr);
+  endfunction
+
   function automatic void decode_cheri_rd_cs1_insn(input string mnemonic);
     data_accessed = CS1 | RD;
     decoded_str = $sformatf("%s\tx%0d,c%0d", mnemonic, rvfi_rd_addr, rvfi_rs1_addr);
@@ -997,9 +999,22 @@ module ibex_tracer import cheri_pkg::*; # (
     decoded_str = $sformatf("%s\tc%0d,c%0d", mnemonic, rvfi_rs1_addr, rvfi_rs2_addr);
   endfunction
 
-  function automatic void decode_cheri_scrrw_insn(input string mnemonic);
+  function automatic void decode_cheri_scrrw_insn();
+    string mnemonic, scr_name;
+
+    scr_name = get_scr_name(rvfi_insn[24:20]);
     data_accessed = CS1 | CD;
-    decoded_str = $sformatf("%s\tc%0d, scr%0d, c%0d", mnemonic, rvfi_rd_addr, rvfi_insn[24:20], rvfi_rs1_addr);
+
+    if (rvfi_rd_addr == 0) begin
+      mnemonic = "CH.cspecialw";
+      decoded_str = $sformatf("%s\t%s,c%0d", mnemonic, scr_name, rvfi_rs1_addr);
+    end else if (rvfi_rs1_addr == 0) begin
+      mnemonic = "CH.cspecialr";
+      decoded_str = $sformatf("%s\tc%0d,%s", mnemonic, rvfi_rd_addr, scr_name);
+    end else begin
+      mnemonic = "CH.cspecialrw";
+      decoded_str = $sformatf("%s\tc%0d,%s,c%0d", mnemonic, rvfi_rd_addr, scr_name, rvfi_rs1_addr);
+    end
   endfunction
 
   // cycle counter
@@ -1064,8 +1079,8 @@ module ibex_tracer import cheri_pkg::*; # (
           end
           INSN_CLW:        decode_compressed_load_insn("c.lw");
           INSN_CSW:        decode_compressed_store_insn("c.sw");
-          INSN_CLC:        decode_compressed_load_insn("c.CH.clc");
-          INSN_CSC:        decode_compressed_store_insn("c.CH.csc");
+          INSN_CCLC:       decode_compressed_load_insn("c.CH.clc");
+          INSN_CCSC:       decode_compressed_store_insn("c.CH.csc");
           // C1 Opcodes
           INSN_CADDI:      decode_ci_caddi_insn("c.addi");
           INSN_CJAL:       decode_cj_insn("c.jal");
@@ -1092,8 +1107,8 @@ module ibex_tracer import cheri_pkg::*; # (
           INSN_CSLLI:      decode_ci_cslli_insn("c.slli");
           INSN_CLWSP:      decode_compressed_load_insn("c.lwsp");
           INSN_SWSP:       decode_compressed_store_insn("c.swsp");
-          INSN_CLCSP:      decode_compressed_load_insn("c.CH.clcsp");
-          INSN_CSCSP:      decode_compressed_store_insn("c.CH.cscsp");
+          INSN_CCLCSP:     decode_compressed_load_insn("c.CH.clcsp");
+          INSN_CCSCSP:     decode_compressed_store_insn("c.CH.cscsp");
           default:         decode_mnemonic("INVALID");
         endcase
       end
@@ -1356,13 +1371,15 @@ module ibex_tracer import cheri_pkg::*; # (
 
         INSN_CHSETBOUNDSIMM: decode_cheri_cd_cs1_imm_insn("CH.csetboundsimm");
         INSN_CHCLEARTAG:     decode_cheri_cd_cs1_insn("CH.ccleartag");
+        INSN_CHCRRL:         decode_cheri_rd_rs1_insn("CH.crrl");
+        INSN_CHCRAM:         decode_cheri_rd_rs1_insn("CH.cram");
 
         INSN_CHSUB:        decode_cheri_rd_cs1_cs2_insn("CH.csub");
         INSN_CHMOVE:       decode_cheri_cd_cs1_insn("CH.cmove");
         INSN_CHTESTSUB:    decode_cheri_rd_cs1_cs2_insn("CH.ctestsubset");
         INSN_CHSETEQUAL:   decode_cheri_rd_cs1_cs2_insn("CH.csetequalexact");
         //INSN_CHJALR:       decode_cheri_cd_cs1_insn("CH.jalr");
-        INSN_CHCSRRW:      decode_cheri_scrrw_insn("CH.cspecialrw");
+        INSN_CHCSRRW:      decode_cheri_scrrw_insn();
         INSN_AUIPC:        decode_cheri_auipcc_insn();
         INSN_AUICGP:       decode_cheri_auicgp_insn();
 

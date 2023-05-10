@@ -159,10 +159,6 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   output reg_cap_t                     rvfi_mem_rcap,
   output logic [32:0]                  rvfi_mem_wdata,
   output reg_cap_t                     rvfi_mem_wcap,
-  output logic                         rvfi_mem2_we,
-  output logic [31:0]                  rvfi_mem2_addr,
-  output logic [65:0]                  rvfi_mem2_rdata,
-  output logic [65:0]                  rvfi_mem2_wdata,
   output logic [31:0]                  rvfi_ext_mip,
   output logic                         rvfi_ext_nmi,
   output logic                         rvfi_ext_debug_req,
@@ -1505,10 +1501,6 @@ end
   logic [32:0] rvfi_stage_mem_wdata [RVFI_STAGES];
   reg_cap_t    rvfi_stage_mem_wcap  [RVFI_STAGES];
   logic        rvfi_stage_mem_is_cap [RVFI_STAGES];
-  logic        rvfi_stage_mem2_we   [RVFI_STAGES];
-  logic [31:0] rvfi_stage_mem2_addr  [RVFI_STAGES];
-  logic [65:0] rvfi_stage_mem2_rdata [RVFI_STAGES];
-  logic [65:0] rvfi_stage_mem2_wdata [RVFI_STAGES];
 
   logic        rvfi_instr_new_wb;
   logic        rvfi_intr_d;
@@ -1552,14 +1544,6 @@ end
   reg_cap_t    rvfi_mem_rcap_q;
   reg_cap_t    rvfi_mem_wcap_d;
   reg_cap_t    rvfi_mem_wcap_q;
-  logic        rvfi_mem2_we_d;
-  logic        rvfi_mem2_we_q;
-  logic [65:0] rvfi_mem2_rdata_d;
-  logic [65:0] rvfi_mem2_rdata_q;
-  logic [65:0] rvfi_mem2_wdata_d;
-  logic [65:0] rvfi_mem2_wdata_q;
-  logic [31:0] rvfi_mem2_addr_d;
-  logic [31:0] rvfi_mem2_addr_q;
   logic        rvfi_trap_id;
   logic        rvfi_trap_wb;
   logic [63:0] rvfi_stage_order_d;
@@ -1614,11 +1598,6 @@ end
   assign rvfi_mem_is_cap = rvfi_stage_mem_is_cap[RVFI_STAGES-1];
   assign rvfi_mem_rcap  = rvfi_stage_mem_rcap[RVFI_STAGES-1];
   assign rvfi_mem_wcap  = rvfi_stage_mem_wcap[RVFI_STAGES-1];
-
-  assign rvfi_mem2_we    = rvfi_stage_mem2_we [RVFI_STAGES-1];
-  assign rvfi_mem2_addr  = rvfi_stage_mem2_addr [RVFI_STAGES-1];
-  assign rvfi_mem2_rdata = rvfi_stage_mem2_rdata[RVFI_STAGES-1];
-  assign rvfi_mem2_wdata = rvfi_stage_mem2_wdata[RVFI_STAGES-1];
 
   assign rvfi_rd_addr_wb  = rf_waddr_wb;
   assign rvfi_rd_wdata_wb = rf_we_wb ? rf_wdata_wb : rf_wdata_lsu; // this doesn't look right but ok
@@ -1802,10 +1781,6 @@ end
         rvfi_stage_mem_rdata[i]       <= '0;
         rvfi_stage_mem_wdata[i]       <= '0;
         rvfi_stage_mem_addr[i]        <= '0;
-        rvfi_stage_mem2_we[i]         <= 1'b0;
-        rvfi_stage_mem2_rdata[i]      <= '0;
-        rvfi_stage_mem2_wdata[i]      <= '0;
-        rvfi_stage_mem2_addr[i]       <= '0;
         rvfi_ext_stage_mip[i+1]       <= '0;
         rvfi_ext_stage_nmi[i+1]       <= '0;
         rvfi_ext_stage_debug_req[i+1] <= '0;
@@ -1844,10 +1819,6 @@ end
             rvfi_stage_mem_wcap[i]        <= rvfi_mem_wcap_d;
             rvfi_stage_mem_is_cap[i]      <= rvfi_mem_is_cap_d;
             rvfi_stage_mem_addr[i]        <= rvfi_mem_addr_d;
-            rvfi_stage_mem2_we[i]         <= rvfi_mem2_we_d;
-            rvfi_stage_mem2_rdata[i]      <= rvfi_mem2_rdata_d;
-            rvfi_stage_mem2_wdata[i]      <= rvfi_mem2_wdata_d;
-            rvfi_stage_mem2_addr[i]       <= rvfi_mem2_addr_d;
             rvfi_ext_stage_mip[i+1]       <= rvfi_ext_stage_mip[i];
             rvfi_ext_stage_nmi[i+1]       <= rvfi_ext_stage_nmi[i];
             rvfi_ext_stage_debug_req[i+1] <= rvfi_ext_stage_debug_req[i];
@@ -1878,10 +1849,6 @@ end
             rvfi_stage_mem_addr[i]  <= rvfi_stage_mem_addr[im1];
             rvfi_stage_rs1_rcap[i]  <= rvfi_stage_rs1_rcap[im1];
             rvfi_stage_rs2_rcap[i]  <= rvfi_stage_rs2_rcap[im1];
-            rvfi_stage_mem2_we[i]   <= rvfi_stage_mem2_we[im1];
-            rvfi_stage_mem2_rdata[i] <= rvfi_stage_mem2_rdata[im1];
-            rvfi_stage_mem2_wdata[i] <= rvfi_stage_mem2_wdata[im1];
-            rvfi_stage_mem2_addr[i]  <= rvfi_stage_mem2_addr[im1];
 
             // For 2 RVFI_STAGES/Writeback Sor 2 Rtage ignore first stage flops for rd_addr, rd_wdata and
             // mem_rdata. For RF write addr/data actual write happens in writeback so capture
@@ -1900,56 +1867,6 @@ end
           end
         end
       end
-    end
-  end
-
-  logic is_cheri_cap_acc;
-  logic cap_acc_1st_req, cap_acc_1st_resp;
-
-  assign is_cheri_cap_acc = cheri_exec_id && (cheri_operator[CLOAD_CAP] | cheri_operator[CSTORE_CAP]);
-
-  always_comb begin
-    rvfi_mem2_addr_d   = rvfi_mem2_addr_q ;
-    rvfi_mem2_we_d     = rvfi_mem2_we_q ;
-    rvfi_mem2_rdata_d  = rvfi_mem2_rdata_q ;
-    rvfi_mem2_wdata_d  = rvfi_mem2_wdata_q ;
-
-    if (is_cheri_cap_acc & lsu_req) begin
-      if (cap_acc_1st_req) begin
-        rvfi_mem2_addr_d        = lsu_addr;
-        rvfi_mem2_we_d          = lsu_we ;
-        rvfi_mem2_wdata_d[32:0] = lsu_wdata;
-      end else begin
-        rvfi_mem2_wdata_d[65:33] = lsu_wdata;
-      end
-    end
-
-    if (is_cheri_cap_acc & lsu_resp_valid) begin
-      if (cap_acc_1st_resp) rvfi_mem2_rdata_d[32:0] = rf_wdata_lsu;
-      else rvfi_mem2_rdata_d[65:33] = rf_wdata_lsu;
-    end
-  end
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      cap_acc_1st_req  <= 1'b1;
-      cap_acc_1st_resp <= 1'b1;
-
-      rvfi_mem2_addr_q   <= 'h0 ;
-      rvfi_mem2_we_q    <= 1'b0;
-      rvfi_mem2_rdata_q  <= 'h0;
-      rvfi_mem2_wdata_q  <= 'h0;
-    end else begin
-      if (instr_id_done) cap_acc_1st_req <= 1'b1;
-      else if (is_cheri_cap_acc & lsu_req_done) cap_acc_1st_req <= 1'b0;
-
-      if (instr_id_done) cap_acc_1st_resp <= 1'b1;
-      else if (is_cheri_cap_acc & lsu_resp_valid) cap_acc_1st_resp <= 1'b0;
-
-      rvfi_mem2_addr_q   <= rvfi_mem2_addr_d ;
-      rvfi_mem2_we_q     <= rvfi_mem2_we_d ;
-      rvfi_mem2_rdata_q  <= rvfi_mem2_rdata_d ;
-      rvfi_mem2_wdata_q  <= rvfi_mem2_wdata_d ;
     end
   end
 

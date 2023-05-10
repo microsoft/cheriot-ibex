@@ -264,10 +264,6 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
     .rvfi_mem_rcap,
     .rvfi_mem_wcap,
     .rvfi_mem_is_cap,
-    .rvfi_mem2_addr,
-    .rvfi_mem2_we,
-    .rvfi_mem2_rdata,
-    .rvfi_mem2_wdata,
     .rvfi_ext_mip,
     .rvfi_ext_nmi,
     .rvfi_ext_debug_req,
@@ -317,11 +313,7 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
     .rvfi_mem_wdata,
     .rvfi_mem_rcap,
     .rvfi_mem_wcap,
-    .rvfi_mem_is_cap,
-    .rvfi_mem2_addr,
-    .rvfi_mem2_we,
-    .rvfi_mem2_rdata,
-    .rvfi_mem2_wdata
+    .rvfi_mem_is_cap
   );
 `endif
 

@@ -309,8 +309,8 @@ package ibex_tracer_pkg;
   parameter logic [15:0] INSN_CADDI4SPN  = { 3'b000,       11'h?,                    {OPCODE_C0} };
   parameter logic [15:0] INSN_CLW        = { 3'b010,       11'h?,                    {OPCODE_C0} };
   parameter logic [15:0] INSN_CSW        = { 3'b110,       11'h?,                    {OPCODE_C0} };
-  parameter logic [15:0] INSN_CLC        = { 3'b011,       11'h?,                    {OPCODE_C0} };
-  parameter logic [15:0] INSN_CSC        = { 3'b111,       11'h?,                    {OPCODE_C0} };
+  parameter logic [15:0] INSN_CCLC       = { 3'b011,       11'h?,                    {OPCODE_C0} };
+  parameter logic [15:0] INSN_CCSC       = { 3'b111,       11'h?,                    {OPCODE_C0} };
 
   // C1
   parameter logic [15:0] INSN_CADDI      = { 3'b000,       11'h?,                    {OPCODE_C1} };
@@ -337,8 +337,8 @@ package ibex_tracer_pkg;
   parameter logic [15:0] INSN_CEBREAK    = { 3'b100, 1'b1,        5'h0,  5'h0,       {OPCODE_C2} };
   parameter logic [15:0] INSN_CJR        = { 3'b100, 1'b0,        5'h0,  5'h0,       {OPCODE_C2} };
   parameter logic [15:0] INSN_CJALR      = { 3'b100, 1'b1,        5'h?,  5'h0,       {OPCODE_C2} };
-  parameter logic [15:0] INSN_CLCSP      = { 3'b011,       11'h?,                    {OPCODE_C2} };  // FLWSP
-  parameter logic [15:0] INSN_CSCSP      = { 3'b111,       11'h?,                    {OPCODE_C2} };  // FSWSP
+  parameter logic [15:0] INSN_CCLCSP     = { 3'b011,       11'h?,                    {OPCODE_C2} };  // FLWSP
+  parameter logic [15:0] INSN_CCSCSP     = { 3'b111,       11'h?,                    {OPCODE_C2} };  // FSWSP
 
   // 32-bit CHERI instructions
   parameter logic [31:0] INSN_CHGETPERM    = {7'h7f, 5'h0, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
@@ -360,6 +360,8 @@ package ibex_tracer_pkg;
   parameter logic [31:0] INSN_CHSETBOUNDSEX   = {7'h09, 10'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHSETBOUNDSIMM  = {12'h?, 5'h?,  3'b010, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHCLEARTAG      = {7'h7f, 5'hb, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
+  parameter logic [31:0] INSN_CHCRRL          = {7'h7f, 5'h8, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
+  parameter logic [31:0] INSN_CHCRAM          = {7'h7f, 5'h9, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
 
   parameter logic [31:0] INSN_CHSUB      = {7'h14, 5'h?, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHMOVE     = {7'h7f, 5'ha, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
@@ -369,6 +371,6 @@ package ibex_tracer_pkg;
   parameter logic [31:0] INSN_CHJALR   = {7'h7f, 5'hc, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
 
   parameter logic [31:0] INSN_CHCSRRW = {7'h01, 5'h?, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
-  parameter logic [31:0] INSN_AUICGP  = { 25'h?,                           {OPCODE_AUICGP} };
+  parameter logic [31:0] INSN_AUICGP  = { 25'h?,                          {OPCODE_AUICGP} };
 
 endpackage
