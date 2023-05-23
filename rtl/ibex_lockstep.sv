@@ -6,7 +6,7 @@
 // This module instantiates a second copy of the core logic, and compares it's outputs against
 // those from the main core. The second core runs synchronously with the main core, delayed by
 // LockstepOffset cycles.
-module ibex_lockstep import ibex_pkg::*; #(
+module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
   parameter int unsigned LockstepOffset    = 2,
   parameter bit          PMPEnable         = 1'b0,
   parameter int unsigned PMPGranularity    = 0,
@@ -34,14 +34,28 @@ module ibex_lockstep import ibex_pkg::*; #(
   parameter bit          RegFileECC        = 1'b0,
   parameter int unsigned RegFileDataWidth  = 32,
   parameter int unsigned DmHaltAddr        = 32'h1A110800,
-  parameter int unsigned DmExceptionAddr   = 32'h1A110808
+  parameter int unsigned DmExceptionAddr   = 32'h1A110808,
+  // CHERIoT paramters
+  parameter bit          CHERIoTEn         = 1'b1,
+  parameter int unsigned DataWidth         = 33,
+  parameter int unsigned HeapBase          ,
+  parameter int unsigned TSMapBase         ,
+  parameter int unsigned TSMapTop          ,
+  parameter int unsigned TSMapSize         ,
+  parameter bit          MemCapFmt         = 1'b0,
+  parameter bit          CheriPPLBC        = 1'b1,
+  parameter bit          CheriSBND2        = 1'b0,
+  parameter bit          CheriTBRE         = 1'b1
+ 
 ) (
   input  logic                         clk_i,
   input  logic                         rst_ni,
 
   input  logic [31:0]                  hart_id_i,
   input  logic [31:0]                  boot_addr_i,
-
+  input  logic                         cheri_pmode_i,
+  input  logic                         cheri_tsafe_en_i,
+ 
   input  logic                         instr_req_i,
   input  logic                         instr_gnt_i,
   input  logic                         instr_rvalid_i,
@@ -56,9 +70,9 @@ module ibex_lockstep import ibex_pkg::*; #(
   input  logic                         data_we_i,
   input  logic [3:0]                   data_be_i,
   input  logic [31:0]                  data_addr_i,
-  input  logic [31:0]                  data_wdata_i,
+  input  logic [DataWidth-1:0]         data_wdata_i,
   output logic [6:0]                   data_wdata_intg_o,
-  input  logic [31:0]                  data_rdata_i,
+  input  logic [DataWidth-1:0]         data_rdata_i,
   input  logic [6:0]                   data_rdata_intg_i,
   input  logic                         data_err_i,
 
@@ -70,7 +84,22 @@ module ibex_lockstep import ibex_pkg::*; #(
   input  logic [RegFileDataWidth-1:0]  rf_wdata_wb_ecc_i,
   input  logic [RegFileDataWidth-1:0]  rf_rdata_a_ecc_i,
   input  logic [RegFileDataWidth-1:0]  rf_rdata_b_ecc_i,
-
+ 
+  input  reg_cap_t                     rf_wcap_wb_i,
+  input  reg_cap_t                     rf_rcap_a_i,
+  input  reg_cap_t                     rf_rcap_b_i,
+  input  logic [31:0]                  rf_reg_rdy_i,
+  input  logic                         rf_trsv_en_i,
+  input  logic [4:0]                   rf_trsv_addr_i,
+  input  logic [4:0]                   rf_trvk_addr_i,
+  input  logic                         rf_trvk_en_i,
+  input  logic                         rf_trvk_clrtag_i,
+  input  logic                         tsmap_cs_i,
+  input  logic [15:0]                  tsmap_addr_i,
+  input  logic [31:0]                  tsmap_rdata_i,
+  input  logic [64:0]                  tbre_ctrl_vec_i,
+  input  logic                         tbre_done_i,
+ 
   input  logic [IC_NUM_WAYS-1:0]       ic_tag_req_i,
   input  logic                         ic_tag_write_i,
   input  logic [IC_INDEX_W-1:0]        ic_tag_addr_i,
@@ -172,7 +201,7 @@ module ibex_lockstep import ibex_pkg::*; #(
     logic                        instr_err;
     logic                        data_gnt;
     logic                        data_rvalid;
-    logic [31:0]                 data_rdata;
+    logic [DataWidth-1:0]        data_rdata;
     logic                        data_err;
     logic [RegFileDataWidth-1:0] rf_rdata_a_ecc;
     logic [RegFileDataWidth-1:0] rf_rdata_b_ecc;
@@ -184,6 +213,13 @@ module ibex_lockstep import ibex_pkg::*; #(
     logic                        debug_req;
     fetch_enable_t               fetch_enable;
     logic                        ic_scr_key_valid;
+    logic                        cheri_pmode;
+    logic                        cheri_tsafe_en;
+    reg_cap_t                    rf_rcap_a;
+    reg_cap_t                    rf_rcap_b;
+    logic [31:0]                 rf_reg_rdy;
+    logic [31:0]                 tsmap_rdata;
+    logic [64:0]                 tbre_ctrl_vec;
   } delayed_inputs_t;
 
   delayed_inputs_t [LockstepOffset-1:0] shadow_inputs_q;
@@ -212,6 +248,13 @@ module ibex_lockstep import ibex_pkg::*; #(
   assign shadow_inputs_in.debug_req        = debug_req_i;
   assign shadow_inputs_in.fetch_enable     = fetch_enable_i;
   assign shadow_inputs_in.ic_scr_key_valid = ic_scr_key_valid_i;
+  assign shadow_inputs_in.cheri_pmode      = cheri_pmode_i;
+  assign shadow_inputs_in.cheri_tsafe_en   = cheri_tsafe_en_i;
+  assign shadow_inputs_in.rf_rcap_a        = rf_rcap_a_i;
+  assign shadow_inputs_in.rf_rcap_b        = rf_rcap_b_i;
+  assign shadow_inputs_in.rf_reg_rdy       = rf_reg_rdy_i;
+  assign shadow_inputs_in.tsmap_rdata      = tsmap_rdata_i;
+  assign shadow_inputs_in.tbre_ctrl_vec    = tbre_ctrl_vec_i;
 
   // Delay the inputs
   always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -242,8 +285,19 @@ module ibex_lockstep import ibex_pkg::*; #(
   ////////////////////////////
 
   logic        bus_intg_err;
-  logic [1:0]  instr_intg_err, data_intg_err;
+  logic [1:0]  instr_intg_err, data_intg_err, data_intg_err_tmp;
   logic [31:0] unused_wdata;
+  logic [1:0]  data_we_q;
+  logic [31:0] rdata_tmp;
+
+  always @(posedge clk_i, negedge rst_ni) begin
+    if (~rst_ni) begin
+      data_we_q <= 2'b00;
+    end else begin
+      if (data_gnt_i) data_we_q[1] <= data_we_i;
+      data_we_q[0] <= data_we_q[1];    // align with shadow_inputs_q[LockstepOffset-1]
+    end
+  end
 
   // Checks on incoming data
   prim_secded_inv_39_32_dec u_instr_intg_dec (
@@ -253,21 +307,38 @@ module ibex_lockstep import ibex_pkg::*; #(
     .err_o      (instr_intg_err)
   );
 
+  if (CHERIoTEn) begin
+    assign rdata_tmp = shadow_inputs_q[LockstepOffset-1].data_rdata[31:0] ^ 
+                       {31'h0, shadow_inputs_q[LockstepOffset-1].data_rdata[32]};
+  end else begin
+    assign rdata_tmp = shadow_inputs_q[LockstepOffset-1].data_rdata[31:0]; 
+  end
+
   prim_secded_inv_39_32_dec u_data_intg_dec (
-    .data_i     ({data_rdata_intg_q, shadow_inputs_q[LockstepOffset-1].data_rdata}),
+    .data_i     ({data_rdata_intg_q, rdata_tmp}),
     .data_o     (),
     .syndrome_o (),
-    .err_o      (data_intg_err)
+    .err_o      (data_intg_err_tmp)
   );
+
+  // only check on read data
+  assign data_intg_err = data_we_q[0] ? 2'h0 : data_intg_err_tmp;
 
   assign bus_intg_err = (shadow_inputs_q[LockstepOffset-1].instr_rvalid & |instr_intg_err) |
                         (shadow_inputs_q[LockstepOffset-1].data_rvalid  & |data_intg_err);
 
   // Generate integrity bits
-  prim_secded_inv_39_32_enc u_data_gen (
-    .data_i (data_wdata_i),
-    .data_o ({data_wdata_intg_o, unused_wdata})
-  );
+  if (CHERIoTEn) begin
+    prim_secded_inv_39_32_enc u_data_gen (
+      .data_i (data_wdata_i[31:0]^{31'h0, data_wdata_i[32]}),
+      .data_o ({data_wdata_intg_o, unused_wdata})
+    );
+  end else begin
+    prim_secded_inv_39_32_enc u_data_gen (
+      .data_i (data_wdata_i[31:0]),
+      .data_o ({data_wdata_intg_o, unused_wdata})
+    );
+  end
 
   ///////////////////
   // Output delays //
@@ -280,7 +351,7 @@ module ibex_lockstep import ibex_pkg::*; #(
     logic                        data_we;
     logic [3:0]                  data_be;
     logic [31:0]                 data_addr;
-    logic [31:0]                 data_wdata;
+    logic [DataWidth-1:0]        data_wdata;
     logic                        dummy_instr_id;
     logic [4:0]                  rf_raddr_a;
     logic [4:0]                  rf_raddr_b;
@@ -300,6 +371,15 @@ module ibex_lockstep import ibex_pkg::*; #(
     logic                        double_fault_seen;
     logic                        icache_inval;
     logic                        core_busy;
+    reg_cap_t                    rf_wcap_wb;
+    logic                        rf_trsv_en;
+    logic [4:0]                  rf_trsv_addr;
+    logic [4:0]                  rf_trvk_addr;
+    logic                        rf_trvk_en;
+    logic                        rf_trvk_clrtag;
+    logic                        tsmap_cs;
+    logic [15:0]                 tsmap_addr;
+    logic                        tbre_done;
   } delayed_outputs_t;
 
   delayed_outputs_t [OutputsOffset-1:0]  core_outputs_q;
@@ -333,7 +413,16 @@ module ibex_lockstep import ibex_pkg::*; #(
   assign core_outputs_in.double_fault_seen   = double_fault_seen_i;
   assign core_outputs_in.icache_inval        = icache_inval_i;
   assign core_outputs_in.core_busy           = core_busy_i;
-
+  assign core_outputs_in.rf_wcap_wb          = rf_wcap_wb_i;
+  assign core_outputs_in.rf_trsv_en          = rf_trsv_en_i;
+  assign core_outputs_in.rf_trsv_addr        = rf_trsv_addr_i;
+  assign core_outputs_in.rf_trvk_addr        = rf_trvk_addr_i;
+  assign core_outputs_in.rf_trvk_en          = rf_trvk_en_i;
+  assign core_outputs_in.rf_trvk_clrtag      = rf_trvk_clrtag_i;
+  assign core_outputs_in.tsmap_cs            = tsmap_cs_i;
+  assign core_outputs_in.tsmap_addr          = tsmap_addr_i;
+  assign core_outputs_in.tbre_done           = tbre_done_i;     
+                        
   // Delay the outputs
   always_ff @(posedge clk_i) begin
     for (int unsigned i = 0; i < OutputsOffset - 1; i++) begin
@@ -375,13 +464,26 @@ module ibex_lockstep import ibex_pkg::*; #(
     .RegFileECC        ( RegFileECC        ),
     .RegFileDataWidth  ( RegFileDataWidth  ),
     .DmHaltAddr        ( DmHaltAddr        ),
-    .DmExceptionAddr   ( DmExceptionAddr   )
+    .DmExceptionAddr   ( DmExceptionAddr   ),
+    .CHERIoTEn         ( CHERIoTEn),
+    .DataWidth         ( DataWidth),
+    .HeapBase          ( HeapBase   ),
+    .TSMapBase         ( TSMapBase  ),
+    .TSMapTop          ( TSMapTop   ),
+    .TSMapSize         ( TSMapSize),
+    .MemCapFmt         ( MemCapFmt   ),
+    .CheriPPLBC        ( CheriPPLBC),
+    .CheriSBND2        ( CheriSBND2),
+    .CheriTBRE         ( CheriTBRE)
   ) u_shadow_core (
     .clk_i               (clk_i),
     .rst_ni              (rst_shadow_n),
 
     .hart_id_i           (hart_id_i),
     .boot_addr_i         (boot_addr_i),
+
+    .cheri_pmode_i       (shadow_inputs_q[0].cheri_pmode),
+    .cheri_tsafe_en_i    (shadow_inputs_q[0].cheri_tsafe_en),
 
     .instr_req_o         (shadow_outputs_d.instr_req),
     .instr_gnt_i         (shadow_inputs_q[0].instr_gnt),
@@ -408,6 +510,20 @@ module ibex_lockstep import ibex_pkg::*; #(
     .rf_wdata_wb_ecc_o   (shadow_outputs_d.rf_wdata_wb_ecc),
     .rf_rdata_a_ecc_i    (shadow_inputs_q[0].rf_rdata_a_ecc),
     .rf_rdata_b_ecc_i    (shadow_inputs_q[0].rf_rdata_b_ecc),
+    .rf_wcap_wb_o        (shadow_outputs_d.rf_wcap_wb),
+    .rf_rcap_a_i         (shadow_inputs_q[0].rf_rcap_a),
+    .rf_rcap_b_i         (shadow_inputs_q[0].rf_rcap_b),
+    .rf_reg_rdy_i        (shadow_inputs_q[0].rf_reg_rdy),
+    .rf_trsv_en_o        (shadow_outputs_d.rf_trsv_en),  
+    .rf_trsv_addr_o      (shadow_outputs_d.rf_trsv_addr),
+    .rf_trvk_addr_o      (shadow_outputs_d.rf_trvk_addr),
+    .rf_trvk_en_o        (shadow_outputs_d.rf_trvk_en),  
+    .rf_trvk_clrtag_o    (shadow_outputs_d.rf_trvk_clrtag),
+    .tsmap_cs_o          (shadow_outputs_d.tsmap_cs),    
+    .tsmap_addr_o        (shadow_outputs_d.tsmap_addr), 
+    .tsmap_rdata_i       (shadow_inputs_q[0].tsmap_rdata),
+    .tbre_ctrl_vec_i     (shadow_inputs_q[0].tbre_ctrl_vec),
+    .tbre_done_o         (shadow_outputs_d.tbre_done),  
 
     .ic_tag_req_o        (shadow_outputs_d.ic_tag_req),
     .ic_tag_write_o      (shadow_outputs_d.ic_tag_write),

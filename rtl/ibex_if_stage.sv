@@ -49,17 +49,17 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
   input  logic                        instr_err_i,
 
   // ICache RAM IO
-//  output logic [IC_NUM_WAYS-1:0]      ic_tag_req_o,
-//  output logic                        ic_tag_write_o,
-//  output logic [IC_INDEX_W-1:0]       ic_tag_addr_o,
-//  output logic [TagSizeECC-1:0]       ic_tag_wdata_o,
-//  input  logic [TagSizeECC-1:0]       ic_tag_rdata_i [IC_NUM_WAYS],
-//  output logic [IC_NUM_WAYS-1:0]      ic_data_req_o,
-//  output logic                        ic_data_write_o,
-//  output logic [IC_INDEX_W-1:0]       ic_data_addr_o,
-//  output logic [LineSizeECC-1:0]      ic_data_wdata_o,
-//  input  logic [LineSizeECC-1:0]      ic_data_rdata_i [IC_NUM_WAYS],
-//  input  logic                        ic_scr_key_valid_i,
+  output logic [IC_NUM_WAYS-1:0]      ic_tag_req_o,
+  output logic                        ic_tag_write_o,
+  output logic [IC_INDEX_W-1:0]       ic_tag_addr_o,
+  output logic [TagSizeECC-1:0]       ic_tag_wdata_o,
+  input  logic [TagSizeECC-1:0]       ic_tag_rdata_i [IC_NUM_WAYS],
+  output logic [IC_NUM_WAYS-1:0]      ic_data_req_o,
+  output logic                        ic_data_write_o,
+  output logic [IC_INDEX_W-1:0]       ic_data_addr_o,
+  output logic [LineSizeECC-1:0]      ic_data_wdata_o,
+  input  logic [LineSizeECC-1:0]      ic_data_rdata_i [IC_NUM_WAYS],
+  input  logic                        ic_scr_key_valid_i,
 
   // output of ID stage
   output logic                        instr_valid_id_o,         // instr in IF-ID is valid
@@ -213,6 +213,57 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
 
   // tell CS register file to initialize mtvec on boot
   assign csr_mtvec_init_o = (pc_mux_i == PC_BOOT) & pc_set_i;
+  if (ICache) begin : gen_icache
+    // Full I-Cache option
+    ibex_icache #(
+      .ICacheECC       (ICacheECC),
+      .ResetAll        (ResetAll),
+      .BusSizeECC      (BusSizeECC),
+      .TagSizeECC      (TagSizeECC),
+      .LineSizeECC     (LineSizeECC)
+    ) icache_i (
+        .clk_i               ( clk_i                      ),
+        .rst_ni              ( rst_ni                     ),
+
+        .req_i               ( req_i                      ),
+
+        .branch_i            ( branch_req                 ),
+        .branch_mispredict_i ( nt_branch_mispredict_i     ),
+        .mispredict_addr_i   ( nt_branch_addr_i           ),
+        .addr_i              ( {fetch_addr_n[31:1], 1'b0} ),
+
+        .ready_i             ( fetch_ready                ),
+        .valid_o             ( fetch_valid                ),
+        .rdata_o             ( fetch_rdata                ),
+        .addr_o              ( fetch_addr                 ),
+        .err_o               ( fetch_err                  ),
+        .err_plus2_o         ( fetch_err_plus2            ),
+
+        .instr_req_o         ( instr_req_o                ),
+        .instr_addr_o        ( instr_addr_o               ),
+        .instr_gnt_i         ( instr_gnt_i                ),
+        .instr_rvalid_i      ( instr_rvalid_i             ),
+        .instr_rdata_i       ( instr_rdata_i              ),
+        .instr_err_i         ( instr_err_i                ),
+
+        .ic_tag_req_o        ( ic_tag_req_o               ),
+        .ic_tag_write_o      ( ic_tag_write_o             ),
+        .ic_tag_addr_o       ( ic_tag_addr_o              ),
+        .ic_tag_wdata_o      ( ic_tag_wdata_o             ),
+        .ic_tag_rdata_i      ( ic_tag_rdata_i             ),
+        .ic_data_req_o       ( ic_data_req_o              ),
+        .ic_data_write_o     ( ic_data_write_o            ),
+        .ic_data_addr_o      ( ic_data_addr_o             ),
+        .ic_data_wdata_o     ( ic_data_wdata_o            ),
+        .ic_data_rdata_i     ( ic_data_rdata_i            ),
+        .ic_scr_key_valid_i  ( ic_scr_key_valid_i         ),
+
+        .icache_enable_i     ( icache_enable_i            ),
+        .icache_inval_i      ( icache_inval_i             ),
+        .busy_o              ( prefetch_busy              )
+    );
+
+  end else begin : gen_prefetch_buffer
 
     // prefetch buffer, caches a fixed number of instructions
     ibex_prefetch_buffer #(
@@ -244,6 +295,25 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
 
         .busy_o              ( prefetch_busy              )
     );
+
+    // ICache tieoffs
+    logic                   unused_icen, unused_icinv, unused_scr_key_valid;
+    logic [TagSizeECC-1:0]  unused_tag_ram_input [IC_NUM_WAYS];
+    logic [LineSizeECC-1:0] unused_data_ram_input [IC_NUM_WAYS];
+    assign unused_icen           = icache_enable_i;
+    assign unused_icinv          = icache_inval_i;
+    assign unused_tag_ram_input  = ic_tag_rdata_i;
+    assign unused_data_ram_input = ic_data_rdata_i;
+    assign unused_scr_key_valid  = ic_scr_key_valid_i;
+    assign ic_tag_req_o          = 'b0;
+    assign ic_tag_write_o        = 'b0;
+    assign ic_tag_addr_o         = 'b0;
+    assign ic_tag_wdata_o        = 'b0;
+    assign ic_data_req_o         = 'b0;
+    assign ic_data_write_o       = 'b0;
+    assign ic_data_addr_o        = 'b0;
+    assign ic_data_wdata_o       = 'b0;
+
 `ifndef SYNTHESIS
     // If we don't instantiate an icache and this is a simulation then we have a problem because the
     // simulator might discard the icache module entirely, including some DPI exports that it
@@ -259,7 +329,7 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
       return 0;
     endfunction
 `endif
-
+  end
 
   assign unused_fetch_addr_n0 = fetch_addr_n[0];
 

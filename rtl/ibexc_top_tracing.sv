@@ -39,7 +39,6 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   parameter int unsigned TSMapTop         = 32'h2004_1000,
   parameter int unsigned TSMapSize        = 1024,
   parameter bit          MemCapFmt        = 1'b0,
-  parameter bit          Cheri32E         = 1'b0,
   parameter bit          CheriPPLBC       = 1'b1,
   parameter bit          CheriSBND2       = 1'b0,
   parameter bit          CheriTBRE        = 1'b0
@@ -158,8 +157,6 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   logic        unused_rvfi_ext_debug_req;
   logic [63:0] unused_rvfi_ext_mcycle;
 
-  logic [95:0] itr_info;
-
   // Tracer doesn't use these signals, though other modules may probe down into tracer to observe
   // them.
   assign unused_rvfi_ext_mip = rvfi_ext_mip;
@@ -168,6 +165,7 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   assign unused_rvfi_ext_mcycle = rvfi_ext_mcycle;
 
   ibex_top #(
+    .RV32E            (1'b0),
     .DmHaltAddr       ( DmHaltAddr       ),
     .DmExceptionAddr  ( DmExceptionAddr  ),
     .HeapBase         ( HeapBase   ),
@@ -175,7 +173,6 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
     .TSMapTop         ( TSMapTop   ),
     .TSMapSize        ( TSMapSize),
     .MemCapFmt        (MemCapFmt   ),
-    .Cheri32E         (Cheri32E),
     .CheriPPLBC       (CheriPPLBC),
     .CheriSBND2       (CheriSBND2),
     .CheriTBRE        (CheriTBRE)
@@ -270,13 +267,12 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
     .rvfi_ext_mcycle,
 `endif
     .fetch_enable_i,
-    .core_sleep_o,
-    .itr_info_o(itr_info)
+    .core_sleep_o
   );
 
 `ifdef RVFI
   ibex_tracer #(
-    .Cheri32E         (Cheri32E)
+    .Cheri32E         (1'b0)
   ) u_ibex_tracer (
     .clk_i,
     .rst_ni,

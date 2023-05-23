@@ -3,44 +3,52 @@
 // SPDX-License-Identifier: Apache-2.0
 
 module cheri_regfile import cheri_pkg::*; #(
-  parameter int unsigned NREGS = 32,
-  parameter int unsigned NCAPS = 16,
+  parameter int unsigned NREGS      = 32,
+  parameter int unsigned NCAPS      = 32,
+  parameter bit          RegFileECC = 1'b0,
+  parameter int unsigned DataWidth  = 32,
   parameter bit          CheriPPLBC = 1'b0
 ) (
    // Clock and Reset
-  input  logic         clk_i,
-  input  logic         rst_ni,
+  input  logic                  clk_i,
+  input  logic                  rst_ni,
 
   //Read port R1
-  input  logic  [4:0]  raddr_a_i,
-  output logic [31:0]  rdata_a_o,
-  output reg_cap_t     rcap_a_o,
+  input  logic           [4:0]  raddr_a_i,
+  output logic [DataWidth-1:0]  rdata_a_o,
+  output reg_cap_t              rcap_a_o,
 
   //Read port R2
-  input  logic  [4:0]  raddr_b_i,
-  output logic [31:0]  rdata_b_o,
-  output reg_cap_t     rcap_b_o,
+  input  logic           [4:0]  raddr_b_i,
+  output logic [DataWidth-1:0]  rdata_b_o,
+  output reg_cap_t              rcap_b_o,
 
   // Write port W1
-  input  logic [4:0]   waddr_a_i,
-  input  logic [31:0]  wdata_a_i,
-  input  reg_cap_t     wcap_a_i,
-  input  logic         we_a_i,         // we always write both cap & data in parallel
+  input  logic          [4:0]   waddr_a_i,
+  input  logic [DataWidth-1:0]  wdata_a_i,
+  input  reg_cap_t              wcap_a_i,
+  input  logic                  we_a_i,         // we always write both cap & data in parallel
 
   // Tag reservation and revocation port
-  output logic [31:0]  reg_rdy_o,
-  input  logic [4:0]   trvk_addr_i,
-  input  logic         trvk_en_i,
-  input  logic         trvk_clrtag_i,
-  input  logic [4:0]   trsv_addr_i,
-  input  logic         trsv_en_i
+  output logic          [31:0]  reg_rdy_o,
+  input  logic          [4:0]   trvk_addr_i,
+  input  logic                  trvk_en_i,
+  input  logic                  trvk_clrtag_i,
+  input  logic          [4:0]   trsv_addr_i,
+  input  logic                  trsv_en_i
 );
 
+  localparam logic [6:0] DefParBits[0:31] = '{7'h27,7'h0d,7'h6b,7'h41,7'h62,7'h48,7'h2e,7'h04,
+                                              7'h1f,7'h35,7'h53,7'h79,7'h5a,7'h70,7'h16,7'h3c,
+                                              7'h6e,7'h44,7'h22,7'h08,7'h2b,7'h01,7'h67,7'h4d,
+                                              7'h56,7'h7c,7'h1a,7'h30,7'h13,7'h39,7'h5f,7'h75};
 
-  logic [31:0] rf_reg   [NREGS-1:0];
-  logic [31:0] rf_reg_q [NREGS-1:1];
-  reg_cap_t    rf_cap   [NCAPS-1:0] ;
-  reg_cap_t    rf_cap_q [NCAPS-1:1] ;
+  localparam logic [6:0] TrvkParIncr = 7'h15;
+
+  logic [DataWidth-1:0] rf_reg   [NREGS-1:0];
+  logic [DataWidth-1:0] rf_reg_q [NREGS-1:1];
+  reg_cap_t             rf_cap   [NCAPS-1:0] ;
+  reg_cap_t             rf_cap_q [NCAPS-1:1] ;
 
   logic [NREGS-1:1]       we_a_dec;
   logic [NREGS-1:1]       trvk_dec, trsv_dec;
@@ -56,16 +64,28 @@ module cheri_regfile import cheri_pkg::*; #(
 
   // No flops for R0 as it's hard-wired to 0
   for (genvar i = 1; i < NREGS; i++) begin : g_rf_flops
+    logic cap_valid;
+    
+    // shouldn't need this for parity update, since trvk_en is only asserted when loaded cap is valid
+    // if (i < NCAPS) begin
+    //  assign cap_valid = rf_cap_q[i].valid;
+    // end else begin
+    //  assign cap_valid = 1'b0;
+    // end
+
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
-        rf_reg_q[i] <= 32'h0;
+        rf_reg_q[i] <= {DefParBits[i], 32'h0};
+      end else if (RegFileECC & CheriPPLBC & trvk_dec[i] & trvk_en_i & trvk_clrtag_i ) begin
+        // update parity bits
+        rf_reg_q[i] <= rf_reg_q[i] ^ {TrvkParIncr, 32'h0};
       end else if (we_a_dec[i]) begin
         rf_reg_q[i] <= wdata_a_i;
-      end
+      end 
     end
   end
 
-  assign rf_reg[0] = 32'h0;
+  assign rf_reg[0] = {DefParBits[0], 32'h0};
   for (genvar i=1; i<NREGS ; i++) begin
     assign rf_reg[i] = rf_reg_q[i];
   end

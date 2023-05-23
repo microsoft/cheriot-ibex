@@ -14,6 +14,8 @@ package cheri_pkg;
   parameter int unsigned CPERMS_W  = 7;
   parameter int unsigned PERMS_W   = 14;
 
+  parameter int unsigned REGCAP_W  = 38;
+
   parameter int unsigned RESETEXP  = 24;
   parameter int unsigned UPPER_W   = 24;
   parameter int unsigned RESETCEXP = 15;
@@ -818,6 +820,40 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
     return {msw, lsw};
 
+  endfunction
+
+  // simply cast regcap to a 38-bit vector. 
+  // we can do this with systemverilog casting but let's be explicit here
+  function automatic logic [REGCAP_W-1:0] reg2vec (reg_cap_t regcap);
+
+    logic [REGCAP_W-1:0] vec_out;
+
+    vec_out[REGCAP_W-1]  = regcap.valid ;
+    vec_out[35+:2]       = regcap.top_cor;
+    vec_out[33+:2]       = regcap.base_cor;
+    vec_out[28+:EXP_W]   = regcap.exp;
+    vec_out[19+:TOP_W]   = regcap.top   ;
+    vec_out[10+:BOT_W]   = regcap.base  ;
+    vec_out[7+:OTYPE_W]  = regcap.otype ;
+    vec_out[0+:CPERMS_W] = regcap.cperms;
+
+    return vec_out;
+  endfunction
+
+  function automatic reg_cap_t vec2reg (logic [REGCAP_W-1:0] vec_in);
+
+    reg_cap_t regcap;
+
+    regcap.valid    = vec_in[REGCAP_W-1];  
+    regcap.top_cor  = vec_in[35+:2];       
+    regcap.base_cor = vec_in[33+:2];       
+    regcap.exp      = vec_in[28+:EXP_W];   
+    regcap.top      = vec_in[19+:TOP_W];   
+    regcap.base     = vec_in[10+:BOT_W];   
+    regcap.otype    = vec_in[7+:OTYPE_W];  
+    regcap.cperms   = vec_in[0+:CPERMS_W]; 
+
+    return regcap;
   endfunction
 
   // test whether 2 caps are equal

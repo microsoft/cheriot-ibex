@@ -47,12 +47,14 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   parameter int unsigned RegFileDataWidth  = 32,
   parameter int unsigned DmHaltAddr        = 32'h1A110800,
   parameter int unsigned DmExceptionAddr   = 32'h1A110808,
+  // CHERIoT paramters
+  parameter bit          CHERIoTEn         = 1'b1,
+  parameter int unsigned DataWidth         = 33,
   parameter int unsigned HeapBase          ,
   parameter int unsigned TSMapBase         ,
   parameter int unsigned TSMapTop          ,
   parameter int unsigned TSMapSize         ,
   parameter bit          MemCapFmt         = 1'b0,
-  parameter bit          Cheri32E          = 1'b0,
   parameter bit          CheriPPLBC        = 1'b1,
   parameter bit          CheriSBND2        = 1'b0,
   parameter bit          CheriTBRE         = 1'b1
@@ -61,10 +63,10 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   input  logic                         clk_i,
   input  logic                         rst_ni,
 
-  input  logic                         cheri_pmode_i,
-  input  logic                         cheri_tsafe_en_i,
   input  logic [31:0]                  hart_id_i,
   input  logic [31:0]                  boot_addr_i,
+  input  logic                         cheri_pmode_i,
+  input  logic                         cheri_tsafe_en_i,
 
   // Instruction memory interface
   output logic                         instr_req_o,
@@ -82,8 +84,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   output logic                         data_we_o,
   output logic [3:0]                   data_be_o,
   output logic [31:0]                  data_addr_o,
-  output logic [32:0]                  data_wdata_o,
-  input  logic [32:0]                  data_rdata_i,
+  output logic [DataWidth-1:0]         data_wdata_o,
+  input  logic [DataWidth-1:0]         data_rdata_i,
   input  logic                         data_err_i,
 
   // Register file interface
@@ -112,6 +114,17 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   output logic                         tbre_done_o,
 
   // RAMs interface
+  output logic [IC_NUM_WAYS-1:0]       ic_tag_req_o,
+  output logic                         ic_tag_write_o,
+  output logic [IC_INDEX_W-1:0]        ic_tag_addr_o,
+  output logic [TagSizeECC-1:0]        ic_tag_wdata_o,
+  input  logic [TagSizeECC-1:0]        ic_tag_rdata_i [IC_NUM_WAYS],
+  output logic [IC_NUM_WAYS-1:0]       ic_data_req_o,
+  output logic                         ic_data_write_o,
+  output logic [IC_INDEX_W-1:0]        ic_data_addr_o,
+  output logic [LineSizeECC-1:0]       ic_data_wdata_o,
+  input  logic [LineSizeECC-1:0]       ic_data_rdata_i [IC_NUM_WAYS],
+  input  logic                         ic_scr_key_valid_i,
 
   // Interrupt inputs
   input  logic                         irq_software_i,
@@ -170,10 +183,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   output logic                         alert_minor_o,
   output logic                         alert_major_o,
   output logic                         icache_inval_o,
-  output logic                         core_busy_o,
-
-  // hw instr trace support
-  output logic [95:0]                  itr_info_o
+  output logic                         core_busy_o
 );
 
   localparam int unsigned PMP_NUM_CHAN      = 3;
@@ -440,7 +450,6 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic [3:0]    lsu_lc_clrperm;
   logic          lsu_req_done_intl, lsu_resp_valid_intl, lsu_resp_err_intl;
 
-  logic [15:0]   itr_id_info;
   logic          csr_dbg_tclr_fault;
 
   logic [31:0]   csr_mshwm;
@@ -491,7 +500,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .RndCnstLfsrSeed   ( RndCnstLfsrSeed   ),
     .RndCnstLfsrPerm   ( RndCnstLfsrPerm   ),
     .BranchPredictor  (BranchPredictor),
-    .Cheri32E         (Cheri32E)
+    .Cheri32E         (1'b0)
   ) if_stage_i (
     .clk_i (clk_i),
     .rst_ni(rst_ni),
@@ -508,6 +517,18 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .instr_rvalid_i (instr_rvalid_i),
     .instr_rdata_i  (instr_rdata_i),
     .instr_err_i    (instr_err_i),
+
+    .ic_tag_req_o      (ic_tag_req_o),
+    .ic_tag_write_o    (ic_tag_write_o),
+    .ic_tag_addr_o     (ic_tag_addr_o),
+    .ic_tag_wdata_o    (ic_tag_wdata_o),
+    .ic_tag_rdata_i    (ic_tag_rdata_i),
+    .ic_data_req_o     (ic_data_req_o),
+    .ic_data_write_o   (ic_data_write_o),
+    .ic_data_addr_o    (ic_data_addr_o),
+    .ic_data_wdata_o   (ic_data_wdata_o),
+    .ic_data_rdata_i   (ic_data_rdata_i),
+    .ic_scr_key_valid_i(ic_scr_key_valid_i),
 
     // outputs to ID stage
     .instr_valid_id_o        (instr_valid_id),
@@ -594,7 +615,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .DataIndTiming  (DataIndTiming),
     .WritebackStage (WritebackStage),
     .BranchPredictor(BranchPredictor),
-    .Cheri32E       (Cheri32E),
+    .Cheri32E       (1'b0),
     .CheriPPLBC     (CheriPPLBC),
     .CheriSBND2     (CheriSBND2)
   ) id_stage_i (
@@ -766,8 +787,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .cheri_wb_err_i        (cheri_wb_err),
     .cheri_wb_err_info_i   (cheri_wb_err_info),
     .cheri_branch_req_i    (cheri_branch_req_spec),
-    .cheri_branch_target_i (branch_target_ex_cheri),
-    .itr_id_info_o         (itr_id_info)
+    .cheri_branch_target_i (branch_target_ex_cheri)
   );
 
 
@@ -830,7 +850,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .HeapBase             (HeapBase),
     .TSMapBase            (TSMapBase),
     .TSMapTop             (TSMapTop),
-    .Cheri32E             (Cheri32E),
+    .Cheri32E             (1'b0),
     .CheriPPLBC           (CheriPPLBC),
     .CheriSBND2           (CheriSBND2)
   ) u_cheri_ex (
@@ -1158,7 +1178,103 @@ end
 
   assign rf_wcap_wb_o = rf_wcap_wb;
 
-  // only keep no_ecc option for now
+  if (RegFileECC & CHERIoTEn) begin : gen_ecc_cheriot
+    logic [37:0] rf_wcap_vec, rf_rcap_a_vec, rf_rcap_b_vec;
+    logic  [1:0] rf_ecc_err_a, rf_ecc_err_b;
+    logic        rf_ecc_err_a_id, rf_ecc_err_b_id;
+    logic [31:0] wdata_tmp, rdata_a_tmp, rdata_b_tmp;
+    logic [38:0] wdata_ecc_tmp;
+
+    assign rf_wcap_vec  = reg2vec(rf_wcap_wb);
+
+    // need to protect the TRSV/TRVK interfaces ?? QQQ
+
+
+    // ECC checkbit generation
+    // -- for simplicity just linearly add the parity bits together.
+    //    this is not as good as the full secded implementation (some double errors won't be detected)
+    //    but probably ok for protection against random fault injection
+
+    // include waddr and we in the ECC calculation? if so need to change reset value of parity bits -- QQQ
+    assign wdata_tmp    = rf_wdata_wb ^ rf_wcap_vec[31:0] ^ {20'h0, rf_we_wb, rf_waddr_wb, rf_wcap_vec[37:32]};
+    // assign wdata_tmp         = rf_wdata_wb ^ rf_wcap_vec[31:0] ^ {26'h0, rf_wcap_vec[37:32]};
+    assign rf_wdata_wb_ecc_o = {wdata_ecc_tmp[38:32], rf_wdata_wb};
+    prim_secded_inv_39_32_enc regfile_ecc_enc (
+      .data_i(wdata_tmp),
+      .data_o(wdata_ecc_tmp)
+    );
+
+    // ECC checking on register file rdata
+    assign rf_rcap_a_vec = reg2vec(rf_rcap_a_i);
+    assign rf_rcap_b_vec = reg2vec(rf_rcap_b_i);
+
+    assign rdata_a_tmp = rf_rdata_a_ecc_i[31:0] ^ rf_rcap_a_vec[31:0] ^ {20'h0, 1'b1, rf_raddr_a, rf_rcap_a_vec[37:32]};
+    assign rdata_b_tmp = rf_rdata_b_ecc_i[31:0] ^ rf_rcap_b_vec[31:0] ^ {20'h0, 1'b1, rf_raddr_b, rf_rcap_b_vec[37:32]};
+    
+    //assign rdata_a_tmp = rf_rdata_a_ecc_i[31:0] ^ rf_rcap_a_vec[31:0] ^ {26'h0, rf_rcap_a_vec[37:32]};
+    //assign rdata_b_tmp = rf_rdata_b_ecc_i[31:0] ^ rf_rcap_b_vec[31:0] ^ {26'h0, rf_rcap_b_vec[37:32]};
+    prim_secded_inv_39_32_dec regfile_ecc_dec_a (
+      .data_i    ({rf_rdata_a_ecc_i[38:32], rdata_a_tmp}),
+      .data_o    (),
+      .syndrome_o(),
+      .err_o     (rf_ecc_err_a)
+    );
+    prim_secded_inv_39_32_dec regfile_ecc_dec_b (
+      .data_i    ({rf_rdata_b_ecc_i[38:32], rdata_b_tmp}),
+      .data_o    (),
+      .syndrome_o(),
+      .err_o     (rf_ecc_err_b)
+    );
+
+    // Assign read outputs - no error correction, just trigger an alert
+    assign rf_rdata_a = rf_rdata_a_ecc_i[31:0];
+    assign rf_rdata_b = rf_rdata_b_ecc_i[31:0];
+
+    // Calculate errors - qualify with WB forwarding to avoid xprop into the alert signal
+    assign rf_ecc_err_a_id = |rf_ecc_err_a & rf_ren_a & ~rf_rd_a_wb_match;
+    assign rf_ecc_err_b_id = |rf_ecc_err_b & rf_ren_b & ~rf_rd_b_wb_match;
+
+    // Combined error
+    assign rf_ecc_err_comb = instr_valid_id & (rf_ecc_err_a_id | rf_ecc_err_b_id);
+
+  end else if (RegFileECC) begin : gen_regfile_ecc
+
+    logic [1:0] rf_ecc_err_a, rf_ecc_err_b;
+    logic       rf_ecc_err_a_id, rf_ecc_err_b_id;
+
+    // ECC checkbit generation for regiter file wdata
+    prim_secded_inv_39_32_enc regfile_ecc_enc (
+      .data_i(rf_wdata_wb),
+      .data_o(rf_wdata_wb_ecc_o)
+    );
+
+    // ECC checking on register file rdata
+    prim_secded_inv_39_32_dec regfile_ecc_dec_a (
+      .data_i    (rf_rdata_a_ecc_i),
+      .data_o    (),
+      .syndrome_o(),
+      .err_o     (rf_ecc_err_a)
+    );
+    prim_secded_inv_39_32_dec regfile_ecc_dec_b (
+      .data_i    (rf_rdata_b_ecc_i),
+      .data_o    (),
+      .syndrome_o(),
+      .err_o     (rf_ecc_err_b)
+    );
+
+    // Assign read outputs - no error correction, just trigger an alert
+    assign rf_rdata_a = rf_rdata_a_ecc_i[31:0];
+    assign rf_rdata_b = rf_rdata_b_ecc_i[31:0];
+
+    // Calculate errors - qualify with WB forwarding to avoid xprop into the alert signal
+    assign rf_ecc_err_a_id = |rf_ecc_err_a & rf_ren_a & ~rf_rd_a_wb_match;
+    assign rf_ecc_err_b_id = |rf_ecc_err_b & rf_ren_b & ~rf_rd_b_wb_match;
+
+    // Combined error
+    assign rf_ecc_err_comb = instr_valid_id & (rf_ecc_err_a_id | rf_ecc_err_b_id);
+
+  end else begin : gen_no_regfile_ecc
+
     logic unused_rf_ren_a, unused_rf_ren_b;
     logic unused_rf_rd_a_wb_match, unused_rf_rd_b_wb_match;
 
@@ -1170,6 +1286,7 @@ end
     assign rf_rdata_a              = rf_rdata_a_ecc_i;
     assign rf_rdata_b              = rf_rdata_b_ecc_i;
     assign rf_ecc_err_comb         = 1'b0;
+end
 
   ///////////////////////
   // Crash dump output //
@@ -2063,11 +2180,5 @@ end
 
   // Certain parameter combinations are not supported
   `ASSERT_INIT(IllegalParamSecure, !(SecureIbex && (RV32M == RV32MNone)))
-
- assign itr_info_o[31:0]  = instr_rdata_id;
- assign itr_info_o[63:32] = pc_id;
- assign itr_info_o[79:64] = itr_id_info;
- assign itr_info_o[95:80] = 0;
-
 
 endmodule

@@ -20,12 +20,14 @@
 module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   parameter int unsigned DmHaltAddr       = 32'h1A110800,
   parameter int unsigned DmExceptionAddr  = 32'h1A110808,
+  parameter bit          SecureIbex       = 1'b0,          // not used
+  parameter bit          WritebackStage   = 1'b1,          // not used
   parameter int unsigned HeapBase         = 32'h2001_0000,
   parameter int unsigned TSMapBase        = 32'h2002_f000, // 4kB default
   parameter int unsigned TSMapTop         = 32'h2003_0000,
   parameter int unsigned TSMapSize        = 1024,           // 32-bit words
   parameter bit          MemCapFmt        = 1'b0,
-  parameter bit          Cheri32E         = 1'b0,
+  parameter bit          RV32E            = 1'b0,
   parameter bit          CheriPPLBC       = 1'b1,
   parameter bit          CheriSBND2       = 1'b1,
   parameter bit          CheriTBRE        = 1'b0
@@ -132,11 +134,13 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   // CPU Control Signals
   input  fetch_enable_t                fetch_enable_i,
   output logic                         core_sleep_o,
+  output logic                         alert_minor_o,
+  output logic                         alert_major_internal_o,
+  output logic                         alert_major_bus_o,
+
 
   // DFT bypass controls
-  input logic                          scan_rst_ni,
-
-  output logic [95:0]                  itr_info_o
+  input logic                          scan_rst_ni
 );
 
   localparam bit          ResetAll          = 1'b1;
@@ -246,12 +250,13 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .RegFileDataWidth (RegFileDataWidth),
     .DmHaltAddr       (DmHaltAddr),
     .DmExceptionAddr  (DmExceptionAddr),
+    .CHERIoTEn        (1'b1),
+    .DataWidth        (33),
     .HeapBase         (HeapBase),
     .TSMapBase        (TSMapBase),
     .TSMapTop         (TSMapTop),
     .TSMapSize        (TSMapSize),
     .MemCapFmt        (MemCapFmt),
-    .Cheri32E         (Cheri32E),
     .CheriPPLBC       (CheriPPLBC),
     .CheriSBND2       (CheriSBND2),
     .CheriTBRE        (CheriTBRE)
@@ -356,9 +361,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .alert_minor_o(),
     .alert_major_o(),
     .icache_inval_o(),
-    .core_busy_o   (core_busy_d),
-
-    .itr_info_o    (itr_info_o)
+    .core_busy_o   (core_busy_d)
   );
 
   assign data_wdata_intg_o = 7'h0;
@@ -366,9 +369,9 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   /////////////////////////////////
   // Register file Instantiation //
   /////////////////////////////////
-  if (Cheri32E) begin
+  if (RV32E) begin
     cheri_regfile #(
-      .NREGS(32),
+      .NREGS(16),
       .NCAPS(16),
       .CheriPPLBC(CheriPPLBC)
     ) register_file_i (

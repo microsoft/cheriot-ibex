@@ -213,10 +213,7 @@ module ibex_id_stage import cheri_pkg::*; #(
   input  logic                      cheri_wb_err_i,
   input  logic [10:0]               cheri_wb_err_info_i,
   input  logic                      cheri_branch_req_i,   // from cheri EX
-  input  logic [31:0]               cheri_branch_target_i,
-
-  output logic [15:0]               itr_id_info_o
-
+  input  logic [31:0]               cheri_branch_target_i
 );
 
   import ibex_pkg::*;
@@ -327,7 +324,6 @@ module ibex_id_stage import cheri_pkg::*; #(
   logic [31:0] alu_operand_a;
   logic [31:0] alu_operand_b;
 
-  logic [7:0]  itr_controller_info;
   logic        cheri_rf_we, cheri_rf_we_dec;
   logic        stall_cheri_trvk;
 
@@ -717,9 +713,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     .cheri_wb_err_i         (cheri_wb_err_i)       ,
     .cheri_wb_err_info_i    (cheri_wb_err_info_i)  ,
     .cheri_branch_req_i     (cheri_branch_req_i)   ,   // from cheri EX
-    .cheri_branch_target_i  (cheri_branch_target_i),
-
-    .itr_controller_info_o  (itr_controller_info)
+    .cheri_branch_target_i  (cheri_branch_target_i)
   );
 
   assign multdiv_en_dec   = mult_en_dec | div_en_dec;
@@ -1265,9 +1259,5 @@ module ibex_id_stage import cheri_pkg::*; #(
   `ifdef CHECK_MISALIGNED
   `ASSERT(IbexMisalignedMemoryAccess, !lsu_addr_incr_req_i)
   `endif
-
-  assign itr_id_info_o[7:0]  = itr_controller_info;
-  assign itr_id_info_o[8]    = instr_id_done_o;
-  assign itr_id_info_o[15:9] = 0;
 
 endmodule

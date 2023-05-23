@@ -120,10 +120,7 @@ module ibex_controller #(
   input  logic  [10:0]          cheri_ex_err_info_i,
   input  logic  [10:0]          cheri_wb_err_info_i,
   input  logic                  cheri_branch_req_i,
-  input  logic [31:0]           cheri_branch_target_i,
-
-  output logic [7:0]            itr_controller_info_o
-
+  input  logic [31:0]           cheri_branch_target_i
 );
   import ibex_pkg::*;
 
@@ -993,9 +990,4 @@ module ibex_controller #(
     assign rvfi_flush_next = ctrl_fsm_ns == FLUSH;
   `endif
 
-   // ITR tracing support
-   assign itr_controller_info_o[0]   = id_exception_o;
-   assign itr_controller_info_o[1]   = (ctrl_fsm_ns==FLUSH);
-   assign itr_controller_info_o[2]   = special_req;
-   assign itr_controller_info_o[7:3] = 0;
 endmodule
