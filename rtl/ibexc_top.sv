@@ -28,6 +28,8 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   parameter int unsigned TSMapSize        = 1024,           // 32-bit words
   parameter bit          MemCapFmt        = 1'b0,
   parameter bit          RV32E            = 1'b0,
+  parameter bit          CHERIoTEn        = 1'b1,
+  parameter int unsigned DataWidth        = 33,
   parameter bit          CheriPPLBC       = 1'b1,
   parameter bit          CheriSBND2       = 1'b1,
   parameter bit          CheriTBRE        = 1'b0

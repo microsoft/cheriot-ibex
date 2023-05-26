@@ -15,6 +15,7 @@
 `include "dv_fcov_macros.svh"
 
 module ibex_controller #(
+  parameter bit CHERIoTEn       = 1'b1,
   parameter bit WritebackStage  = 0,
   parameter bit BranchPredictor = 0
  ) (
@@ -225,7 +226,7 @@ module ibex_controller #(
                          // MRET must be in M-Mode. TW means trap WFI to M-Mode.
                          (mret_insn | (csr_mstatus_tw_i & wfi_insn));
 
-  assign illegal_mret_cheri = ~csr_pcc_perm_sr_i & mret_insn;
+  assign illegal_mret_cheri = CHERIoTEn & ~csr_pcc_perm_sr_i & mret_insn;
 
   // This is recorded in the illegal_insn_q flop to help timing.  Specifically
   // it is needed to break the path from ibex_cs_registers/illegal_csr_insn_o

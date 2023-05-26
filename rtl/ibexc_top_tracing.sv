@@ -38,6 +38,8 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   parameter int unsigned TSMapBase        = 32'h2004_0000, // 4kB default
   parameter int unsigned TSMapTop         = 32'h2004_1000,
   parameter int unsigned TSMapSize        = 1024,
+  parameter bit          CHERIoTEn        = 1'b1,
+  parameter int unsigned DataWidth        = 33,
   parameter bit          MemCapFmt        = 1'b0,
   parameter bit          CheriPPLBC       = 1'b1,
   parameter bit          CheriSBND2       = 1'b0,

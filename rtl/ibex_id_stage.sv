@@ -29,7 +29,7 @@ module ibex_id_stage import cheri_pkg::*; #(
   parameter bit               BranchTargetALU = 0,
   parameter bit               WritebackStage  = 0,
   parameter bit               BranchPredictor = 0,
-  parameter bit               Cheri32E        = 1'b0,
+  parameter bit               CHERIoTEn       = 1'b1,
   parameter bit               CheriPPLBC      = 1'b1,
   parameter bit               CheriSBND2      = 1'b0
 ) (
@@ -327,7 +327,7 @@ module ibex_id_stage import cheri_pkg::*; #(
   logic        cheri_rf_we, cheri_rf_we_dec;
   logic        stall_cheri_trvk;
 
-  assign       cheri_rf_we = instr_valid_i & ~instr_fetch_err_i & ~illegal_insn_o & cheri_rf_we_dec;
+  assign       cheri_rf_we = CHERIoTEn & instr_valid_i & ~instr_fetch_err_i & ~illegal_insn_o & cheri_rf_we_dec;
 
   /////////////
   // LSU Mux //
@@ -478,7 +478,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     .RV32M          (RV32M),
     .RV32B          (RV32B),
     .BranchTargetALU(BranchTargetALU),
-    .Cheri32E       (Cheri32E),
+    .CHERIoTEn      (CHERIoTEn),
     .CheriPPLBC     (CheriPPLBC),
     .CheriSBND2     (CheriSBND2)
   ) decoder_i (
@@ -614,6 +614,7 @@ module ibex_id_stage import cheri_pkg::*; #(
   assign illegal_insn_o = instr_valid_i & (illegal_insn_dec | illegal_csr_insn_i);
 
   ibex_controller #(
+    .CHERIoTEn      (CHERIoTEn),
     .WritebackStage (WritebackStage),
     .BranchPredictor(BranchPredictor)
   ) controller_i (
@@ -1111,10 +1112,11 @@ module ibex_id_stage import cheri_pkg::*; #(
 
     assign stall_ld_hz = outstanding_load_wb_i & (rf_rd_a_hz | rf_rd_b_hz);
 
-    assign stall_cheri_trvk = CheriPPLBC ? ((rf_ren_a && ~rf_reg_rdy_i[rf_raddr_a_o]) |
-                                            (rf_ren_b && ~rf_reg_rdy_i[rf_raddr_b_o]) |
-                                            (cheri_rf_we && ~ rf_reg_rdy_i[rf_waddr_id_o]))
-                                         : 1'b0;
+    assign stall_cheri_trvk = (CHERIoTEn & CheriPPLBC) ? 
+                               ((rf_ren_a && ~rf_reg_rdy_i[rf_raddr_a_o]) |
+                                (rf_ren_b && ~rf_reg_rdy_i[rf_raddr_b_o]) |
+                                (cheri_rf_we && ~ rf_reg_rdy_i[rf_waddr_id_o])) :
+                               1'b0;
 
     assign instr_type_wb_o = ~lsu_req_dec ? WB_INSTR_OTHER :
                               lsu_we      ? WB_INSTR_STORE :

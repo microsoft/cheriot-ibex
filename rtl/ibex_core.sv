@@ -472,6 +472,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic          tbre_trvk_clrtag;
 
   logic          lsu_tbre_sel, cpu_lsu_dec;
+  logic          rf_trsv_en;
 
 
   //////////////////////
@@ -496,18 +497,18 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .TagSizeECC       (TagSizeECC),
     .LineSizeECC      (LineSizeECC),
     .PCIncrCheck      (PCIncrCheck),
-    .ResetAll          ( ResetAll          ),
-    .RndCnstLfsrSeed   ( RndCnstLfsrSeed   ),
-    .RndCnstLfsrPerm   ( RndCnstLfsrPerm   ),
+    .ResetAll         (ResetAll          ),
+    .RndCnstLfsrSeed  (RndCnstLfsrSeed   ),
+    .RndCnstLfsrPerm  (RndCnstLfsrPerm   ),
     .BranchPredictor  (BranchPredictor),
-    .Cheri32E         (1'b0)
+    .CHERIoTEn        (CHERIoTEn)
   ) if_stage_i (
     .clk_i (clk_i),
     .rst_ni(rst_ni),
 
-    .cheri_pmode_i (cheri_pmode_i),
-    .boot_addr_i(boot_addr_i),
-    .req_i      (instr_req_gated),  // instruction request control
+    .cheri_pmode_i  (cheri_pmode_i),
+    .boot_addr_i    (boot_addr_i),
+    .req_i          (instr_req_gated),  // instruction request control
     .debug_mode_i   (debug_mode),
 
     // instruction cache interface
@@ -615,7 +616,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .DataIndTiming  (DataIndTiming),
     .WritebackStage (WritebackStage),
     .BranchPredictor(BranchPredictor),
-    .Cheri32E       (1'b0),
+    .CHERIoTEn      (CHERIoTEn),
     .CheriPPLBC     (CheriPPLBC),
     .CheriSBND2     (CheriSBND2)
   ) id_stage_i (
@@ -843,200 +844,246 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   //////////////
   // cheri EX //
   //////////////
-  logic rf_trsv_en;
+  if (CHERIoTEn) begin : g_cheri_ex
+    cheri_ex #(
+      .WritebackStage       (WritebackStage),
+      .HeapBase             (HeapBase),
+      .TSMapBase            (TSMapBase),
+      .TSMapTop             (TSMapTop),
+      .Cheri32E             (1'b0),
+      .CheriPPLBC           (CheriPPLBC),
+      .CheriSBND2           (CheriSBND2)
+    ) u_cheri_ex (
+      .clk_i                (clk_i),
+      .rst_ni               (rst_ni),
+      .cheri_pmode_i        (cheri_pmode_i),
+      .cheri_tsafe_en_i     (cheri_tsafe_en_i),
+      .debug_mode_i         (debug_mode),
+      .fwd_we_i             (rf_write_wb),
+      .fwd_waddr_i          (rf_waddr_wb),
+      .fwd_wdata_i          (rf_wdata_fwd_wb),
+      .fwd_wcap_i           (rf_wcap_fwd_wb),
+      .rf_raddr_a_i         (rf_raddr_a),
+      .rf_rdata_a_i         (rf_rdata_a),
+      .rf_rcap_a_i          (rf_rcap_a_i),
+      .rf_raddr_b_i         (rf_raddr_b),
+      .rf_rdata_b_i         (rf_rdata_b),
+      .rf_rcap_b_i          (rf_rcap_b_i),
+      .rf_trsv_en_o         (rf_trsv_en),
+      .pcc_fullcap_i        (pcc_fullcap_r),
+      .pcc_fullcap_o        (pcc_fullcap_w),
+      .pc_id_i              (pc_id),
+      .branch_req_o         (cheri_branch_req),
+      .branch_req_spec_o    (cheri_branch_req_spec),
+      .branch_target_o      (branch_target_ex_cheri),
+      .cheri_exec_id_i      (cheri_exec_id),
+      .instr_valid_i        (instr_valid_id),
+      .instr_first_cycle_i  (instr_first_cycle_id),
+      .instr_is_cheri_i     (instr_is_cheri_id),
+      .instr_is_rv32lsu_i   (instr_is_rv32lsu_id),
+      .instr_is_compressed_i(instr_is_compressed_id),
+      .cheri_imm12_i        (cheri_imm12),
+      .cheri_imm14_i        (cheri_imm14),
+      .cheri_imm20_i        (cheri_imm20),
+      .cheri_imm21_i        (cheri_imm21),
+      .cheri_operator_i     (cheri_operator),
+      .cheri_cs2_dec_i      (cheri_cs2_dec),
+      .cheri_rf_we_o        (cheri_rf_we),
+      .result_data_o        (cheri_result_data),
+      .result_cap_o         (cheri_result_cap),
+      .cheri_ex_valid_o     (cheri_ex_valid),
+      .cheri_ex_err_o       (cheri_ex_err),
+      .cheri_ex_err_info_o  (cheri_ex_err_info),
+      .cheri_wb_err_o       (cheri_wb_err),
+      .cheri_wb_err_info_o  (cheri_wb_err_info),
+      .lsu_req_o            (lsu_req),
+      .lsu_is_cap_o         (lsu_is_cap),
+      .lsu_is_intl_o        (lsu_is_intl),
+      .lsu_lc_clrperm_o     (lsu_lc_clrperm),
+      .lsu_cheri_err_o      (lsu_cheri_err),
+      .lsu_we_o             (lsu_we),
+      .lsu_addr_o           (lsu_addr),
+      .lsu_type_o           (lsu_type),
+      .lsu_wdata_o          (lsu_wdata),
+      .lsu_wcap_o           (lsu_wcap),
+      .lsu_sign_ext_o       (lsu_sign_ext),
+      .addr_incr_req_i      (lsu_addr_incr_req),
+      .addr_last_i          (lsu_addr_last),
+      .lsu_req_done_i       (lsu_req_done),
+      .lsu_req_done_intl_i  (lsu_req_done_intl),
+      .lsu_resp_valid_intl_i(lsu_resp_valid_intl),
+      .lsu_rdata_i          (rf_wdata_lsu),
+      .lsu_rcap_i           (rf_wcap_lsu),
+      .lsu_resp_err_intl_i  (lsu_resp_err_intl),
+      .rv32_lsu_req_i       (rv32_lsu_req),
+      .rv32_lsu_we_i        (rv32_lsu_we),
+      .rv32_lsu_type_i      (rv32_lsu_type),
+      .rv32_lsu_wdata_i     (rv32_lsu_wdata),
+      .rv32_lsu_sign_ext_i  (rv32_lsu_sign_ext),
+      .rv32_lsu_addr_i      (alu_adder_result_ex),
+      .rv32_addr_incr_req_o (rv32_lsu_addr_incr_req),
+      .rv32_addr_last_o     (rv32_lsu_addr_last),
+      .lsu_tbre_sel_i       (lsu_tbre_sel),
+      .tbre_lsu_req_i       (tbre_lsu_req),
+      .tbre_lsu_is_cap_i    (tbre_lsu_is_cap),
+      .tbre_lsu_we_i        (tbre_lsu_we),
+      .tbre_lsu_addr_i      (tbre_lsu_addr),
+      .tbre_lsu_wdata_i     (tbre_lsu_wdata),
+      .cpu_lsu_dec_o        (cpu_lsu_dec),  
+      .csr_rdata_i          (cheri_csr_rdata),
+      .csr_rcap_i           (cheri_csr_rcap),
+      .csr_mstatus_mie_i    (csr_mstatus_mie),
+      .csr_access_o         (cheri_csr_access),
+      .csr_addr_o           (cheri_csr_addr),
+      .csr_wdata_o          (cheri_csr_wdata),
+      .csr_wcap_o           (cheri_csr_wcap),
+      .csr_op_o             (cheri_csr_op),
+      .csr_op_en_o          (cheri_csr_op_en),
+      .csr_set_mie_o        (cheri_csr_set_mie),
+      .csr_clr_mie_o        (cheri_csr_clr_mie),
+      .csr_mshwm_i          (csr_mshwm),
+      .csr_mshwmb_i         (csr_mshwmb),
+      .csr_mshwm_set_o      (csr_mshwm_set),
+      .csr_mshwm_new_o      (csr_mshwm_new),
+      .csr_dbg_tclr_fault_i (csr_dbg_tclr_fault)
+    );
 
-  cheri_ex #(
-    .WritebackStage       (WritebackStage),
-    .HeapBase             (HeapBase),
-    .TSMapBase            (TSMapBase),
-    .TSMapTop             (TSMapTop),
-    .Cheri32E             (1'b0),
-    .CheriPPLBC           (CheriPPLBC),
-    .CheriSBND2           (CheriSBND2)
-  ) u_cheri_ex (
-    .clk_i                (clk_i),
-    .rst_ni               (rst_ni),
-    .cheri_pmode_i        (cheri_pmode_i),
-    .cheri_tsafe_en_i     (cheri_tsafe_en_i),
-    .debug_mode_i         (debug_mode),
-    .fwd_we_i             (rf_write_wb),
-    .fwd_waddr_i          (rf_waddr_wb),
-    .fwd_wdata_i          (rf_wdata_fwd_wb),
-    .fwd_wcap_i           (rf_wcap_fwd_wb),
-    .rf_raddr_a_i         (rf_raddr_a),
-    .rf_rdata_a_i         (rf_rdata_a),
-    .rf_rcap_a_i          (rf_rcap_a_i),
-    .rf_raddr_b_i         (rf_raddr_b),
-    .rf_rdata_b_i         (rf_rdata_b),
-    .rf_rcap_b_i          (rf_rcap_b_i),
-    .rf_trsv_en_o         (rf_trsv_en),
-    .pcc_fullcap_i        (pcc_fullcap_r),
-    .pcc_fullcap_o        (pcc_fullcap_w),
-    .pc_id_i              (pc_id),
-    .branch_req_o         (cheri_branch_req),
-    .branch_req_spec_o    (cheri_branch_req_spec),
-    .branch_target_o      (branch_target_ex_cheri),
-    .cheri_exec_id_i      (cheri_exec_id),
-    .instr_valid_i        (instr_valid_id),
-    .instr_first_cycle_i  (instr_first_cycle_id),
-    .instr_is_cheri_i     (instr_is_cheri_id),
-    .instr_is_rv32lsu_i   (instr_is_rv32lsu_id),
-    .instr_is_compressed_i(instr_is_compressed_id),
-    .cheri_imm12_i        (cheri_imm12),
-    .cheri_imm14_i        (cheri_imm14),
-    .cheri_imm20_i        (cheri_imm20),
-    .cheri_imm21_i        (cheri_imm21),
-    .cheri_operator_i     (cheri_operator),
-    .cheri_cs2_dec_i      (cheri_cs2_dec),
-    .cheri_rf_we_o        (cheri_rf_we),
-    .result_data_o        (cheri_result_data),
-    .result_cap_o         (cheri_result_cap),
-    .cheri_ex_valid_o     (cheri_ex_valid),
-    .cheri_ex_err_o       (cheri_ex_err),
-    .cheri_ex_err_info_o  (cheri_ex_err_info),
-    .cheri_wb_err_o       (cheri_wb_err),
-    .cheri_wb_err_info_o  (cheri_wb_err_info),
-    .lsu_req_o            (lsu_req),
-    .lsu_is_cap_o         (lsu_is_cap),
-    .lsu_is_intl_o        (lsu_is_intl),
-    .lsu_lc_clrperm_o     (lsu_lc_clrperm),
-    .lsu_cheri_err_o      (lsu_cheri_err),
-    .lsu_we_o             (lsu_we),
-    .lsu_addr_o           (lsu_addr),
-    .lsu_type_o           (lsu_type),
-    .lsu_wdata_o          (lsu_wdata),
-    .lsu_wcap_o           (lsu_wcap),
-    .lsu_sign_ext_o       (lsu_sign_ext),
-    .addr_incr_req_i      (lsu_addr_incr_req),
-    .addr_last_i          (lsu_addr_last),
-    .lsu_req_done_i       (lsu_req_done),
-    .lsu_req_done_intl_i  (lsu_req_done_intl),
-    .lsu_resp_valid_intl_i(lsu_resp_valid_intl),
-    .lsu_rdata_i          (rf_wdata_lsu),
-    .lsu_rcap_i           (rf_wcap_lsu),
-    .lsu_resp_err_intl_i  (lsu_resp_err_intl),
-    .rv32_lsu_req_i       (rv32_lsu_req),
-    .rv32_lsu_we_i        (rv32_lsu_we),
-    .rv32_lsu_type_i      (rv32_lsu_type),
-    .rv32_lsu_wdata_i     (rv32_lsu_wdata),
-    .rv32_lsu_sign_ext_i  (rv32_lsu_sign_ext),
-    .rv32_lsu_addr_i      (alu_adder_result_ex),
-    .rv32_addr_incr_req_o (rv32_lsu_addr_incr_req),
-    .rv32_addr_last_o     (rv32_lsu_addr_last),
-    .lsu_tbre_sel_i       (lsu_tbre_sel),
-    .tbre_lsu_req_i       (tbre_lsu_req),
-    .tbre_lsu_is_cap_i    (tbre_lsu_is_cap),
-    .tbre_lsu_we_i        (tbre_lsu_we),
-    .tbre_lsu_addr_i      (tbre_lsu_addr),
-    .tbre_lsu_wdata_i     (tbre_lsu_wdata),
-    .cpu_lsu_dec_o        (cpu_lsu_dec),  
-    .csr_rdata_i          (cheri_csr_rdata),
-    .csr_rcap_i           (cheri_csr_rcap),
-    .csr_mstatus_mie_i    (csr_mstatus_mie),
-    .csr_access_o         (cheri_csr_access),
-    .csr_addr_o           (cheri_csr_addr),
-    .csr_wdata_o          (cheri_csr_wdata),
-    .csr_wcap_o           (cheri_csr_wcap),
-    .csr_op_o             (cheri_csr_op),
-    .csr_op_en_o          (cheri_csr_op_en),
-    .csr_set_mie_o        (cheri_csr_set_mie),
-    .csr_clr_mie_o        (cheri_csr_clr_mie),
-    .csr_mshwm_i          (csr_mshwm),
-    .csr_mshwmb_i         (csr_mshwmb),
-    .csr_mshwm_set_o      (csr_mshwm_set),
-    .csr_mshwm_new_o      (csr_mshwm_new),
-    .csr_dbg_tclr_fault_i (csr_dbg_tclr_fault)
-  );
+    assign rf_trsv_en_o     = rf_trsv_en;
+    assign rf_trsv_addr_o   = rf_waddr_id;
+    assign branch_target_ex = (instr_valid_id & instr_is_cheri_id) ? branch_target_ex_cheri : branch_target_ex_rv32;
+  end else begin : gen_no_cheri_ex
+    assign rf_trsv_en_o           = 1'b0;
+    assign rf_trsv_addr_o         = 5'h0;
+                                  
+    assign cheri_branch_reqc      = 1'b0;
+    assign cheri_branch_req_spec  = 1'b0;
+    assign branch_target_ex       = branch_target_ex_rv32;
+    assign pcc_fullcap_w          = NULL_FULL_CAP;
+                                  
+    assign cheri_rf_we            = 1'b0;
+    assign cheri_result_data      = 32'h0;
+    assign cheri_result_cap       = NULL_REG_CAP;
+                                  
+    assign cheri_ex_valid         = 1'b0;
+    assign cheri_ex_err           = 1'b0;
+    assign cheri_ex_err_info      = 11'h0;
+    assign cheri_wb_err           = 1'b0;
+    assign cheri_wb_err_info      = 11'h0;
 
-  assign rf_trsv_en_o     = rf_trsv_en;
-  assign rf_trsv_addr_o   = rf_waddr_id;
-  assign branch_target_ex = (instr_valid_id & instr_is_cheri_id) ? branch_target_ex_cheri : branch_target_ex_rv32;
+    assign lsu_req                = rv32_lsu_req;
+    assign lsu_is_cap             = 1'b0;
+    assign lsu_is_intl            = 1'b0;
+    assign lsu_lc_clrperm         = 4'h0;
+    assign lsu_cheri_err          = 1'b0;
+    assign lsu_we                 = rv32_lsu_we;
+    assign lsu_addr               = alu_adder_result_ex;
+    assign lsu_type               = rv32_lsu_type;
+    assign lsu_wdata              = rv32_lsu_wdata;
+    assign lsu_wcap               = NULL_REG_CAP;
+    assign lsu_sign_ext           = rv32_lsu_sign_ext;
+    assign rv32_lsu_addr_incr_req = lsu_addr_incr_req;
+    assign rv32_lsu_addr_last     = lsu_addr_last;
+
+    assign cpu_lsu_dec            = 1'b0;
+    assign cheri_csr_access       = 1'b0;
+    assign cheri_csr_addr         = 5'h0;
+    assign cheri_csr_wdata        = 32'h0;
+    assign cheri_csr_wcap         = NULL_REG_CAP;
+    assign cheri_csr_op           = CHERI_CSR_NULL;
+    assign cheri_csr_op_en        = 1'b0;
+    assign cheri_csr_set_mie      = 1'b0;
+    assign cheri_csr_clr_mie      = 1'b0;
+     
+    assign csr_mshwm_set          = 1'b0;
+    assign csr_mshwm_new          = 1'b0;
+ 
+  end
 
   /////////////////////////////
   // cheri TS pipeline stage //
   /////////////////////////////
 
-if (CheriPPLBC) begin : g_trvk_stage
-  cheri_trvk_stage #(
-    .HeapBase  (HeapBase),
-    .TSMapSize (TSMapSize)
-  ) cheri_trvk_stage_i (
-   // Clock and Reset
-  .clk_i             (clk_i           ),
-  .rst_ni            (rst_ni          ),
-  .rf_trsv_en_i      (rf_trsv_en      ),
-  .rf_trsv_addr_i    (rf_trsv_addr_o  ),
-  .lsu_resp_valid_i  (lsu_resp_valid  ),
-  .lsu_load_err_i    (lsu_load_err    ),
-  .rf_wdata_lsu_i    (rf_wdata_lsu[31:0]),
-  .rf_wcap_lsu_i     (rf_wcap_lsu     ),
-  .lsu_resp_is_wr_i  (lsu_resp_is_wr),
-  .lsu_tbre_resp_valid_i (lsu_tbre_resp_valid),
-  .lsu_tbre_resp_err_i   (lsu_tbre_resp_err),
-  .rf_trvk_addr_o    (rf_trvk_addr_o  ),
-  .rf_trvk_en_o      (rf_trvk_en_o    ),
-  .rf_trvk_clrtag_o  (rf_trvk_clrtag_o),
-  .tbre_trvk_en_o    (tbre_trvk_en    ),
-  .tbre_trvk_clrtag_o(tbre_trvk_clrtag),          
-  .tsmap_cs_o        (tsmap_cs_o      ),
-  .tsmap_addr_o      (tsmap_addr_o    ),
-  .tsmap_rdata_i     (tsmap_rdata_i   )
-  );
-end else begin
-  assign rf_trvk_addr_o   = 0;
-  assign rf_trvk_en_o     = 1'b0;
-  assign rf_trvk_clrtag_o = 1'b0;
-  assign tsmap_cs_o       = 1'b0;
-  assign tsmap_addr_o     = 0;
-end
+  if (CHERIoTEn & CheriPPLBC) begin : g_trvk_stage
+    cheri_trvk_stage #(
+      .HeapBase  (HeapBase),
+      .TSMapSize (TSMapSize)
+    ) cheri_trvk_stage_i (
+     // Clock and Reset
+    .clk_i             (clk_i           ),
+    .rst_ni            (rst_ni          ),
+    .rf_trsv_en_i      (rf_trsv_en      ),
+    .rf_trsv_addr_i    (rf_trsv_addr_o  ),
+    .lsu_resp_valid_i  (lsu_resp_valid  ),
+    .lsu_load_err_i    (lsu_load_err    ),
+    .rf_wdata_lsu_i    (rf_wdata_lsu[31:0]),
+    .rf_wcap_lsu_i     (rf_wcap_lsu     ),
+    .lsu_resp_is_wr_i  (lsu_resp_is_wr),
+    .lsu_tbre_resp_valid_i (lsu_tbre_resp_valid),
+    .lsu_tbre_resp_err_i   (lsu_tbre_resp_err),
+    .rf_trvk_addr_o    (rf_trvk_addr_o  ),
+    .rf_trvk_en_o      (rf_trvk_en_o    ),
+    .rf_trvk_clrtag_o  (rf_trvk_clrtag_o),
+    .tbre_trvk_en_o    (tbre_trvk_en    ),
+    .tbre_trvk_clrtag_o(tbre_trvk_clrtag),          
+    .tsmap_cs_o        (tsmap_cs_o      ),
+    .tsmap_addr_o      (tsmap_addr_o    ),
+    .tsmap_rdata_i     (tsmap_rdata_i   )
+    );
+  end else begin
+    assign rf_trvk_addr_o   = 0;
+    assign rf_trvk_en_o     = 1'b0;
+    assign rf_trvk_clrtag_o = 1'b0;
+    assign tsmap_cs_o       = 1'b0;
+    assign tsmap_addr_o     = 0;
+  end
 
   //////////////////////////////////////////
   // cheri TS background revocation engine//
   //////////////////////////////////////////
 
-if (CheriTBRE) begin : g_tbre
-  logic snoop_lsu_req_done;
+  if (CHERIoTEn & CheriTBRE) begin : g_tbre
+    logic snoop_lsu_req_done;
 
-  assign snoop_lsu_req_done = lsu_req_done | lsu_req_done_intl;
+    assign snoop_lsu_req_done = lsu_req_done | lsu_req_done_intl;
 
-  cheri_tbre #(
-    .FifoSize (4), 
-    .AddrHi   (23)
-) cheri_tbre_i (
-   // Clock and Reset
-    .clk_i                   (clk_i),                 
-    .rst_ni                  (rst_ni),
-    .tbre_ctrl_vec_i         (tbre_ctrl_vec_i),
-    .tbre_done_o             (tbre_done_o),
-    .lsu_tbre_resp_valid_i   (lsu_tbre_resp_valid),
-    .lsu_tbre_resp_err_i     (lsu_tbre_resp_err),
-    .lsu_tbre_resp_is_wr_i   (lsu_resp_is_wr),
-    .lsu_tbre_raw_lsw_i      (lsu_tbre_raw_lsw),   
-    .lsu_tbre_req_done_i     (lsu_tbre_req_done),   
-    .lsu_tbre_addr_incr_i    (lsu_addr_incr_req),
-    .tbre_lsu_req_o          (tbre_lsu_req),
-    .tbre_lsu_is_cap_o       (tbre_lsu_is_cap),
-    .tbre_lsu_we_o           (tbre_lsu_we),
-    .tbre_lsu_addr_o         (tbre_lsu_addr),
-    .tbre_lsu_wdata_o        (tbre_lsu_wdata),
-    .snoop_lsu_req_done_i    (snoop_lsu_req_done),  
-    .snoop_lsu_req_i         (lsu_req),
-    .snoop_lsu_is_cap_i      (lsu_is_cap),
-    .snoop_lsu_we_i          (lsu_we),
-    .snoop_lsu_cheri_err_i   (lsu_cheri_err),
-    .snoop_lsu_addr_i        (lsu_addr),
-    .trvk_en_i               (tbre_trvk_en),
-    .trvk_clrtag_i           (tbre_trvk_clrtag)          
-);
+    cheri_tbre #(
+      .FifoSize (4), 
+      .AddrHi   (23)
+    ) cheri_tbre_i (
+     // Clock and Reset
+      .clk_i                   (clk_i),                 
+      .rst_ni                  (rst_ni),
+      .tbre_ctrl_vec_i         (tbre_ctrl_vec_i),
+      .tbre_done_o             (tbre_done_o),
+      .lsu_tbre_resp_valid_i   (lsu_tbre_resp_valid),
+      .lsu_tbre_resp_err_i     (lsu_tbre_resp_err),
+      .lsu_tbre_resp_is_wr_i   (lsu_resp_is_wr),
+      .lsu_tbre_raw_lsw_i      (lsu_tbre_raw_lsw),   
+      .lsu_tbre_req_done_i     (lsu_tbre_req_done),   
+      .lsu_tbre_addr_incr_i    (lsu_addr_incr_req),
+      .tbre_lsu_req_o          (tbre_lsu_req),
+      .tbre_lsu_is_cap_o       (tbre_lsu_is_cap),
+      .tbre_lsu_we_o           (tbre_lsu_we),
+      .tbre_lsu_addr_o         (tbre_lsu_addr),
+      .tbre_lsu_wdata_o        (tbre_lsu_wdata),
+      .snoop_lsu_req_done_i    (snoop_lsu_req_done),  
+      .snoop_lsu_req_i         (lsu_req),
+      .snoop_lsu_is_cap_i      (lsu_is_cap),
+      .snoop_lsu_we_i          (lsu_we),
+      .snoop_lsu_cheri_err_i   (lsu_cheri_err),
+      .snoop_lsu_addr_i        (lsu_addr),
+      .trvk_en_i               (tbre_trvk_en),
+      .trvk_clrtag_i           (tbre_trvk_clrtag)          
+  );
 
-end else begin
-  assign tbre_done_o     = 1'b0;
-  assign tbre_lsu_req    = 1'b0;
-  assign tbre_lsu_is_cap = 1'b0;
-  assign tbre_lsu_we     = 1'b0;
-  assign tbre_lsu_addr   = 32'h0;
-  assign tbre_lsu_wdata  = 33'h0;
-end
+  end else begin
+    assign tbre_done_o     = 1'b0;
+    assign tbre_lsu_req    = 1'b0;
+    assign tbre_lsu_is_cap = 1'b0;
+    assign tbre_lsu_we     = 1'b0;
+    assign tbre_lsu_addr   = 32'h0;
+    assign tbre_lsu_wdata  = 33'h0;
+  end
 
 
   /////////////////////
@@ -1047,6 +1094,7 @@ end
   assign lsu_resp_err = lsu_load_err | lsu_store_err;
 
   ibex_load_store_unit #(
+    .CHERIoTEn(CHERIoTEn),
     .MemCapFmt(MemCapFmt),
     .CheriTBRE(CheriTBRE)
     ) load_store_unit_i (
@@ -1358,27 +1406,27 @@ end
   // CHERI assertions
   ////////////////////////
 
-  // decoded cheri_operator should be one-hot
-  `ASSERT(CheriOperatorOneHotOnly, $onehot0(cheri_operator))
+  if (CHERIoTEn) begin : gen_cheri_assert
+    // decoded cheri_operator should be one-hot
+    `ASSERT(CheriOperatorOneHotOnly, $onehot0(cheri_operator))
 
-  // cheri_ex operand forwarding logic should behave the same as ID_stage
-  `ASSERT_IF(CheriFwdCheckA, (u_cheri_ex.rf_rdata_ng_a == id_stage_i.rf_rdata_a_fwd), id_stage_i.instr_executing)
-  `ASSERT_IF(CheriFwdCheckB, (u_cheri_ex.rf_rdata_ng_b == id_stage_i.rf_rdata_b_fwd), id_stage_i.instr_executing)
+    // cheri_ex operand forwarding logic should behave the same as ID_stage
+    `ASSERT_IF(CheriFwdCheckA, (g_cheri_ex.u_cheri_ex.rf_rdata_ng_a == id_stage_i.rf_rdata_a_fwd), id_stage_i.instr_executing)
+    `ASSERT_IF(CheriFwdCheckB, (g_cheri_ex.u_cheri_ex.rf_rdata_ng_b == id_stage_i.rf_rdata_b_fwd), id_stage_i.instr_executing)
 
-  if (WritebackStage && ~CheriPPLBC) begin
-  // cheri_ex state machines must be in IDLE state when a new instruction starts
-  `ASSERT(CheriLsuFsmIdle1, instr_id_done |-> (load_store_unit_i.ls_fsm_ns == 0), clk_i, !rst_ni)
-  `ASSERT(CheriLsuFsmIdle2, ((load_store_unit_i.ls_fsm_cs == 0) && load_store_unit_i.lsu_req_i)  |->
-         ((load_store_unit_i.cap_rx_fsm_q==0) | (load_store_unit_i.cap_rx_fsm_q==2)), clk_i, !rst_ni)
-  `ASSERT_IF(CheriLsuFsmWaitResp, (load_store_unit_i.cap_rx_fsm_q != 7), 1'b1)
+    if (WritebackStage && ~CheriPPLBC) begin
+    // cheri_ex state machines must be in IDLE state when a new instruction starts
+    `ASSERT(CheriLsuFsmIdle1, instr_id_done |-> (load_store_unit_i.ls_fsm_ns == 0), clk_i, !rst_ni)
+    `ASSERT(CheriLsuFsmIdle2, ((load_store_unit_i.ls_fsm_cs == 0) && load_store_unit_i.lsu_req_i)  |->
+           ((load_store_unit_i.cap_rx_fsm_q==0) | (load_store_unit_i.cap_rx_fsm_q==2)), clk_i, !rst_ni)
+    `ASSERT_IF(CheriLsuFsmWaitResp, (load_store_unit_i.cap_rx_fsm_q != 7), 1'b1)
+    end
+
+    // only writes to regfile when wb_done
+    if (WritebackStage) begin
+      `ASSERT(CheriWrRegs, rf_we_wb |-> instr_done_wb, clk_i, !rst_ni)
+    end
   end
-
-
-  // only writes to regfile when wb_done
-  if (WritebackStage) begin
-    `ASSERT(CheriWrRegs, rf_we_wb |-> instr_done_wb, clk_i, !rst_ni)
-  end
-
   ////////////////////////
   // RF (Register File) //
   ////////////////////////
@@ -1407,7 +1455,8 @@ end
     .PMPNumRegions    (PMPNumRegions),
     .RV32E            (RV32E),
     .RV32M            (RV32M),
-    .RV32B            (RV32B)
+    .RV32B            (RV32B),
+    .CHERIoTEn        (CHERIoTEn)
   ) cs_registers_i (
     .clk_i (clk_i),
     .rst_ni(rst_ni),
@@ -2063,6 +2112,21 @@ end
 
   // Source registers 1 and 2 are read in the first instruction cycle
   // Source register 3 is read in the second instruction cycle.
+  if (CHERIoTEn) begin
+    always_comb begin
+      if (instr_first_cycle_id) begin
+        rvfi_rs1_cap_d  = rf_ren_a ? g_cheri_ex.u_cheri_ex.rf_rcap_a : NULL_REG_CAP;
+        rvfi_rs2_cap_d  = rf_ren_b ? g_cheri_ex.u_cheri_ex.rf_rcap_b : NULL_REG_CAP;
+      end else begin
+        rvfi_rs1_cap_d  = rvfi_rs1_cap_q;
+        rvfi_rs2_cap_d  = rvfi_rs2_cap_q;
+      end
+    end
+  end else begin
+    assign rvfi_rs1_cap_d  = NULL_REG_CAP; 
+    assign rvfi_rs2_cap_d  = NULL_REG_CAP;
+  end
+
   always_comb begin
     if (instr_first_cycle_id) begin
       rvfi_rs1_data_d = rf_ren_a ? multdiv_operand_a_ex : '0;
@@ -2071,8 +2135,6 @@ end
       rvfi_rs2_addr_d = rf_ren_b ? rf_raddr_b : '0;
       rvfi_rs3_data_d = '0;
       rvfi_rs3_addr_d = '0;
-      rvfi_rs1_cap_d  = rf_ren_a ? u_cheri_ex.rf_rcap_a : NULL_REG_CAP;
-      rvfi_rs2_cap_d  = rf_ren_b ? u_cheri_ex.rf_rcap_b : NULL_REG_CAP;
     end else begin
       rvfi_rs1_data_d = rvfi_rs1_data_q;
       rvfi_rs1_addr_d = rvfi_rs1_addr_q;
@@ -2080,10 +2142,9 @@ end
       rvfi_rs2_addr_d = rvfi_rs2_addr_q;
       rvfi_rs3_data_d = multdiv_operand_a_ex;
       rvfi_rs3_addr_d = rf_raddr_a;
-      rvfi_rs1_cap_d  = rvfi_rs1_cap_q;
-      rvfi_rs2_cap_d  = rvfi_rs2_cap_q;
     end
   end
+
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       rvfi_rs1_data_q <= '0;

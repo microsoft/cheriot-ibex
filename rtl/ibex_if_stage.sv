@@ -30,7 +30,7 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
   parameter lfsr_seed_t  RndCnstLfsrSeed   = RndCnstLfsrSeedDefault,
   parameter lfsr_perm_t  RndCnstLfsrPerm   = RndCnstLfsrPermDefault,
   parameter bit          BranchPredictor   = 1'b0,
-  parameter bit          Cheri32E          = 1'b1
+  parameter bit          CHERIoTEn         = 1'b1
 ) (
   input  logic                         clk_i,
   input  logic                         rst_ni,
@@ -364,7 +364,7 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
   assign hdrm_ok    = instr_is_compressed ? hdrm_ge2 : hdrm_ge4;
 
   // only issue cheri_acc_vio on valid fetches
-  assign cheri_acc_vio = cheri_pmode_i & ~debug_mode_i & fetch_valid & ~fetch_err &
+  assign cheri_acc_vio = CHERIoTEn & cheri_pmode_i & ~debug_mode_i & fetch_valid & ~fetch_err &
                         ((if_instr_addr < pcc_fullcap_i.base32) || instr_hdrm[32] || ~hdrm_ok  ||
                          ~pcc_fullcap_i.perms[PERM_EX] || ~pcc_fullcap_i.valid);
 
@@ -374,7 +374,8 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
   // since it does not matter where we decompress instructions, we do it here
   // to ease timing closure
   ibex_compressed_decoder #(
-    .Cheri32E (Cheri32E)
+    .CHERIoTEn (CHERIoTEn),
+    .Cheri32E  (1'b0)
   ) compressed_decoder_i (
     .clk_i          (clk_i),
     .rst_ni         (rst_ni),

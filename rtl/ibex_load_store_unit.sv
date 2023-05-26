@@ -19,8 +19,9 @@
 `include "dv_fcov_macros.svh"
 
 module ibex_load_store_unit import cheri_pkg::*; #(
-  parameter logic MemCapFmt = 1'b0,
-  parameter logic CheriTBRE = 1'b0
+  parameter bit CHERIoTEn = 1'b1,
+  parameter bit MemCapFmt = 1'b0,
+  parameter bit CheriTBRE = 1'b0
 )(
   input  logic         clk_i,
   input  logic         rst_ni,
@@ -218,9 +219,9 @@ module ibex_load_store_unit import cheri_pkg::*; #(
   // we handle misaligned accesses, half word and byte accesses here
   if (~MemCapFmt) begin : gen_memcap_wr_fmt0
     always_comb begin
-      if (lsu_is_cap_i && (ls_fsm_cs == CTX_WAIT_GNT2))
+      if (CHERIoTEn & lsu_is_cap_i && (ls_fsm_cs == CTX_WAIT_GNT2))
         data_wdata = reg2memcap_fmt0(lsu_wcap_i);
-      else if (lsu_is_cap_i)
+      else if (CHERIoTEn &lsu_is_cap_i)
         data_wdata = lsu_wdata_i;
       else begin
         unique case (data_offset)
@@ -237,9 +238,9 @@ module ibex_load_store_unit import cheri_pkg::*; #(
     assign mem_capaddr = reg2mem_fmt1(lsu_wcap_i, lsu_wdata_i);
 
     always_comb begin
-      if (lsu_is_cap_i && (ls_fsm_cs == CTX_WAIT_GNT2))
+      if (CHERIoTEn & lsu_is_cap_i && (ls_fsm_cs == CTX_WAIT_GNT2))
         data_wdata = mem_capaddr[65:33];
-      else if (lsu_is_cap_i)
+      else if (CHERIoTEn & lsu_is_cap_i)
         data_wdata = mem_capaddr[32:0];
       else begin
         unique case (data_offset)
@@ -433,7 +434,7 @@ module ibex_load_store_unit import cheri_pkg::*; #(
         pmp_err_d   = 1'b0;
         cheri_err_d = 1'b0;
 
-        if (lsu_req_i & lsu_cheri_err_i & ~tbre_resp_wait) begin
+        if (CHERIoTEn & lsu_req_i & lsu_cheri_err_i & ~tbre_resp_wait) begin
           // cheri access error case, don't issue data_req but send error response back to WB stage
           data_req_o   = 1'b0;          
           cheri_err_d  = 1'b1;
@@ -444,7 +445,7 @@ module ibex_load_store_unit import cheri_pkg::*; #(
           perf_load_o  = 1'b0;
           lsu_go       = 1'b1;         // decision to move forward with a request
           ls_fsm_ns    = IDLE;
-        end else if ((lsu_req_i | tbre_req_good) & lsu_is_cap_i & ~tbre_resp_wait) begin
+        end else if (CHERIoTEn & (lsu_req_i | tbre_req_good) & lsu_is_cap_i & ~tbre_resp_wait) begin
           // normal cap access case
           data_req_o   = 1'b1;
           cheri_err_d  = 1'b0;
@@ -593,7 +594,7 @@ module ibex_load_store_unit import cheri_pkg::*; #(
 
     case (cap_rx_fsm_q)
       CRX_IDLE:
-        if (lsu_is_cap_i && (ls_fsm_ns != IDLE)) cap_rx_fsm_d = CRX_WAIT_RESP1;
+        if (CHERIoTEn & lsu_is_cap_i && (ls_fsm_ns != IDLE)) cap_rx_fsm_d = CRX_WAIT_RESP1;
       CRX_WAIT_RESP1:
         if (data_rvalid_i) cap_rx_fsm_d = CRX_WAIT_RESP2;
       CRX_WAIT_RESP2:
@@ -603,8 +604,8 @@ module ibex_load_store_unit import cheri_pkg::*; #(
     endcase
   end
 
-  assign tbre_req_good = CheriTBRE & tbre_lsu_req_i & ~cpu_lsu_dec_i;
-  assign tbre_resp_wait = CheriTBRE & outstanding_resp_q & ~lsu_resp_valid;
+  assign tbre_req_good  = CHERIoTEn & CheriTBRE & tbre_lsu_req_i & ~cpu_lsu_dec_i;
+  assign tbre_resp_wait = CHERIoTEn & CheriTBRE & outstanding_resp_q & ~lsu_resp_valid;
 
   // we assume ctrl will be held till req_done asserted 
   // (once req captured in IDLE, it can be deasserted)
@@ -615,7 +616,7 @@ module ibex_load_store_unit import cheri_pkg::*; #(
   assign lsu_req_done_intl_o = lsu_req_done & (lsu_is_intl_i)  & (~cur_req_is_tbre);
   assign lsu_tbre_req_done_o = lsu_req_done & cur_req_is_tbre;
 
-  assign cur_req_is_tbre = CheriTBRE & ((ls_fsm_cs == IDLE) ? (tbre_req_good & ~tbre_resp_wait) : req_is_tbre_q);
+  assign cur_req_is_tbre = CHERIoTEn & CheriTBRE & ((ls_fsm_cs == IDLE) ? (tbre_req_good & ~tbre_resp_wait) : req_is_tbre_q);
 
   // registers for FSM
   always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -655,13 +656,13 @@ module ibex_load_store_unit import cheri_pkg::*; #(
         resp_is_tbre_q    <= cur_req_is_tbre;
       end
 
-      if ((cap_rx_fsm_q == CRX_WAIT_RESP1) && data_rvalid_i && (~data_we_q))
+      if (CHERIoTEn && (cap_rx_fsm_q == CRX_WAIT_RESP1) && data_rvalid_i && (~data_we_q))
         cap_lsw_q <= data_rdata_i;
 
-      if ((cap_rx_fsm_q == CRX_WAIT_RESP1) && data_rvalid_i)
+      if (CHERIoTEn && (cap_rx_fsm_q == CRX_WAIT_RESP1) && data_rvalid_i)
         cap_lsw_err_q <= data_err_i;
 
-      if (lsu_go) req_is_tbre_q <= tbre_req_good;
+      if (CHERIoTEn & lsu_go) req_is_tbre_q <= tbre_req_good;
 
       if (lsu_go)
         outstanding_resp_q <= 1'b1;
@@ -690,14 +691,17 @@ module ibex_load_store_unit import cheri_pkg::*; #(
                               (~resp_is_intl_q) & (~resp_is_tbre_q);
 
   // output to register file
-  if (~MemCapFmt) begin : gen_memcap_rd_fmt0
+  if (CHERIoTEn & ~MemCapFmt) begin : gen_memcap_rd_fmt0
     assign lsu_rdata_o = resp_is_cap_q ? cap_lsw_q : data_rdata_ext;
     assign lsu_rcap_o  = (resp_is_cap_q && data_rvalid_i && (cap_rx_fsm_q == CRX_WAIT_RESP2) && (~data_or_pmp_err)) ?
                          mem2regcap_fmt0(data_rdata_i, cap_lsw_q, resp_lc_clrperm_q) : NULL_REG_CAP;
-  end else begin : gen_memcap_rd_fmt1
+  end else if (CHERIoTEn) begin : gen_memcap_rd_fmt1
     assign lsu_rdata_o = resp_is_cap_q ? mem2regaddr_fmt1(data_rdata_ext, cap_lsw_q, lsu_rcap_o): data_rdata_ext;
     assign lsu_rcap_o  = (resp_is_cap_q && data_rvalid_i && (cap_rx_fsm_q == CRX_WAIT_RESP2) && (~data_or_pmp_err)) ?
                          mem2regcap_fmt1(data_rdata_i, cap_lsw_q, resp_lc_clrperm_q) : NULL_REG_CAP;
+  end else begin : gen_no_cap_rd
+    assign lsu_rdata_o = data_rdata_ext;
+    assign lsu_rcap_o  = NULL_REG_CAP;
   end
   
   

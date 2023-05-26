@@ -30,7 +30,8 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   parameter int unsigned      PMPNumRegions     = 4,
   parameter bit               RV32E             = 0,
   parameter ibex_pkg::rv32m_e RV32M             = ibex_pkg::RV32MFast,
-  parameter ibex_pkg::rv32b_e RV32B             = ibex_pkg::RV32BNone
+  parameter ibex_pkg::rv32b_e RV32B             = ibex_pkg::RV32BNone,
+  parameter bit               CHERIoTEn         = 1'b1
 ) (
   // Clock and Reset
   input  logic                 clk_i,
@@ -627,7 +628,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
         CSR_MSCRATCH: mscratch_en = 1'b1;
 
         // mepc: exception program counter
-        CSR_MEPC: mepc_en = ~cheri_pmode_i;   // disabled for pure cap mode (only allow cap writes)
+        CSR_MEPC: mepc_en = ~CHERIoTEn | ~cheri_pmode_i;   // disabled for pure cap mode (only allow cap writes)
 
         // mcause
         CSR_MCAUSE: mcause_en = 1'b1;
@@ -636,7 +637,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
         CSR_MTVAL: mtval_en = 1'b1;
 
         // mtvec
-        CSR_MTVEC: mtvec_en = ~cheri_pmode_i;  // disabled for pure cap mode (only allow cap writes)
+        CSR_MTVEC: mtvec_en = ~CHERIoTEn | ~cheri_pmode_i;  // disabled for pure cap mode (only allow cap writes)
 
         CSR_DCSR: begin
           dcsr_d = csr_wdata_int;
@@ -836,9 +837,10 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   //     for now we are allowing reading the M-mode counters (assuming only use single priv level)
 
   logic read_ok;
-  assign read_ok = ~cheri_pmode_i || debug_mode_i || pcc_fullcap_o.perms[PERM_SR] || ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<CSR_MSHWM));
+  assign read_ok = ~CHERIoTEn || ~cheri_pmode_i || debug_mode_i || pcc_fullcap_o.perms[PERM_SR] || 
+                   ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<CSR_MSHWM));
 
-  assign csr_we_int  = csr_wr & csr_op_en_i & (~cheri_pmode_i | debug_mode_i | pcc_fullcap_o.perms[PERM_SR]) & ~illegal_csr_insn_o;
+  assign csr_we_int  = csr_wr & csr_op_en_i & (~CHERIoTEn | ~cheri_pmode_i | debug_mode_i | pcc_fullcap_o.perms[PERM_SR]) & ~illegal_csr_insn_o;
   assign csr_rdata_o = read_ok ? csr_rdata_int : 0;
 
   // directly output some registers
@@ -846,8 +848,13 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   assign csr_depc_o  = depc_q;
   assign csr_mtvec_o = mtvec_q;
 
-  assign csr_mshwm_o  = mshwm_q;
-  assign csr_mshwmb_o = mshwmb_q;
+  if (CHERIoTEn) begin
+    assign csr_mshwm_o  = mshwm_q;
+    assign csr_mshwmb_o = mshwmb_q;
+  end else begin
+    assign csr_mshwm_o  = 32'h0;
+    assign csr_mshwmb_o = 32'h0;
+  end
 
   assign csr_mstatus_mie_o   = mstatus_q.mie;
   assign csr_mstatus_tw_o    = mstatus_q.tw;
@@ -871,7 +878,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
                                           mprv: 1'b0,
                                           tw:   1'b0};
 
-  // adding set/clr of mie - it's a bit of a hack now let's just worry about it later.. kliu QQQ
+  // adding set/clr of mie based on sentry type for CHERIoT
   logic    mstatus_en_combi;
   status_t mstatus_d_combi;
 
@@ -1713,185 +1720,202 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   `ASSERT(IbexCsrOpEnRequiresAccess, csr_op_en_i |-> csr_access_i)
 
   //////////////////////
-  // Cheri CSR's
+  // Cheriot SCR's
   //////////////////////
 
-  pcc_cap_t    pcc_cap_q, pcc_cap_d;
+  if (CHERIoTEn) begin: gen_scr
+    pcc_cap_t    pcc_cap_q, pcc_cap_d;
 
-  reg_cap_t     mtdc_cap;
-  logic [31:0]  mtdc_data;
-  reg_cap_t     mscratchc_cap;
-  logic [31:0]  mscratchc_data;  // QQQ - note this is separate from legacy mscratch
+    reg_cap_t     mtdc_cap;
+    logic [31:0]  mtdc_data;
+    reg_cap_t     mscratchc_cap;
+    logic [31:0]  mscratchc_data;  // QQQ - note this is separate from legacy mscratch
 
-  logic [3:0]   mdbg_ctrl;
+    logic [3:0]   mdbg_ctrl;
 
-  logic mtdc_en_cheri, mscratchc_en_cheri;
+    logic mtdc_en_cheri, mscratchc_en_cheri;
 
-  always_comb begin
-    case (cheri_csr_addr_i)
-      5'd24:
-        begin
-          cheri_csr_rdata_o = debug_mode_i ? depc_q : 0;
-          cheri_csr_rcap_o  = debug_mode_i ? depc_cap : NULL_REG_CAP;
-        end
-      5'd25:
-        begin
-          cheri_csr_rdata_o = debug_mode_i ? dscratch0_q : 0;
-          cheri_csr_rcap_o  = debug_mode_i ? dscratch0_cap : NULL_REG_CAP;
-        end
-      5'd26:
-        begin
-          cheri_csr_rdata_o = debug_mode_i ? dscratch1_q : 0;
-          cheri_csr_rcap_o  = debug_mode_i ? dscratch1_cap : NULL_REG_CAP;
-        end
-      5'd27:
-        begin
-          cheri_csr_rdata_o = {28'h0, mdbg_ctrl};
-          cheri_csr_rcap_o  = NULL_REG_CAP;
-        end
-      5'd28:
-        begin
-          cheri_csr_rdata_o = mtvec_q;
-          cheri_csr_rcap_o  = mtvec_cap;
-        end
-      5'd29:
-        begin
-          cheri_csr_rdata_o = mtdc_data;
-          cheri_csr_rcap_o  = mtdc_cap;
-        end
-      5'd30:
-        begin
-          cheri_csr_rdata_o = mscratchc_data;
-          cheri_csr_rcap_o  = mscratchc_cap;
-        end
-      5'd31:
-        begin
-          cheri_csr_rdata_o = mepc_q;
-          cheri_csr_rcap_o  = mepc_cap;
-        end
-      default:
-        begin
-          cheri_csr_rdata_o = 32'h0;
-          cheri_csr_rcap_o  = NULL_REG_CAP;
-        end
-    endcase
-  end
-
-  assign pcc_fullcap_o  = pcc2fullcap(pcc_cap_q, pc_id_i);
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      pcc_cap_q  <= PCC_RESET_CAP;
-    end else begin
-      pcc_cap_q  <= pcc_cap_d;
+    always_comb begin
+      case (cheri_csr_addr_i)
+        5'd24:
+          begin
+            cheri_csr_rdata_o = debug_mode_i ? depc_q : 0;
+            cheri_csr_rcap_o  = debug_mode_i ? depc_cap : NULL_REG_CAP;
+          end
+        5'd25:
+          begin
+            cheri_csr_rdata_o = debug_mode_i ? dscratch0_q : 0;
+            cheri_csr_rcap_o  = debug_mode_i ? dscratch0_cap : NULL_REG_CAP;
+          end
+        5'd26:
+          begin
+            cheri_csr_rdata_o = debug_mode_i ? dscratch1_q : 0;
+            cheri_csr_rcap_o  = debug_mode_i ? dscratch1_cap : NULL_REG_CAP;
+          end
+        5'd27:
+          begin
+            cheri_csr_rdata_o = {28'h0, mdbg_ctrl};
+            cheri_csr_rcap_o  = NULL_REG_CAP;
+          end
+        5'd28:
+          begin
+            cheri_csr_rdata_o = mtvec_q;
+            cheri_csr_rcap_o  = mtvec_cap;
+          end
+        5'd29:
+          begin
+            cheri_csr_rdata_o = mtdc_data;
+            cheri_csr_rcap_o  = mtdc_cap;
+          end
+        5'd30:
+          begin
+            cheri_csr_rdata_o = mscratchc_data;
+            cheri_csr_rcap_o  = mscratchc_cap;
+          end
+        5'd31:
+          begin
+            cheri_csr_rdata_o = mepc_q;
+            cheri_csr_rcap_o  = mepc_cap;
+          end
+        default:
+          begin
+            cheri_csr_rdata_o = 32'h0;
+            cheri_csr_rcap_o  = NULL_REG_CAP;
+          end
+      endcase
     end
-  end
 
-  // PCC updating
-  //  -- PC address range checking is always against the pcc_cap, which is only updated with
-  //     CHER CJALR or exceptions. Legacy RV32 jumps/branches can change PC but not the PCC
-  //     bounds/perms, so they are still limited by the orginal bounds in IF stage checking
-  always_comb begin
-    if (csr_save_cause_i) begin              // Exception cases
-      pcc_cap_d = full2pcap(reg2fullcap(mtvec_cap, mtvec_q));
-    end else if (csr_restore_mret_i) begin
-      pcc_cap_d = full2pcap(reg2fullcap(mepc_cap, mepc_q));
-    end else if (csr_restore_dret_i & debug_mode_i) begin
-      pcc_cap_d = full2pcap(reg2fullcap(depc_cap, depc_q));
-    end else if (cheri_branch_req_i) begin
-      pcc_cap_d = full2pcap(pcc_fullcap_i);
-    end else begin
-      pcc_cap_d = pcc_cap_q;
+    assign pcc_fullcap_o  = pcc2fullcap(pcc_cap_q, pc_id_i);
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        pcc_cap_q  <= PCC_RESET_CAP;
+      end else begin
+        pcc_cap_q  <= pcc_cap_d;
+      end
     end
-  end
 
-  // mtvec extended capability
-  assign mtvec_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd28) && (cheri_csr_op_i == CHERI_CSR_RW);
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni)
-      mtvec_cap <= MTVEC_RESET_CAP;
-    else if (mtvec_en_cheri)
-      mtvec_cap <= cheri_csr_wcap_i;
-  end
-
-  // mepc extended capability
-  assign mepc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd31) && (cheri_csr_op_i == CHERI_CSR_RW);
-
-  // let's not worry about non-stanard recoverable NMI/mstack for now QQQ
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni)
-      mepc_cap <= MEPC_RESET_CAP;
-    else if (csr_save_cause_i & (~debug_csr_save_i) & (~debug_mode_i))
-      mepc_cap <= full2regcap(pcc2fullcap(pcc_cap_q, exception_pc));
-    else if (cheri_pmode_i & mepc_en)            // legacy cssrw; NMI recover
-      mepc_cap <= NULL_REG_CAP;
-    else if (mepc_en_cheri)
-      mepc_cap <= cheri_csr_wcap_i;
-  end
-
-  // MTDC capability
-  assign mtdc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd29) && (cheri_csr_op_i == CHERI_CSR_RW);
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      mtdc_cap  <= MTDC_RESET_CAP;
-      mtdc_data <= 32'h0;
-    end else if (mtdc_en_cheri) begin
-      mtdc_cap  <= cheri_csr_wcap_i;
-      mtdc_data <= cheri_csr_wdata_i;
+    // PCC updating
+    //  -- PC address range checking is always against the pcc_cap, which is only updated with
+    //     CHER CJALR or exceptions. Legacy RV32 jumps/branches can change PC but not the PCC
+    //     bounds/perms, so they are still limited by the orginal bounds in IF stage checking
+    always_comb begin
+      if (csr_save_cause_i) begin              // Exception cases
+        pcc_cap_d = full2pcap(reg2fullcap(mtvec_cap, mtvec_q));
+      end else if (csr_restore_mret_i) begin
+        pcc_cap_d = full2pcap(reg2fullcap(mepc_cap, mepc_q));
+      end else if (csr_restore_dret_i & debug_mode_i) begin
+        pcc_cap_d = full2pcap(reg2fullcap(depc_cap, depc_q));
+      end else if (cheri_branch_req_i) begin
+        pcc_cap_d = full2pcap(pcc_fullcap_i);
+      end else begin
+        pcc_cap_d = pcc_cap_q;
+      end
     end
-  end
 
-  // MSCRATCHC capability
-  assign mscratchc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd30) && (cheri_csr_op_i == CHERI_CSR_RW);
+    // mtvec extended capability
+    assign mtvec_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd28) && (cheri_csr_op_i == CHERI_CSR_RW);
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      mscratchc_cap  <= MSCRATCHC_RESET_CAP;
-      mscratchc_data <= 32'h0;
-    end else if (mscratchc_en_cheri) begin
-      mscratchc_cap  <= cheri_csr_wcap_i;
-      mscratchc_data <= cheri_csr_wdata_i;
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni)
+        mtvec_cap <= MTVEC_RESET_CAP;
+      else if (mtvec_en_cheri)
+        mtvec_cap <= cheri_csr_wcap_i;
     end
+
+    // mepc extended capability
+    assign mepc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd31) && (cheri_csr_op_i == CHERI_CSR_RW);
+
+    // let's not worry about non-stanard recoverable NMI/mstack for now QQQ
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni)
+        mepc_cap <= MEPC_RESET_CAP;
+      else if (csr_save_cause_i & (~debug_csr_save_i) & (~debug_mode_i))
+        mepc_cap <= full2regcap(pcc2fullcap(pcc_cap_q, exception_pc));
+      else if (cheri_pmode_i & mepc_en)            // legacy cssrw; NMI recover
+        mepc_cap <= NULL_REG_CAP;
+      else if (mepc_en_cheri)
+        mepc_cap <= cheri_csr_wcap_i;
+    end
+
+    // MTDC capability
+    assign mtdc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd29) && (cheri_csr_op_i == CHERI_CSR_RW);
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        mtdc_cap  <= MTDC_RESET_CAP;
+        mtdc_data <= 32'h0;
+      end else if (mtdc_en_cheri) begin
+        mtdc_cap  <= cheri_csr_wcap_i;
+        mtdc_data <= cheri_csr_wdata_i;
+      end
+    end
+
+    // MSCRATCHC capability
+    assign mscratchc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd30) && (cheri_csr_op_i == CHERI_CSR_RW);
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        mscratchc_cap  <= MSCRATCHC_RESET_CAP;
+        mscratchc_data <= 32'h0;
+      end else if (mscratchc_en_cheri) begin
+        mscratchc_cap  <= cheri_csr_wcap_i;
+        mscratchc_data <= cheri_csr_wdata_i;
+      end
+    end
+
+    // depc extended capability
+    assign depc_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd24) && (cheri_csr_op_i == CHERI_CSR_RW);
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni)
+        depc_cap <= NULL_REG_CAP;
+      else if (csr_save_cause_i & debug_csr_save_i)
+        depc_cap <= full2regcap(pcc2fullcap(pcc_cap_q, exception_pc));
+      else if (depc_en_cheri)
+        depc_cap <= cheri_csr_wcap_i;
+    end
+
+    // dscratch0/1 extended capability
+    assign dscratch0_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd25) && (cheri_csr_op_i == CHERI_CSR_RW);
+    assign dscratch1_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd26) && (cheri_csr_op_i == CHERI_CSR_RW);
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        dscratch0_cap <= NULL_REG_CAP;
+        dscratch1_cap <= NULL_REG_CAP;
+      end else if (dscratch0_en_cheri)
+        dscratch0_cap <= cheri_csr_wcap_i;
+      else if (dscratch1_en_cheri)
+        dscratch1_cap <= cheri_csr_wcap_i;
+
+    end
+
+    // cheri debug feature control
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni)
+        mdbg_ctrl <= 4'h0;
+      else if (cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd27) && (cheri_csr_op_i == CHERI_CSR_RW))
+        mdbg_ctrl <= cheri_csr_wdata_i[3:0];
+    end
+
+    assign csr_dbg_tclr_fault_o = mdbg_ctrl[0];
+
+  end else begin: gen_no_scr
+    
+    assign cheri_csr_rdata_o = 32'h0;
+    assign cheri_csr_rcap_o  = NULL_REG_CAP;
+
+    assign pcc_fullcap_o = NULL_FULL_CAP;
+
+    assign csr_dbg_tclr_fault_o = 1'b0;
+
+    assign mtvec_en_cheri      = 1'b0;
+    assign mepc_en_cheri       = 1'b0;
+    assign depc_en_cheri       = 1'b0;
+    assign dscratch0_en_cheri  = 1'b0;
+    assign dscratch1_en_cheri  = 1'b0;
+    
   end
-
-  // depc extended capability
-  assign depc_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd24) && (cheri_csr_op_i == CHERI_CSR_RW);
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni)
-      depc_cap <= NULL_REG_CAP;
-    else if (csr_save_cause_i & debug_csr_save_i)
-      depc_cap <= full2regcap(pcc2fullcap(pcc_cap_q, exception_pc));
-    else if (depc_en_cheri)
-      depc_cap <= cheri_csr_wcap_i;
-  end
-
-  // dscratch0/1 extended capability
-  assign dscratch0_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd25) && (cheri_csr_op_i == CHERI_CSR_RW);
-  assign dscratch1_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd26) && (cheri_csr_op_i == CHERI_CSR_RW);
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      dscratch0_cap <= NULL_REG_CAP;
-      dscratch1_cap <= NULL_REG_CAP;
-    end else if (dscratch0_en_cheri)
-      dscratch0_cap <= cheri_csr_wcap_i;
-    else if (dscratch1_en_cheri)
-      dscratch1_cap <= cheri_csr_wcap_i;
-
-  end
-
-
-  // cheri debug feature control
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni)
-      mdbg_ctrl <= 4'h0;
-    else if (cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd27) && (cheri_csr_op_i == CHERI_CSR_RW))
-      mdbg_ctrl <= cheri_csr_wdata_i[3:0];
-  end
-
-  assign csr_dbg_tclr_fault_o = mdbg_ctrl[0];
 
 endmodule
