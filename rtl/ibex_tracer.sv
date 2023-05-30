@@ -183,7 +183,7 @@ module ibex_tracer import cheri_pkg::*; # (
     if ((data_accessed & MEM) != 0) begin
       $fwrite(file_handle, " PA:0x%08x", rvfi_mem_addr);
 
-      if (rvfi_mem_wmask == 4'b0001)                           // QQQ will we have compatibility issue?
+      if (rvfi_mem_wmask == 4'b0001)                           
         $fwrite(file_handle, " store:0x%1b??????%02x", rvfi_mem_wdata[32], rvfi_mem_wdata[7:0]);
       else if (rvfi_mem_wmask == 4'b0011)
         $fwrite(file_handle, " store:0x%1b????%04x", rvfi_mem_wdata[32], rvfi_mem_wdata[15:0]);
@@ -191,13 +191,13 @@ module ibex_tracer import cheri_pkg::*; # (
         $fwrite(file_handle, " store:0x%09x", rvfi_mem_wdata);
 
       if (rvfi_mem_rmask != 4'b0000)
-        $fwrite(file_handle, " load:0x%08x", rvfi_mem_rdata);  // let's not change this to 33-bit yet - may cause compatibility issue with ibex log/testbench QQQ
+        $fwrite(file_handle, " load:0x%08x", rvfi_mem_rdata);  
     end
 
     if ((data_accessed & MEMC) != 0) begin
       $fwrite(file_handle, " PA:0x%08x", rvfi_mem_addr);
 
-      if (rvfi_mem_wmask != 0)                           // QQQ will we have compatibility issue?
+      if (rvfi_mem_wmask != 0)        
         $fwrite(file_handle, " store:0x%09x+0x%09x", rvfi_mem_wdata, reg2memcap_fmt0(rvfi_mem_wcap));
        else
         $fwrite(file_handle, " load:0x%09x+0x%09x", rvfi_mem_rdata, reg2memcap_fmt0(rvfi_mem_rcap));

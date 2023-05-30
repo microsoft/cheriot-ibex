@@ -1729,7 +1729,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     reg_cap_t     mtdc_cap;
     logic [31:0]  mtdc_data;
     reg_cap_t     mscratchc_cap;
-    logic [31:0]  mscratchc_data;  // QQQ - note this is separate from legacy mscratch
+    logic [31:0]  mscratchc_data;  // note this is separate from legacy mscratch
 
     logic [3:0]   mdbg_ctrl;
 

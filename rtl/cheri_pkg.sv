@@ -159,7 +159,7 @@ package cheri_pkg;
   `define TEST_IMSK(P, M) (&((P) | ~(M)))
 
   // compress perms field to memory representation
-  function automatic logic [CPERMS_W-1:0] compress_perms (logic [PERMS_W-1:0] perms, logic [1:0] qqq);   // QQQ just to compatible with the old encoding for now.
+  function automatic logic [CPERMS_W-1:0] compress_perms (logic [PERMS_W-1:0] perms, logic [1:0] qqq);   // qqq is a place holder, just to compatible with the old encoding for now.
     logic [CPERMS_W-1:0] cperms;
 
     // test all types encoding and determine encoding (Robert's priority order)
@@ -606,7 +606,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
     full_cap.top33  = get_bound33(reg_cap.top, reg_cap.top_cor, reg_cap.exp, addr);
     full_cap.base32 = get_bound33(reg_cap.base, reg_cap.base_cor, reg_cap.exp, addr);
-    // full_cap  = update_bounds(full_cap, addr);   // for some reason this increases area QQQ
+    // full_cap  = update_bounds(full_cap, addr);   // for some reason this increases area 
 
     full_cap.maska    = 0;
     full_cap.rlen     = 0;
@@ -698,7 +698,6 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     logic [BOT_W-1:0]    addrmi9;
     logic                sealed;
 
-    // QQQ if cs1 doesn't have LC permission do we clear tag ??
     regcap.valid  = msw[32] & addr33[32] & ~clrperm[3];   // AND the valid bits for now
 
     tmp32    = msw[CEXP_LO+:CEXP_W];
@@ -791,7 +790,6 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     return addr33;
   endfunction
 
-  // should split between 2 cycles. mask1/mask2 can be reused between r/w QQQ
   function automatic logic[65:0] reg2mem_fmt1 (reg_cap_t reg_cap, logic[31:0] addr);
 
     logic [32:0] msw, lsw;

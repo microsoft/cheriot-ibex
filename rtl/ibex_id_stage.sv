@@ -37,7 +37,7 @@ module ibex_id_stage import cheri_pkg::*; #(
   input  logic                      rst_ni,
 
   input  logic                      cheri_pmode_i,
-  input  logic                      cheri_tsafe_en_i,     // may change this to a parameter later QQQ
+  input  logic                      cheri_tsafe_en_i,    
   output logic                      ctrl_busy_o,
   output logic                      illegal_insn_o,
 
@@ -1141,7 +1141,7 @@ module ibex_id_stage import cheri_pkg::*; #(
 
     // No load hazards without Writeback Stage
     assign stall_ld_hz   = 1'b0;
-    assign stall_cheri_trvk = 1'b0;    // CheriPPLBC can't work with 2-stage pipeline configuration QQQ
+    assign stall_cheri_trvk = 1'b0;    // CheriPPLBC can't work with 2-stage pipeline configuration
 
     // Without writeback stage any valid instruction that hasn't seen an error will execute
     assign instr_executing_spec = instr_valid_i & ~instr_fetch_err_i & controller_run;

@@ -577,7 +577,7 @@ module ibex_load_store_unit import cheri_pkg::*; #(
         else if (data_gnt_i) ls_fsm_ns = CTX_WAIT_RESP;
       end
 
-      CTX_WAIT_RESP: begin        // is this really necessary... QQQ
+      CTX_WAIT_RESP: begin        // only needed if mem allows 2 active req 
         addr_incr_req_o = 1'b0;
         data_req_o      = 1'b0;
         if (data_rvalid_i) ls_fsm_ns = IDLE;

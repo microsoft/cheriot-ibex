@@ -776,7 +776,7 @@ module ibex_controller #(
             end
             cheri_ex_err_prio: begin
               exc_cause_o = EXC_CAUSE_CHERI_FAULT;
-              csr_mtval_o = cheri_ex_err_info_i;        // do we need to flop this QQQ
+              csr_mtval_o = cheri_ex_err_info_i;        
             end
             cheri_wb_err_prio: begin
               exc_cause_o = EXC_CAUSE_CHERI_FAULT;

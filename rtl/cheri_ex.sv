@@ -232,9 +232,9 @@ module cheri_ex import cheri_pkg::*; #(
   assign rf_fullcap_a = reg2fullcap(rf_rcap_a, rf_rdata_a);
   assign rf_fullcap_b = reg2fullcap(rf_rcap_b, rf_rdata_b);
 
-  // gate these signals with cheri_exec_id to make sure they are only active 1 cycle
+  // gate these signals with cheri_exec_id to make sure they are only active when needed 
+  // (only 1 cycle in all cases other than cheri_rf_we)
   // -- safest approach and probably the right thing to do in case there is a wb_exception
-  //    however may lose some performance in branch case ??? QQQ
   assign cheri_rf_we_o     = cheri_rf_we_raw & cheri_exec_id_i;
   assign branch_req_o      = branch_req_raw & cheri_exec_id_i;
   assign branch_req_spec_o = branch_req_spec_raw & cheri_exec_id_i;
@@ -492,7 +492,7 @@ module cheri_ex import cheri_pkg::*; #(
           result_cap_o         = csr_rcap_i;
           cheri_rf_we_raw      = ~perm_vio;
           cheri_ex_valid_raw   = 1'b1;
-          cheri_ex_err_raw     = perm_vio;  // also illegal_csr_register_err? QQQ
+          cheri_ex_err_raw     = perm_vio; 
         end
       (cheri_operator_i[CJALR] | cheri_operator_i[CJAL]):
         begin                  // cd <-- pcc; pcc <-- cs1/pc+offset; pcc.address[0] <--'0'; pcc.sealed <--'0'
@@ -514,7 +514,6 @@ module cheri_ex import cheri_pkg::*; #(
           // -- use the speculative version for instruction fetch
           // -- the ID exception (cheri_ex_err) flushes the pipeline and re-set PC so
           //    the speculatively fetched instruction will be flushed
-          // -- is there a side-effect by the speculative fetch? there is no data involved QQQ
           instr_fault           = ~pcc_fullcap_o.valid | perm_vio;
 
           cheri_rf_we_raw      = ~instr_fault;    // err -> wb exception
@@ -926,7 +925,7 @@ module cheri_ex import cheri_pkg::*; #(
       cheri_ex_err_info_d = {1'b0, rf_raddr_a_i, cheri_lsu_err_cause};
     else if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load & clbc_err)  
       // 2-stage ppl load/store, error treated as EX error, memory error
-      cheri_ex_err_info_d = {1'b0, rf_raddr_a_i, 5'h1f};    // QQQ
+      cheri_ex_err_info_d = {1'b0, rf_raddr_a_i, 5'h1f};    
     else 
       cheri_ex_err_info_d = cheri_ex_err_info_q;
 

@@ -1243,7 +1243,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     //    this is not as good as the full secded implementation (some double errors won't be detected)
     //    but probably ok for protection against random fault injection
 
-    // include waddr and we in the ECC calculation? if so need to change reset value of parity bits -- QQQ
+    // include waddr and we in the ECC calculation
     assign wdata_tmp    = rf_wdata_wb ^ rf_wcap_vec[31:0] ^ {20'h0, rf_we_wb, rf_waddr_wb, rf_wcap_vec[37:32]};
     // assign wdata_tmp         = rf_wdata_wb ^ rf_wcap_vec[31:0] ^ {26'h0, rf_wcap_vec[37:32]};
     assign rf_wdata_wb_ecc_o = {wdata_ecc_tmp[38:32], rf_wdata_wb};
@@ -2211,7 +2211,7 @@ end
   always_comb begin
     rvfi_set_trap_pc_d = rvfi_set_trap_pc_q;
 
-    //if (pc_set && pc_mux_id == PC_EXC &&           // kliu - interrupt only QQQ
+    //if (pc_set && pc_mux_id == PC_EXC &&           // kliu - interrupt only 
     //    (exc_pc_mux_id == EXC_PC_EXC || exc_pc_mux_id == EXC_PC_IRQ)) begin   
     if (pc_set && pc_mux_id == PC_EXC && (exc_pc_mux_id == EXC_PC_IRQ)) begin
       // PC is set to enter a trap handler
