@@ -15,6 +15,10 @@ filesets:
       - lowrisc:ibex:ibex_icache
       - lowrisc:dv:dv_fcov_macros
     files:
+      - rtl/cheri_decoder.sv
+      - rtl/cheri_ex.sv
+      - rtl/cheri_tbre.sv
+      - rtl/cheri_trvk_stage.sv
       - rtl/ibex_alu.sv
       - rtl/ibex_branch_predict.sv
       - rtl/ibex_compressed_decoder.sv

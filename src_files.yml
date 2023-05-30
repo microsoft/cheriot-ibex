@@ -4,6 +4,12 @@ ibex:
     shared/rtl,
   ]
   files: [
+    rtl/cheri_pkg.sv,
+    rtl/cheri_decoder.sv,
+    rtl/cheri_ex.sv,
+    rtl/cheri_tbre.sv,
+    rtl/cheri_trvk_stage.sv,
+    rtl/cheri_regfile.sv,
     rtl/ibex_pkg.sv,
     rtl/ibex_alu.sv,
     rtl/ibex_compressed_decoder.sv,
@@ -32,6 +38,7 @@ ibex_vip_rtl:
   ]
   files: [
     rtl/ibex_pkg.sv,
+    rtl/cheri_pkg.sv,
     rtl/ibex_tracer_pkg.sv,
     rtl/ibex_tracer.sv,
     rtl/ibex_core_tracing.sv,
