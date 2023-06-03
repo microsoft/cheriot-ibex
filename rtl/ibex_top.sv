@@ -90,6 +90,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   output logic                         tsmap_cs_o,
   output logic [15:0]                  tsmap_addr_o,
   input  logic [31:0]                  tsmap_rdata_i,
+  input  logic [6:0]                   tsmap_rdata_intg_i,
   input  logic [64:0]                  tbre_ctrl_vec_i,
   output logic                         tbre_done_o,
 
@@ -220,8 +221,11 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   logic [4:0]    rf_trvk_addr;
   logic          rf_trvk_en;
   logic          rf_trvk_clrtag;
+  logic [6:0]    rf_trvk_par;
   logic [4:0]    rf_trsv_addr;
   logic          rf_trsv_en;
+  logic [6:0]    rf_trsv_par;
+  logic          rf_alert;
 
   /////////////////////
   // Main clock gate //
@@ -344,9 +348,11 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .rf_reg_rdy_i     (rf_reg_rdy),
     .rf_trsv_en_o     (rf_trsv_en),
     .rf_trsv_addr_o   (rf_trsv_addr),
+    .rf_trsv_par_o    (rf_trsv_par),
     .rf_trvk_addr_o   (rf_trvk_addr),
     .rf_trvk_en_o     (rf_trvk_en    ),
     .rf_trvk_clrtag_o (rf_trvk_clrtag),
+    .rf_trvk_par_o    (rf_trvk_par),
     .tsmap_cs_o,
     .tsmap_addr_o,
     .tsmap_rdata_i,
@@ -422,6 +428,9 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   /////////////////////////////////
   // Register file Instantiation //
   /////////////////////////////////
+  if (!CHERIoTEn) begin
+    assign rf_alert = 1'b0;     // rf_alert only available in cheri_regfile
+  end
 
   if (CHERIoTEn) begin : gen_regfile_cheriot
 
@@ -437,6 +446,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     ) register_file_i (
       .clk_i         (clk),
       .rst_ni        (rst_ni),
+      .par_rst_ni    (rst_ni),
       .raddr_a_i     (rf_raddr_a),
       .rdata_a_o     (rf_rdata_a_ecc),
       .rcap_a_o      (rf_rcap_a),
@@ -451,8 +461,11 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       .trvk_addr_i   (rf_trvk_addr),
       .trvk_en_i     (rf_trvk_en),
       .trvk_clrtag_i (rf_trvk_clrtag),
+      .trvk_par_i    (rf_trvk_par),
       .trsv_addr_i   (rf_trsv_addr),
-      .trsv_en_i     (rf_trsv_en)
+      .trsv_en_i     (rf_trsv_en),
+      .trsv_par_i    (rf_trsv_par),
+      .alert_o       (rf_alert)
     );
 
   end else if (RegFile == RegFileFF) begin : gen_regfile_ff
@@ -752,6 +765,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       tsmap_cs_o,
       tsmap_addr_o,
       tsmap_rdata_i,
+      tsmap_rdata_intg_i,
       tbre_ctrl_vec_i,
       tbre_done_o
     });
@@ -804,6 +818,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     logic                         tsmap_cs_local;
     logic [15:0]                  tsmap_addr_local;
     logic [31:0]                  tsmap_rdata_local;
+    logic [6:0]                   tsmap_rdata_intg_local;
     logic [64:0]                  tbre_ctrl_vec_local;
     logic                         tbre_done_local;
     reg_cap_t                     rf_wcap_local, rf_rcap_a_local, rf_rcap_b_local;
@@ -896,6 +911,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       tsmap_cs_o,
       tsmap_addr_o,
       tsmap_rdata_i,
+      tsmap_rdata_intg_i,
       tbre_ctrl_vec_i,
       tbre_done_o
     };
@@ -963,6 +979,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       tsmap_cs_local,
       tsmap_addr_local,
       tsmap_rdata_local,
+      tsmap_rdata_intg_local,
       tbre_ctrl_vec_local,
       tbre_done_local
     } = buf_out;
@@ -1036,7 +1053,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       .CheriTBRE        (CheriTBRE)
     ) u_ibex_lockstep (
       .clk_i                  (clk),
-      .rst_ni                 (rst_ni),
+      .rst_ni                 (rst_ni),   // should use a different reset tree ?? QQQ kliu
 
       .hart_id_i              (hart_id_local),
       .boot_addr_i            (boot_addr_local),
@@ -1083,6 +1100,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       .tsmap_cs_i             (tsmap_cs_local       ),
       .tsmap_addr_i           (tsmap_addr_local     ),
       .tsmap_rdata_i          (tsmap_rdata_local    ),
+      .tsmap_rdata_intg_i     (tsmap_rdata_intg_local),
       .tbre_ctrl_vec_i        (tbre_ctrl_vec_local  ),
       .tbre_done_i            (tbre_done_local      ), 
 
@@ -1150,7 +1168,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     assign unused_intg = |{instr_rdata_intg_i, data_rdata_intg_i};
   end
 
-  assign alert_major_internal_o = core_alert_major | lockstep_alert_major_internal;
+  assign alert_major_internal_o = core_alert_major | lockstep_alert_major_internal | rf_alert;
   assign alert_major_bus_o      = lockstep_alert_major_bus;
   assign alert_minor_o          = core_alert_minor | lockstep_alert_minor;
 

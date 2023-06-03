@@ -1,3 +1,4 @@
+
 // Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
@@ -12,6 +13,7 @@ module cheri_regfile import cheri_pkg::*; #(
    // Clock and Reset
   input  logic                  clk_i,
   input  logic                  rst_ni,
+  input  logic                  par_rst_ni,
 
   //Read port R1
   input  logic           [4:0]  raddr_a_i,
@@ -34,8 +36,12 @@ module cheri_regfile import cheri_pkg::*; #(
   input  logic          [4:0]   trvk_addr_i,
   input  logic                  trvk_en_i,
   input  logic                  trvk_clrtag_i,
+  input  logic          [6:0]   trvk_par_i,     // make sure this is included in lockstep compare QQQ     
   input  logic          [4:0]   trsv_addr_i,
-  input  logic                  trsv_en_i
+  input  logic                  trsv_en_i,
+  input  logic          [6:0]   trsv_par_i,     
+  
+  output logic                  alert_o
 );
 
   localparam logic [6:0] DefParBits[0:31] = '{7'h27,7'h0d,7'h6b,7'h41,7'h62,7'h48,7'h2e,7'h04,
@@ -44,16 +50,24 @@ module cheri_regfile import cheri_pkg::*; #(
                                               7'h56,7'h7c,7'h1a,7'h30,7'h13,7'h39,7'h5f,7'h75};
 
   localparam logic [6:0] TrvkParIncr = 7'h15;
+  localparam logic [6:0] NullParBits = 7'h2a;           // 7-bit parity for 32'h0
 
-  logic [DataWidth-1:0] rf_reg   [NREGS-1:0];
-  logic [DataWidth-1:0] rf_reg_q [NREGS-1:1];
+  logic [31:0] rf_reg   [NREGS-1:0];
+  logic [31:0] rf_reg_q [NREGS-1:1];
+  
+  logic [6:0] rf_reg_par   [NREGS-1:0];
+  logic [6:0] rf_reg_par_q [NREGS-1:0];
+  
+  
   reg_cap_t             rf_cap   [NCAPS-1:0] ;
   reg_cap_t             rf_cap_q [NCAPS-1:1] ;
 
-  logic [NREGS-1:1]       we_a_dec;
-  logic [NREGS-1:1]       trvk_dec, trsv_dec;
-  logic [31:0]            reg_rdy_vec;
-
+  logic [NREGS-1:1]     we_a_dec;
+  logic [NREGS-1:1]     trvk_dec, trsv_dec;
+  logic [31:0]          reg_rdy_vec;
+  
+  logic                 pplbc_alert;
+  
   always_comb begin : we_a_decoder
     for (int unsigned i = 1; i < NREGS; i++) begin
       we_a_dec[i] = (waddr_a_i == 5'(i)) ? we_a_i : 1'b0;
@@ -66,32 +80,47 @@ module cheri_regfile import cheri_pkg::*; #(
   for (genvar i = 1; i < NREGS; i++) begin : g_rf_flops
     logic cap_valid;
     
-    // shouldn't need this for parity update, since trvk_en is only asserted when loaded cap is valid
-    // if (i < NCAPS) begin
-    //  assign cap_valid = rf_cap_q[i].valid;
-    // end else begin
-    //  assign cap_valid = 1'b0;
-    // end
-
+    
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
-        rf_reg_q[i] <= {DefParBits[i], 32'h0};
-      end else if (RegFileECC & CheriPPLBC & trvk_dec[i] & trvk_en_i & trvk_clrtag_i ) begin
-        // update parity bits
-        rf_reg_q[i] <= rf_reg_q[i] ^ {TrvkParIncr, 32'h0};
+        rf_reg_q[i] <= 32'h0;
       end else if (we_a_dec[i]) begin
-        rf_reg_q[i] <= wdata_a_i;
+        rf_reg_q[i] <= wdata_a_i[31:0];
       end 
     end
-  end
+    
+    if (RegFileECC) begin : g_reg_par
+      logic [6:0] wdata_par;
+      
+      assign wdata_par = wdata_a_i[DataWidth-1:DataWidth-7];
+      
+      // split reset of data and parity to detect spurious reset (fault protection)
+      always_ff @(posedge clk_i or negedge par_rst_ni) begin
+        if (!par_rst_ni) begin
+          rf_reg_par_q[i] <= DefParBits[i];
+        end else if (RegFileECC & CheriPPLBC & trvk_dec[i] & trvk_en_i & trvk_clrtag_i) begin
+          // update parity bits
+          rf_reg_par_q[i] <= rf_reg_par_q[i] ^ TrvkParIncr;
+        end else if (we_a_dec[i]) begin
+          rf_reg_par_q[i] <= wdata_par;
+        end 
+      end
+    end else begin : g_no_reg_par
+      assign rf_reg_par_q[i] = 7'h0;
+    end  // gen reg_par
 
-  assign rf_reg[0] = {DefParBits[0], 32'h0};
+  end // g_rf_flops
+
+
+  assign rf_reg[0]     = 32'h0;
+  assign rf_reg_par[0] = DefParBits[0];
   for (genvar i=1; i<NREGS ; i++) begin
-    assign rf_reg[i] = rf_reg_q[i];
+    assign rf_reg[i]     = rf_reg_q[i];         
+    assign rf_reg_par[i] = rf_reg_par_q[i];     
   end
 
-  assign rdata_a_o = rf_reg[raddr_a_i];
-  assign rdata_b_o = rf_reg[raddr_b_i];
+  assign rdata_a_o = {rf_reg_par[raddr_a_i], rf_reg[raddr_a_i]};
+  assign rdata_b_o = {rf_reg_par[raddr_b_i], rf_reg[raddr_b_i]};
 
   // capability meta data (MSW)
   for (genvar i = 1; i < NCAPS; i++) begin : g_cap_flops
@@ -115,21 +144,184 @@ module cheri_regfile import cheri_pkg::*; #(
   assign rcap_a_o = (raddr_a_i < NCAPS) ? rf_cap[raddr_a_i] : NULL_REG_CAP;
   assign rcap_b_o = (raddr_b_i < NCAPS) ? rf_cap[raddr_b_i] : NULL_REG_CAP;
 
-  for (genvar i = 0; i < 32; i++) begin : g_regrdy
-    if (~CheriPPLBC || (i==0) || (i>=NCAPS)) begin
-      assign reg_rdy_vec[i] = 1'b1;
-    end else begin
-      always_ff @(posedge clk_i or negedge rst_ni) begin
-        if (!rst_ni)
-          reg_rdy_vec[i] <= 1'b1;
-        else if (trvk_dec[i] & trvk_en_i)
-          reg_rdy_vec[i] <= 1'b1;
-        else if (trsv_dec[i] & trsv_en_i)
+  if (CheriPPLBC) begin : g_regrdy
+    
+    for (genvar i=0; i<32; i++) begin
+      if ((i == 0) || (i >= NCAPS)) begin
+        assign reg_rdy_vec[i] = 1'b1;
+      end else begin
+        always_ff @(posedge clk_i or negedge rst_ni) begin
+          if (!rst_ni)
+            reg_rdy_vec[i] <= 1'b1;
+          else if (trvk_dec[i] & trvk_en_i)
+            reg_rdy_vec[i] <= 1'b1;
+          else if (trsv_dec[i] & trsv_en_i)
           reg_rdy_vec[i] <= 1'b0;
-      end  // always_ff
-    end
-  end   // for generate
+        end  // always_ff
+      end    // if 
+    end      // for
 
+    // build the shadow copy of reg_rdy_vec for fault protection
+    if (RegFileECC) begin : gen_shdw
+      logic  [4:0] trvk_addr_q;
+      logic        trvk_en_q;
+      logic        trvk_clrtag_q;
+      logic  [6:0] trvk_par_q;     // make sure this is included in lockstep compare QQQ     
+      logic  [4:0] trsv_addr_q;
+      logic        trsv_en_q;
+      logic  [6:0] trsv_par_q;
+
+      logic      [31:0] reg_rdy_vec_shdw, reg_rdy_vec_q;  
+      logic [NREGS-1:1] trvk_dec_shdw, trsv_dec_shdw;
+      logic             shdw_mismatch_err, cap_rvk_err;            
+
+
+      always_comb begin  
+        for (int unsigned i = 1; i < NREGS; i++) begin
+          trvk_dec_shdw[i] = (trvk_addr_q == 5'(i));
+          trsv_dec_shdw[i] = (trsv_addr_q == 5'(i));
+        end
+      end
+      
+      always_ff @(posedge clk_i or negedge par_rst_ni) begin
+        if (!par_rst_ni) begin
+           trvk_addr_q   <= 5'h0;
+           trvk_en_q     <= 1'b0;        
+           trvk_clrtag_q <= 1'b0;
+           trvk_par_q    <= NullParBits;   
+           trsv_addr_q   <= 5'h0;
+           trsv_en_q     <= 1'b0;
+           trsv_par_q    <= NullParBits;
+           reg_rdy_vec_q <= {32{1'b1}};
+        end else begin
+           trvk_addr_q   <= trvk_addr_i;
+           trvk_en_q     <= trvk_en_i;
+           trvk_clrtag_q <= trvk_clrtag_i;
+           trvk_par_q    <= trvk_par_i;   
+           trsv_addr_q   <= trsv_addr_i;
+           trsv_en_q     <= trsv_en_i;
+           trsv_par_q    <= trsv_par_i;
+           reg_rdy_vec_q <= reg_rdy_vec;
+        end
+      end
+      
+      for (genvar i = 0; i < 32; i++) begin
+        if ((i == 0) || (i >= NCAPS)) begin
+          assign reg_rdy_vec_shdw[i] = 1'b1;
+        end else begin
+          always_ff @(posedge clk_i or negedge par_rst_ni) begin
+            if (!par_rst_ni)
+              reg_rdy_vec_shdw[i] <= 1'b1;
+            else if (trvk_dec_shdw[i] & trvk_en_q)
+              reg_rdy_vec_shdw[i] <= 1'b1;
+            else if (trsv_dec_shdw[i] & trsv_en_q)
+            reg_rdy_vec_shdw[i] <= 1'b0;
+          end  // always_ff
+        end
+      end
+
+      // generate alert 
+      assign shdw_mismatch_err = (reg_rdy_vec_shdw != reg_rdy_vec_q);
+
+      // readback revoked cap to make sure the valid bit is actually cleared
+      always_comb begin
+        cap_rvk_err = 0;        
+        for (int unsigned i = 1; i < NCAPS; i++) begin
+          cap_rvk_err = cap_rvk_err | (trvk_en_q & trvk_clrtag_q & trvk_dec_shdw[i] & rf_cap_q[i].valid);
+        end
+      end
+ 
+       
+      // check parity of trsv and trvk requests
+      logic [1:0] trsv_ecc_err, trvk_ecc_err;
+
+      prim_secded_inv_39_32_dec trsv_ecc_i (
+        .data_i    ({trsv_par_q, 26'h0, trsv_en_q, trsv_addr_q}),
+        .data_o    (),
+        .syndrome_o(),
+        .err_o     (trsv_ecc_err)
+      );
+
+      prim_secded_inv_39_32_dec trsk_ecc_i (
+        .data_i    ({trvk_par_q, 25'h0, trvk_en_q, trvk_clrtag_q, trvk_addr_q}),
+        .data_o    (),
+        .syndrome_o(),
+        .err_o     (trvk_ecc_err)
+      );
+
+      assign pplbc_alert = shdw_mismatch_err | cap_rvk_err | (|trsv_ecc_err) | (|trvk_ecc_err);
+      
+    end else begin : gen_no_shdw // no ECC or shdw checking
+      assign pplbc_alert = 1'b0;      
+    end
+    
+  end else begin : g_no_regrdy
+    assign reg_rdy_vec = {32{1'b1}};
+    assign pplbc_alert = 1'b0;
+  end  // not pplbc
+  
+  //
+  //  read back last-writen register for fault protection
+  //
+  logic reg_rdbk_err;
+  
+  if (RegFileECC) begin : gen_fault_rdbk
+    logic [NREGS-1:1] we_a_dec_shdw;
+    logic       [4:0] waddr_a_q;
+    logic      [31:0] wdata_a_q;
+    logic       [6:0] wpar_a_q;
+    logic      [37:0] wcap_vec_q;
+    logic             we_a_q;
+    logic      [31:0] wdata_tmp;
+    logic       [6:0] rpar_tmp;
+    logic       [1:0] wreq_ecc_err;
+    logic             rdbk_cmp_err;
+    
+    // flop the write request and check parity 
+    //   need all fields to compute parity bits
+    always_ff @(posedge clk_i or negedge par_rst_ni) begin
+      if (!par_rst_ni) begin
+        waddr_a_q   <= 5'h0;
+        wdata_a_q   <= 32'h0;
+        wpar_a_q    <= NullParBits;
+        wcap_vec_q  <= 38'h0;
+        we_a_q      <= 1'b0;
+      end else begin
+        waddr_a_q   <= waddr_a_i;
+        wdata_a_q   <= wdata_a_i[31:0];
+        wpar_a_q    <= wdata_a_i[DataWidth-1:DataWidth-7];
+        wcap_vec_q  <= reg2vec(wcap_a_i);
+        we_a_q      <= we_a_i;
+      end
+    end      
+
+    assign wdata_tmp    = wdata_a_q ^ wcap_vec_q[31:0] ^ {20'h0, we_a_q, waddr_a_q, wcap_vec_q[37:32]};
+
+    prim_secded_inv_39_32_dec wdata_ecc_i (
+      .data_i    ({wpar_a_q, wdata_tmp}),
+      .data_o    (),
+      .syndrome_o(),
+      .err_o     (wreq_ecc_err)
+    );
+   
+    // decode and read back to verify (only parity bits)
+    always_comb begin 
+      for (int unsigned i = 1; i < NREGS; i++) begin
+        we_a_dec_shdw[i] = (waddr_a_q == 5'(i)) ? we_a_q : 1'b0;
+      end
+    end
+
+    assign rpar_tmp     = rf_reg_par[waddr_a_q]; 
+   
+    assign rdbk_cmp_err = (rpar_tmp != wpar_a_q) && (waddr_a_q != 0) && we_a_q;
+
+    assign reg_rdbk_err = (|wreq_ecc_err) | rdbk_cmp_err;
+
+  end else begin : gen_no_fault_rdbk
+    assign reg_rdbk_err = 1'b0;
+  end 
+  
   assign reg_rdy_o = reg_rdy_vec;
+  assign alert_o   = pplbc_alert | reg_rdbk_err;
 
 endmodule

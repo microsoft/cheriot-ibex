@@ -104,9 +104,11 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
 
   output logic                         rf_trsv_en_o,
   output logic [4:0]                   rf_trsv_addr_o,
+  output logic [6:0]                   rf_trsv_par_o,
   output logic [4:0]                   rf_trvk_addr_o,
   output logic                         rf_trvk_en_o,
   output logic                         rf_trvk_clrtag_o,
+  output logic [6:0]                   rf_trvk_par_o,
   output logic                         tsmap_cs_o,
   output logic [15:0]                  tsmap_addr_o,
   input  logic [31:0]                  tsmap_rdata_i,
@@ -1231,6 +1233,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     logic  [1:0] rf_ecc_err_a, rf_ecc_err_b;
     logic        rf_ecc_err_a_id, rf_ecc_err_b_id;
     logic [31:0] wdata_tmp, rdata_a_tmp, rdata_b_tmp;
+    logic [31:0] unused_sig32_0, unused_sig32_1;
     logic [38:0] wdata_ecc_tmp;
 
     assign rf_wcap_vec  = reg2vec(rf_wcap_wb);
@@ -1250,6 +1253,17 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     prim_secded_inv_39_32_enc regfile_ecc_enc (
       .data_i(wdata_tmp),
       .data_o(wdata_ecc_tmp)
+    );
+
+    // generate parity bits for the TRSV/TRVK interface
+    prim_secded_inv_39_32_enc trsv_ecc_enc (
+      .data_i({26'h0, rf_trsv_en_o, rf_trsv_addr_o}),
+      .data_o({rf_trsv_par_o, unused_sig32_0})
+    );
+    
+    prim_secded_inv_39_32_enc trvk_ecc_enc (
+      .data_i({25'h0, rf_trvk_en_o, rf_trvk_clrtag_o, rf_trvk_addr_o}),
+      .data_o({rf_trvk_par_o, unused_sig32_1})
     );
 
     // ECC checking on register file rdata

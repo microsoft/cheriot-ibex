@@ -85,6 +85,7 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   output logic                         tsmap_cs_o,
   output logic [15:0]                  tsmap_addr_o,
   input  logic [31:0]                  tsmap_rdata_i,
+  input  logic [6:0]                   tsmap_rdata_intg_i,
   input  logic [64:0]                  tbre_ctrl_vec_i,
   output logic                         tbre_done_o,
 
@@ -217,6 +218,7 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
     .tsmap_cs_o,
     .tsmap_addr_o,
     .tsmap_rdata_i,
+    .tsmap_rdata_intg_i,
     .tbre_ctrl_vec_i,
     .tbre_done_o,
 

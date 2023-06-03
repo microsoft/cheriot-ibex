@@ -97,6 +97,7 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
   input  logic                         tsmap_cs_i,
   input  logic [15:0]                  tsmap_addr_i,
   input  logic [31:0]                  tsmap_rdata_i,
+  input  logic [6:0]                   tsmap_rdata_intg_i,
   input  logic [64:0]                  tbre_ctrl_vec_i,
   input  logic                         tbre_done_i,
  
@@ -225,6 +226,7 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
   delayed_inputs_t [LockstepOffset-1:0] shadow_inputs_q;
   delayed_inputs_t                      shadow_inputs_in;
   logic [6:0]                           instr_rdata_intg_q, data_rdata_intg_q;
+  logic [6:0]                           tsmap_rdata_intg_q;
   // Packed arrays must be dealt with separately
   logic [TagSizeECC-1:0]                shadow_tag_rdata_q [IC_NUM_WAYS][LockstepOffset];
   logic [LineSizeECC-1:0]               shadow_data_rdata_q [IC_NUM_WAYS][LockstepOffset];
@@ -261,6 +263,7 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
     if (!rst_ni) begin
       instr_rdata_intg_q <= '0;
       data_rdata_intg_q  <= '0;
+      tsmap_rdata_intg_q  <= '0;
       for (int unsigned i = 0; i < LockstepOffset; i++) begin
         shadow_inputs_q[i]     <= delayed_inputs_t'('0);
         shadow_tag_rdata_q[i]  <= '{default: 0};
@@ -269,6 +272,7 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
     end else begin
       instr_rdata_intg_q <= instr_rdata_intg_i;
       data_rdata_intg_q  <= data_rdata_intg_i;
+      tsmap_rdata_intg_q  <= tsmap_rdata_intg_i;
       for (int unsigned i = 0; i < LockstepOffset - 1; i++) begin
         shadow_inputs_q[i]     <= shadow_inputs_q[i+1];
         shadow_tag_rdata_q[i]  <= shadow_tag_rdata_q[i+1];
@@ -321,7 +325,7 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
     .err_o      (data_intg_err_tmp)
   );
 
-  // only check on read data
+  // only check read data (data_rvalid includes both reads and writes)
   assign data_intg_err = data_we_q[0] ? 2'h0 : data_intg_err_tmp;
 
   assign bus_intg_err = (shadow_inputs_q[LockstepOffset-1].instr_rvalid & |instr_intg_err) |
@@ -338,6 +342,38 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
       .data_i (data_wdata_i[31:0]),
       .data_o ({data_wdata_intg_o, unused_wdata})
     );
+  end
+
+  
+  ////////////////////////////////////////
+  // TSMAP interface integrity checking //
+  ////////////////////////////////////////
+
+  logic       tsmap_intg_err;
+  logic [1:0] tsmap_intg_err_tmp;
+  logic [1:0] tsmap_cs_q;
+
+  if (CHERIoTEn && CheriPPLBC) begin
+    always @(posedge clk_i, negedge rst_ni) begin
+      if (~rst_ni) begin
+        tsmap_cs_q <= 2'b00;
+      end else begin
+        tsmap_cs_q <= {tsmap_cs_i, tsmap_cs_q[1]}; // align with shadow_inputs_q[LockstepOffset-1]
+      end
+    end
+
+    // Checks on incoming data
+    prim_secded_inv_39_32_dec u_tsmap_intg_dec (
+      .data_i     ({tsmap_rdata_intg_q, shadow_inputs_q[LockstepOffset-1].tsmap_rdata}),
+      .data_o     (),
+      .syndrome_o (),
+      .err_o      (tsmap_intg_err_tmp)
+    );
+
+    assign tsmap_intg_err = tsmap_cs_q[0] & tsmap_intg_err_tmp;
+
+  end else begin
+    assign tsmap_intg_err = 1'b0;
   end
 
   ///////////////////
@@ -598,7 +634,7 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
 
   assign outputs_mismatch       = enable_cmp_q & (shadow_outputs_q != core_outputs_q[0]);
   assign alert_major_internal_o = outputs_mismatch | shadow_alert_major;
-  assign alert_major_bus_o      = bus_intg_err;
+  assign alert_major_bus_o      = bus_intg_err | tsmap_intg_err;
   assign alert_minor_o          = shadow_alert_minor;
 
 endmodule
