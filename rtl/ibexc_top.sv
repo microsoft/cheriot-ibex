@@ -447,7 +447,8 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   `ASSERT_KNOWN(IbexDataRValidX, data_rvalid_i)
 
   // kliu - check data_rdata_i for reads only (FPGA ram model drives rdata for writes also)
-  `ASSERT_KNOWN_IF(IbexDataRPayloadX, {({32{~u_ibex_core.load_store_unit_i.data_we_q}} & data_rdata_i), data_rdata_intg_i, data_err_i}, data_rvalid_i)
+  `ASSERT_KNOWN_IF(IbexDataRPayloadX, {({32{~u_ibex_core.load_store_unit_i.data_we_q}} & data_rdata_i), 
+      ({7{~u_ibex_core.load_store_unit_i.data_we_q}} & data_rdata_intg_i), data_err_i}, data_rvalid_i)
 
   `ASSERT_KNOWN(IbexIrqX, {irq_software_i, irq_timer_i, irq_external_i, irq_fast_i, irq_nm_i})
 
