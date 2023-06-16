@@ -112,10 +112,6 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   output logic                         core_sleep_o
 );
 
-  // ibex_tracer relies on the signals from the RISC-V Formal Interface
-  `ifndef RVFI
-    $fatal("Fatal error: RVFI needs to be defined globally.");
-  `endif
 
   logic        rvfi_valid;
   logic [63:0] rvfi_order;
@@ -273,6 +269,12 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
     .core_sleep_o
   );
 
+// ibex_tracer relies on the signals from the RISC-V Formal Interface
+// synthesis translate_off
+`ifndef RVFI
+   $fatal("Fatal error: RVFI needs to be defined globally.");
+`endif
+
 `ifdef RVFI
   ibex_tracer #(
     .Cheri32E         (1'b0)
@@ -315,5 +317,7 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
     .rvfi_mem_is_cap
   );
 `endif
+
+// synthesis translate_on
 
 endmodule

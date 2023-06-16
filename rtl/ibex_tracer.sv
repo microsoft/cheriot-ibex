@@ -83,6 +83,8 @@ module ibex_tracer import cheri_pkg::*; # (
   input reg_cap_t    rvfi_mem_wcap
 );
 
+// synthesis translate_off
+
   // These signals are part of RVFI, but not used in this module currently.
   // Keep them as part of the interface to change the tracer more easily in the future. Assigning
   // these signals to unused_* signals marks them explicitly as unused, an annotation picked up by
@@ -1387,5 +1389,6 @@ module ibex_tracer import cheri_pkg::*; # (
       endcase
     end
   end
+// synthesis translate_on
 
 endmodule

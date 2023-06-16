@@ -1054,10 +1054,9 @@ module ibex_id_stage import cheri_pkg::*; #(
                              ~stall_cheri_trvk          &
                              ~outstanding_memory_access;
 
-    // allowing a cheri instruction to start execution - valid instruction not stored by WB/hz
+    // allowing a cheri instruction to start execution - valid instruction not stalled by WB/hz
     // note we can't use_instr_kill here since it includes id_exception (cherr_ex_err), which causes a
     // comb loop.
-    // not actually used right now by cheri_ex since all cheri instructions are single-cycle.
 
     assign cheri_exec_id_o = instr_valid_i              &
                             ~instr_fetch_err_i         &
