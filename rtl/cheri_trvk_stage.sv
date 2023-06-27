@@ -59,7 +59,7 @@ module cheri_trvk_stage #(
   assign tsmap_ptr = (base32 - HeapBase) >> 3;
 
   assign tsmap_addr_o  = tsmap_ptr[15:5];
-  assign range_ok      = (tsmap_addr_o <= TSMapSize);
+  assign range_ok      = (tsmap_ptr[31:5] <= TSMapSize);
   assign tsmap_cs_o    = (cpu_op_valid_q[0] | tbre_op_valid_q[0]) & cap_good_q[0];
 
   assign rf_trvk_en_o     =  cpu_op_valid_q[2];
