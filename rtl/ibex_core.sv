@@ -170,9 +170,9 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   output logic [31:0]                  rvfi_mem_addr,
   output logic [ 3:0]                  rvfi_mem_rmask,
   output logic [ 3:0]                  rvfi_mem_wmask,
-  output logic [32:0]                  rvfi_mem_rdata,
+  output logic [DataWidth-1:0]         rvfi_mem_rdata,
   output reg_cap_t                     rvfi_mem_rcap,
-  output logic [32:0]                  rvfi_mem_wdata,
+  output logic [DataWidth-1:0]         rvfi_mem_wdata,
   output reg_cap_t                     rvfi_mem_wcap,
   output logic [31:0]                  rvfi_ext_mip,
   output logic                         rvfi_ext_nmi,
@@ -1091,9 +1091,17 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   /////////////////////
   // Load/store unit //
   /////////////////////
+  logic [32:0] data_wdata33, data_rdata33;
 
   assign data_req_o   = data_req_out & ~pmp_req_err[PMP_D];
   assign lsu_resp_err = lsu_load_err | lsu_store_err;
+  assign data_wdata_o = data_wdata33[DataWidth-1:0];
+
+  if (DataWidth == 33) begin
+    assign data_rdata33 = data_rdata_i;
+  end else begin
+    assign data_rdata33 = {1'b0, data_rdata_i};
+  end
 
   ibex_load_store_unit #(
     .CHERIoTEn(CHERIoTEn),
@@ -1114,8 +1122,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .data_addr_o (data_addr_o),
     .data_we_o   (data_we_o),
     .data_be_o   (data_be_o),
-    .data_wdata_o(data_wdata_o),
-    .data_rdata_i(data_rdata_i),
+    .data_wdata_o(data_wdata33),
+    .data_rdata_i(data_rdata33),
 
     // signals to/from ID/EX stage
     .lsu_we_i      (lsu_we),
@@ -1335,6 +1343,9 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     // Combined error
     assign rf_ecc_err_comb = instr_valid_id & (rf_ecc_err_a_id | rf_ecc_err_b_id);
 
+    assign rf_trvk_par_o = 7'h0;
+    assign rf_trsv_par_o = 7'h0;
+
   end else begin : gen_no_regfile_ecc
 
     logic unused_rf_ren_a, unused_rf_ren_b;
@@ -1348,6 +1359,9 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     assign rf_rdata_a              = rf_rdata_a_ecc_i;
     assign rf_rdata_b              = rf_rdata_b_ecc_i;
     assign rf_ecc_err_comb         = 1'b0;
+
+    assign rf_trvk_par_o = 7'h0;
+    assign rf_trsv_par_o = 7'h0;
 end
 
   ///////////////////////
@@ -1676,9 +1690,9 @@ end
   logic [31:0] rvfi_stage_mem_addr  [RVFI_STAGES];
   logic [ 3:0] rvfi_stage_mem_rmask [RVFI_STAGES];
   logic [ 3:0] rvfi_stage_mem_wmask [RVFI_STAGES];
-  logic [32:0] rvfi_stage_mem_rdata [RVFI_STAGES];
+  logic [DataWidth-1:0] rvfi_stage_mem_rdata [RVFI_STAGES];
   reg_cap_t    rvfi_stage_mem_rcap  [RVFI_STAGES];
-  logic [32:0] rvfi_stage_mem_wdata [RVFI_STAGES];
+  logic [DataWidth-1:0] rvfi_stage_mem_wdata [RVFI_STAGES];
   reg_cap_t    rvfi_stage_mem_wcap  [RVFI_STAGES];
   logic        rvfi_stage_mem_is_cap [RVFI_STAGES];
 
@@ -1712,10 +1726,10 @@ end
   logic [31:0] rvfi_rd_wdata_q;
   logic        rvfi_rd_we_wb;
   logic [3:0]  rvfi_mem_mask_int;
-  logic [32:0] rvfi_mem_rdata_d;
-  logic [32:0] rvfi_mem_rdata_q;
-  logic [32:0] rvfi_mem_wdata_d;
-  logic [32:0] rvfi_mem_wdata_q;
+  logic [DataWidth-1:0] rvfi_mem_rdata_d;
+  logic [DataWidth-1:0] rvfi_mem_rdata_q;
+  logic [DataWidth-1:0] rvfi_mem_wdata_d;
+  logic [DataWidth-1:0] rvfi_mem_wdata_q;
   logic [31:0] rvfi_mem_addr_d;
   logic [31:0] rvfi_mem_addr_q;
   logic        rvfi_mem_is_cap_d;

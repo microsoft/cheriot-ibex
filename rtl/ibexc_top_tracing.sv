@@ -137,8 +137,8 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   logic [31:0] rvfi_mem_addr;
   logic [ 3:0] rvfi_mem_rmask;
   logic [ 3:0] rvfi_mem_wmask;
-  logic [32:0] rvfi_mem_rdata;
-  logic [32:0] rvfi_mem_wdata;
+  logic [DataWidth-1:0] rvfi_mem_rdata;
+  logic [DataWidth-1:0] rvfi_mem_wdata;
   logic        rvfi_mem_is_cap;
   reg_cap_t     rvfi_mem_rcap;
   reg_cap_t     rvfi_mem_wcap;
@@ -266,7 +266,10 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
     .rvfi_ext_mcycle,
 `endif
     .fetch_enable_i,
-    .core_sleep_o
+    .core_sleep_o,
+    .alert_major_bus_o(),
+    .alert_major_internal_o(),
+    .alert_minor_o()
   );
 
 // ibex_tracer relies on the signals from the RISC-V Formal Interface
@@ -277,7 +280,8 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
 
 `ifdef RVFI
   ibex_tracer #(
-    .Cheri32E         (1'b0)
+    .Cheri32E         (1'b0),
+    .DataWidth        (DataWidth)
   ) u_ibex_tracer (
     .clk_i,
     .rst_ni,

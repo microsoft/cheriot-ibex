@@ -71,6 +71,7 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
   input  logic [3:0]                   data_be_i,
   input  logic [31:0]                  data_addr_i,
   input  logic [DataWidth-1:0]         data_wdata_i,
+  input  logic                         data_is_cap_i,
   output logic [6:0]                   data_wdata_intg_o,
   input  logic [DataWidth-1:0]         data_rdata_i,
   input  logic [6:0]                   data_rdata_intg_i,
@@ -91,9 +92,11 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
   input  logic [31:0]                  rf_reg_rdy_i,
   input  logic                         rf_trsv_en_i,
   input  logic [4:0]                   rf_trsv_addr_i,
+  input  logic [6:0]                   rf_trsv_par_i,
   input  logic [4:0]                   rf_trvk_addr_i,
   input  logic                         rf_trvk_en_i,
   input  logic                         rf_trvk_clrtag_i,
+  input  logic [6:0]                   rf_trvk_par_i,
   input  logic                         tsmap_cs_i,
   input  logic [15:0]                  tsmap_addr_i,
   input  logic [31:0]                  tsmap_rdata_i,
@@ -388,6 +391,7 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
     logic [3:0]                  data_be;
     logic [31:0]                 data_addr;
     logic [DataWidth-1:0]        data_wdata;
+    logic                        data_is_cap;
     logic                        dummy_instr_id;
     logic [4:0]                  rf_raddr_a;
     logic [4:0]                  rf_raddr_b;
@@ -410,9 +414,11 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
     reg_cap_t                    rf_wcap_wb;
     logic                        rf_trsv_en;
     logic [4:0]                  rf_trsv_addr;
+    logic [6:0]                  rf_trsv_par;
     logic [4:0]                  rf_trvk_addr;
     logic                        rf_trvk_en;
     logic                        rf_trvk_clrtag;
+    logic [6:0]                  rf_trvk_par;
     logic                        tsmap_cs;
     logic [15:0]                 tsmap_addr;
     logic                        tbre_done;
@@ -430,6 +436,7 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
   assign core_outputs_in.data_be             = data_be_i;
   assign core_outputs_in.data_addr           = data_addr_i;
   assign core_outputs_in.data_wdata          = data_wdata_i;
+  assign core_outputs_in.data_is_cap         = data_is_cap_i;
   assign core_outputs_in.dummy_instr_id      = dummy_instr_id_i;
   assign core_outputs_in.rf_raddr_a          = rf_raddr_a_i;
   assign core_outputs_in.rf_raddr_b          = rf_raddr_b_i;
@@ -452,9 +459,11 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
   assign core_outputs_in.rf_wcap_wb          = rf_wcap_wb_i;
   assign core_outputs_in.rf_trsv_en          = rf_trsv_en_i;
   assign core_outputs_in.rf_trsv_addr        = rf_trsv_addr_i;
+  assign core_outputs_in.rf_trsv_par         = rf_trsv_par_i;
   assign core_outputs_in.rf_trvk_addr        = rf_trvk_addr_i;
   assign core_outputs_in.rf_trvk_en          = rf_trvk_en_i;
   assign core_outputs_in.rf_trvk_clrtag      = rf_trvk_clrtag_i;
+  assign core_outputs_in.rf_trvk_par         = rf_trvk_par_i;
   assign core_outputs_in.tsmap_cs            = tsmap_cs_i;
   assign core_outputs_in.tsmap_addr          = tsmap_addr_i;
   assign core_outputs_in.tbre_done           = tbre_done_i;     
@@ -535,6 +544,7 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
     .data_be_o           (shadow_outputs_d.data_be),
     .data_addr_o         (shadow_outputs_d.data_addr),
     .data_wdata_o        (shadow_outputs_d.data_wdata),
+    .data_is_cap_o       (shadow_outputs_d.data_is_cap),
     .data_rdata_i        (shadow_inputs_q[0].data_rdata),
     .data_err_i          (shadow_inputs_q[0].data_err),
 
@@ -552,9 +562,11 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
     .rf_reg_rdy_i        (shadow_inputs_q[0].rf_reg_rdy),
     .rf_trsv_en_o        (shadow_outputs_d.rf_trsv_en),  
     .rf_trsv_addr_o      (shadow_outputs_d.rf_trsv_addr),
+    .rf_trsv_par_o       (shadow_outputs_d.rf_trsv_par),
     .rf_trvk_addr_o      (shadow_outputs_d.rf_trvk_addr),
     .rf_trvk_en_o        (shadow_outputs_d.rf_trvk_en),  
     .rf_trvk_clrtag_o    (shadow_outputs_d.rf_trvk_clrtag),
+    .rf_trvk_par_o       (shadow_outputs_d.rf_trvk_par),
     .tsmap_cs_o          (shadow_outputs_d.tsmap_cs),    
     .tsmap_addr_o        (shadow_outputs_d.tsmap_addr), 
     .tsmap_rdata_i       (shadow_inputs_q[0].tsmap_rdata),
@@ -612,6 +624,12 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
     .rvfi_ext_nmi       (),
     .rvfi_ext_debug_req (),
     .rvfi_ext_mcycle    (),
+    .rvfi_mem_wcap      (),
+    .rvfi_mem_rcap      (),
+    .rvfi_mem_is_cap    (),
+    .rvfi_rd_wcap       (),
+    .rvfi_rs2_rcap      (),
+    .rvfi_rs1_rcap      (),
 `endif
 
     .fetch_enable_i    (shadow_inputs_q[0].fetch_enable),

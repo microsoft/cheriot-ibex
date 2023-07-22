@@ -306,6 +306,8 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .rf_trvk_addr_o   (rf_trvk_addr),
     .rf_trvk_en_o     (rf_trvk_en    ),
     .rf_trvk_clrtag_o (rf_trvk_clrtag),
+    .rf_trvk_par_o    (),
+    .rf_trsv_par_o    (),
     .tsmap_cs_o       (tsmap_cs_o   ),
     .tsmap_addr_o     (tsmap_addr_o ),
     .tsmap_rdata_i    (tsmap_rdata_i),
@@ -363,7 +365,18 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .alert_minor_o(),
     .alert_major_o(),
     .icache_inval_o(),
-    .core_busy_o   (core_busy_d)
+    .core_busy_o   (core_busy_d),
+    .ic_scr_key_valid_i (1'b0),
+    .ic_data_rdata_i    ('{'{64'h0}, '{64'h0}}),
+    .ic_data_wdata_o    (),
+    .ic_data_addr_o     (),
+    .ic_data_write_o    (),
+    .ic_data_req_o      (),
+    .ic_tag_rdata_i     ('{'{22'h0}, '{22'h0}}),
+    .ic_tag_wdata_o     (),
+    .ic_tag_addr_o      (),
+    .ic_tag_write_o     (), 
+    .ic_tag_req_o       ()
   );
 
   assign data_wdata_intg_o = 7'h0;
@@ -394,7 +407,11 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       .trvk_en_i     (rf_trvk_en),
       .trvk_clrtag_i (rf_trvk_clrtag),
       .trsv_addr_i   (rf_trsv_addr),
-      .trsv_en_i     (rf_trsv_en)
+      .trsv_en_i     (rf_trsv_en),
+      .trsv_par_i    (7'h0),
+      .trvk_par_i    (7'h0),
+      .par_rst_ni    (1'b0),
+      .alert_o       ()
     );
   end else begin
     cheri_regfile #(
@@ -419,7 +436,11 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       .trvk_en_i     (rf_trvk_en),
       .trvk_clrtag_i (rf_trvk_clrtag),
       .trsv_addr_i   (rf_trsv_addr),
-      .trsv_en_i     (rf_trsv_en)
+      .trsv_en_i     (rf_trsv_en),
+      .trsv_par_i    (7'h0),
+      .trvk_par_i    (7'h0),
+      .par_rst_ni    (1'b0),
+      .alert_o       ()
     );
   end
 

@@ -719,6 +719,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       data_be_o,
       data_addr_o,
       data_wdata_o,
+      data_is_cap_o,
       data_rdata_i,
       data_rdata_intg_i,
       data_err_i,
@@ -759,9 +760,11 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       rf_reg_rdy,
       rf_trsv_en,
       rf_trsv_addr,
+      rf_trsv_par,
       rf_trvk_addr,
       rf_trvk_en,
       rf_trvk_clrtag,
+      rf_trvk_par,
       tsmap_cs_o,
       tsmap_addr_o,
       tsmap_rdata_i,
@@ -790,6 +793,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     logic [3:0]                   data_be_local;
     logic [31:0]                  data_addr_local;
     logic [DataWidth-1:0]         data_wdata_local;
+    logic                         data_is_cap_local;
     logic [6:0]                   data_wdata_intg_local;
     logic [DataWidth-1:0]         data_rdata_local;
     logic [6:0]                   data_rdata_intg_local;
@@ -812,9 +816,11 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     logic [31:0]                  rf_reg_rdy_local;
     logic                         rf_trsv_en_local;
     logic [4:0]                   rf_trsv_addr_local;
+    logic [6:0]                   rf_trsv_par_local;
     logic [4:0]                   rf_trvk_addr_local;
     logic                         rf_trvk_en_local;
-    logic                         rf_trvk_clrtag_locla;
+    logic                         rf_trvk_clrtag_local;
+    logic [6:0]                   rf_trvk_par_local;
     logic                         tsmap_cs_local;
     logic [15:0]                  tsmap_addr_local;
     logic [31:0]                  tsmap_rdata_local;
@@ -865,6 +871,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       data_be_o,
       data_addr_o,
       data_wdata_o,
+      data_is_cap_o,
       data_rdata_i,
       data_rdata_intg_i,
       data_err_i,
@@ -905,9 +912,11 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       rf_reg_rdy,
       rf_trsv_en,
       rf_trsv_addr,
+      rf_trsv_par,
       rf_trvk_addr,
       rf_trvk_en,
       rf_trvk_clrtag,
+      rf_trvk_par,
       tsmap_cs_o,
       tsmap_addr_o,
       tsmap_rdata_i,
@@ -933,6 +942,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       data_be_local,
       data_addr_local,
       data_wdata_local,
+      data_is_cap_local,
       data_rdata_local,
       data_rdata_intg_local,
       data_err_local,
@@ -973,9 +983,11 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       rf_reg_rdy_local,
       rf_trsv_en_local,
       rf_trsv_addr_local,
+      rf_trsv_par_local,
       rf_trvk_addr_local,
       rf_trvk_en_local,
       rf_trvk_clrtag_local,
+      rf_trvk_par_local,
       tsmap_cs_local,
       tsmap_addr_local,
       tsmap_rdata_local,
@@ -1075,6 +1087,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       .data_be_i              (data_be_local),
       .data_addr_i            (data_addr_local),
       .data_wdata_i           (data_wdata_local),
+      .data_is_cap_i          (data_is_cap_local),
       .data_wdata_intg_o      (data_wdata_intg_local),
       .data_rdata_i           (data_rdata_local),
       .data_rdata_intg_i      (data_rdata_intg_local),
@@ -1094,9 +1107,11 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       .rf_reg_rdy_i           (rf_reg_rdy_local     ),
       .rf_trsv_en_i           (rf_trsv_en_local     ),
       .rf_trsv_addr_i         (rf_trsv_addr_local   ),
+      .rf_trsv_par_i          (rf_trsv_par_local ),
       .rf_trvk_addr_i         (rf_trvk_addr_local   ),
       .rf_trvk_en_i           (rf_trvk_en_local     ),
       .rf_trvk_clrtag_i       (rf_trvk_clrtag_local ),
+      .rf_trvk_par_i          (rf_trvk_par_local ),
       .tsmap_cs_i             (tsmap_cs_local       ),
       .tsmap_addr_i           (tsmap_addr_local     ),
       .tsmap_rdata_i          (tsmap_rdata_local    ),

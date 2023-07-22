@@ -40,7 +40,8 @@
  */
 
 module ibex_tracer import cheri_pkg::*; # (
-  parameter bit Cheri32E = 1'b1
+  parameter bit          Cheri32E = 1'b1,
+  parameter int unsigned DataWidth = 32
 ) (
   input logic        clk_i,
   input logic        rst_ni,
@@ -76,8 +77,8 @@ module ibex_tracer import cheri_pkg::*; # (
   input logic [31:0] rvfi_mem_addr,
   input logic [ 3:0] rvfi_mem_rmask,
   input logic [ 3:0] rvfi_mem_wmask,
-  input logic [32:0] rvfi_mem_rdata,
-  input logic [32:0] rvfi_mem_wdata,
+  input logic [DataWidth-1:0] rvfi_mem_rdata,
+  input logic [DataWidth-1:0] rvfi_mem_wdata,
   input logic        rvfi_mem_is_cap,
   input reg_cap_t    rvfi_mem_rcap,
   input reg_cap_t    rvfi_mem_wcap
@@ -104,6 +105,7 @@ module ibex_tracer import cheri_pkg::*; # (
   int unsigned cycle;
   string       decoded_str;
   logic        insn_is_compressed;
+  logic        rvfi_mem_wdata_bit32;
 
   // Data items accessed during this instruction
   localparam logic [9:0] RS1 = (1 << 0);
@@ -186,9 +188,9 @@ module ibex_tracer import cheri_pkg::*; # (
       $fwrite(file_handle, " PA:0x%08x", rvfi_mem_addr);
 
       if (rvfi_mem_wmask == 4'b0001)                           
-        $fwrite(file_handle, " store:0x%1b??????%02x", rvfi_mem_wdata[32], rvfi_mem_wdata[7:0]);
+        $fwrite(file_handle, " store:0x%1b??????%02x", rvfi_mem_wdata_bit32, rvfi_mem_wdata[7:0]);
       else if (rvfi_mem_wmask == 4'b0011)
-        $fwrite(file_handle, " store:0x%1b????%04x", rvfi_mem_wdata[32], rvfi_mem_wdata[15:0]);
+        $fwrite(file_handle, " store:0x%1b????%04x", rvfi_mem_wdata_bit32, rvfi_mem_wdata[15:0]);
       else if (rvfi_mem_wmask != 4'b0000)
         $fwrite(file_handle, " store:0x%09x", rvfi_mem_wdata);
 
@@ -1039,6 +1041,12 @@ module ibex_tracer import cheri_pkg::*; # (
     if (rvfi_valid && trace_log_enable) begin
       printbuffer_dumpline();
     end
+  end
+
+  if (DataWidth == 33) begin
+    assign rvfi_mem_wdata_bit32 = rvfi_mem_wdata[32];
+  end else begin
+    assign rvfi_mem_wdata_bit32 = 1'b0;
   end
 
   //always_comb begin
