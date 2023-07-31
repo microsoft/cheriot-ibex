@@ -45,8 +45,9 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
   parameter bit          MemCapFmt         = 1'b0,
   parameter bit          CheriPPLBC        = 1'b1,
   parameter bit          CheriSBND2        = 1'b0,
-  parameter bit          CheriTBRE         = 1'b1
- 
+  parameter bit          CheriTBRE         = 1'b1,
+  parameter int unsigned MMRegDinW         = 128,
+  parameter int unsigned MMRegDoutW        = 64
 ) (
   input  logic                         clk_i,
   input  logic                         rst_ni,
@@ -101,8 +102,8 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
   input  logic [15:0]                  tsmap_addr_i,
   input  logic [31:0]                  tsmap_rdata_i,
   input  logic [6:0]                   tsmap_rdata_intg_i,
-  input  logic [64:0]                  tbre_ctrl_vec_i,
-  input  logic                         tbre_done_i,
+  input  logic [MMRegDinW-1:0]         mmreg_corein_i,
+  input  logic [MMRegDoutW-1:0]        mmreg_coreout_i,
  
   input  logic [IC_NUM_WAYS-1:0]       ic_tag_req_i,
   input  logic                         ic_tag_write_i,
@@ -223,7 +224,7 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
     reg_cap_t                    rf_rcap_b;
     logic [31:0]                 rf_reg_rdy;
     logic [31:0]                 tsmap_rdata;
-    logic [64:0]                 tbre_ctrl_vec;
+    logic [MMRegDinW-1:0]        mmreg_corein;
   } delayed_inputs_t;
 
   delayed_inputs_t [LockstepOffset-1:0] shadow_inputs_q;
@@ -259,7 +260,7 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
   assign shadow_inputs_in.rf_rcap_b        = rf_rcap_b_i;
   assign shadow_inputs_in.rf_reg_rdy       = rf_reg_rdy_i;
   assign shadow_inputs_in.tsmap_rdata      = tsmap_rdata_i;
-  assign shadow_inputs_in.tbre_ctrl_vec    = tbre_ctrl_vec_i;
+  assign shadow_inputs_in.mmreg_corein     = mmreg_corein_i;
 
   // Delay the inputs
   always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -421,7 +422,7 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
     logic [6:0]                  rf_trvk_par;
     logic                        tsmap_cs;
     logic [15:0]                 tsmap_addr;
-    logic                        tbre_done;
+    logic [MMRegDoutW-1:0]       mmreg_coreout;
   } delayed_outputs_t;
 
   delayed_outputs_t [OutputsOffset-1:0]  core_outputs_q;
@@ -466,7 +467,7 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
   assign core_outputs_in.rf_trvk_par         = rf_trvk_par_i;
   assign core_outputs_in.tsmap_cs            = tsmap_cs_i;
   assign core_outputs_in.tsmap_addr          = tsmap_addr_i;
-  assign core_outputs_in.tbre_done           = tbre_done_i;     
+  assign core_outputs_in.mmreg_coreout       = mmreg_coreout_i;     
                         
   // Delay the outputs
   always_ff @(posedge clk_i) begin
@@ -570,8 +571,8 @@ module ibex_lockstep import ibex_pkg::*; import cheri_pkg::*; #(
     .tsmap_cs_o          (shadow_outputs_d.tsmap_cs),    
     .tsmap_addr_o        (shadow_outputs_d.tsmap_addr), 
     .tsmap_rdata_i       (shadow_inputs_q[0].tsmap_rdata),
-    .tbre_ctrl_vec_i     (shadow_inputs_q[0].tbre_ctrl_vec),
-    .tbre_done_o         (shadow_outputs_d.tbre_done),  
+    .mmreg_corein_i      (shadow_inputs_q[0].mmreg_corein),
+    .mmreg_coreout_o     (shadow_outputs_d.mmreg_coreout),  
 
     .ic_tag_req_o        (shadow_outputs_d.ic_tag_req),
     .ic_tag_write_o      (shadow_outputs_d.ic_tag_write),

@@ -57,7 +57,9 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   parameter bit          MemCapFmt         = 1'b0,
   parameter bit          CheriPPLBC        = 1'b1,
   parameter bit          CheriSBND2        = 1'b0,
-  parameter bit          CheriTBRE         = 1'b1
+  parameter bit          CheriTBRE         = 1'b1,
+  parameter int unsigned MMRegDinW         = 128,
+  parameter int unsigned MMRegDoutW        = 64
 ) (
   // Clock and Reset
   input  logic                         clk_i,
@@ -112,8 +114,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   output logic                         tsmap_cs_o,
   output logic [15:0]                  tsmap_addr_o,
   input  logic [31:0]                  tsmap_rdata_i,
-  input  logic [64:0]                  tbre_ctrl_vec_i,
-  output logic                         tbre_done_o,
+  input  logic [MMRegDinW-1:0]         mmreg_corein_i,
+  output logic [MMRegDoutW-1:0]        mmreg_coreout_o,
 
   // RAMs interface
   output logic [IC_NUM_WAYS-1:0]       ic_tag_req_o,
@@ -1042,11 +1044,16 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   //////////////////////////////////////////
   // cheri TS background revocation engine//
   //////////////////////////////////////////
+  logic  tbre_stat;
+
+  assign mmreg_coreout_o = {{(MMRegDoutW-1){1'b0}}, tbre_stat};
 
   if (CHERIoTEn & CheriTBRE) begin : g_tbre
-    logic snoop_lsu_req_done;
+    logic        snoop_lsu_req_done;
+    logic [64:0] tbre_ctrl_vec;
 
     assign snoop_lsu_req_done = lsu_req_done | lsu_req_done_intl;
+    assign tbre_ctrl_vec      = mmreg_corein_i[64:0];
 
     cheri_tbre #(
       .FifoSize (4), 
@@ -1055,8 +1062,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
      // Clock and Reset
       .clk_i                   (clk_i),                 
       .rst_ni                  (rst_ni),
-      .tbre_ctrl_vec_i         (tbre_ctrl_vec_i),
-      .tbre_done_o             (tbre_done_o),
+      .tbre_ctrl_vec_i         (tbre_ctrl_vec),
+      .tbre_stat_o             (tbre_stat),
       .lsu_tbre_resp_valid_i   (lsu_tbre_resp_valid),
       .lsu_tbre_resp_err_i     (lsu_tbre_resp_err),
       .lsu_tbre_resp_is_wr_i   (lsu_resp_is_wr),
@@ -1079,7 +1086,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   );
 
   end else begin
-    assign tbre_done_o     = 1'b0;
+    assign tbre_stat       = 1'b0;
     assign tbre_lsu_req    = 1'b0;
     assign tbre_lsu_is_cap = 1'b0;
     assign tbre_lsu_we     = 1'b0;

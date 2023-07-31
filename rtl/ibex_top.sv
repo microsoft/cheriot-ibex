@@ -48,7 +48,9 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   parameter bit          MemCapFmt        = 1'b0,
   parameter bit          CheriPPLBC       = 1'b1,
   parameter bit          CheriSBND2       = 1'b0,
-  parameter bit          CheriTBRE        = 1'b1
+  parameter bit          CheriTBRE        = 1'b1,
+  parameter int unsigned MMRegDinW         = 128,
+  parameter int unsigned MMRegDoutW        = 64
 ) (
   // Clock and Reset
   input  logic                         clk_i,
@@ -91,8 +93,8 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   output logic [15:0]                  tsmap_addr_o,
   input  logic [31:0]                  tsmap_rdata_i,
   input  logic [6:0]                   tsmap_rdata_intg_i,
-  input  logic [64:0]                  tbre_ctrl_vec_i,
-  output logic                         tbre_done_o,
+  input  logic [MMRegDinW-1:0]         mmreg_corein_i,
+  output logic [MMRegDoutW-1:0]        mmreg_coreout_o,
 
   // Interrupt inputs
   input  logic                         irq_software_i,
@@ -356,8 +358,8 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .tsmap_cs_o,
     .tsmap_addr_o,
     .tsmap_rdata_i,
-    .tbre_ctrl_vec_i,
-    .tbre_done_o,
+    .mmreg_corein_i,
+    .mmreg_coreout_o,
 
     .ic_tag_req_o      (ic_tag_req),
     .ic_tag_write_o    (ic_tag_write),
@@ -769,8 +771,8 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       tsmap_addr_o,
       tsmap_rdata_i,
       tsmap_rdata_intg_i,
-      tbre_ctrl_vec_i,
-      tbre_done_o
+      mmreg_corein_i,
+      mmreg_coreout_o
     });
 
     logic [NumBufferBits-1:0] buf_in, buf_out;
@@ -825,8 +827,8 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     logic [15:0]                  tsmap_addr_local;
     logic [31:0]                  tsmap_rdata_local;
     logic [6:0]                   tsmap_rdata_intg_local;
-    logic [64:0]                  tbre_ctrl_vec_local;
-    logic                         tbre_done_local;
+    logic [MMRegDinW-1:0]         mmreg_corein_local;
+    logic [MMRegDoutW-1:0]        mmreg_coreout_local;
     reg_cap_t                     rf_wcap_local, rf_rcap_a_local, rf_rcap_b_local;
 
     logic [IC_NUM_WAYS-1:0]       ic_tag_req_local;
@@ -921,8 +923,8 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       tsmap_addr_o,
       tsmap_rdata_i,
       tsmap_rdata_intg_i,
-      tbre_ctrl_vec_i,
-      tbre_done_o
+      mmreg_corein_i,
+      mmreg_coreout_o
     };
 
     assign {
@@ -992,8 +994,8 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       tsmap_addr_local,
       tsmap_rdata_local,
       tsmap_rdata_intg_local,
-      tbre_ctrl_vec_local,
-      tbre_done_local
+      mmreg_corein_local,
+      mmreg_coreout_local
     } = buf_out;
 
     assign rf_wcap_vec     = reg2vec(rf_wcap);
@@ -1116,8 +1118,8 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       .tsmap_addr_i           (tsmap_addr_local     ),
       .tsmap_rdata_i          (tsmap_rdata_local    ),
       .tsmap_rdata_intg_i     (tsmap_rdata_intg_local),
-      .tbre_ctrl_vec_i        (tbre_ctrl_vec_local  ),
-      .tbre_done_i            (tbre_done_local      ), 
+      .mmreg_corein_i         (mmreg_corein_local  ),
+      .mmreg_coreout_i        (mmreg_coreout_local      ), 
 
       .ic_tag_req_i           (ic_tag_req_local),
       .ic_tag_write_i         (ic_tag_write_local),

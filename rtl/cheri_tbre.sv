@@ -13,7 +13,7 @@ module cheri_tbre #(
 
   // MMIO register interface 
   input  logic [64:0]   tbre_ctrl_vec_i,
-  output logic          tbre_done_o,
+  output logic          tbre_stat_o,
 
   // LSU req/resp interface (to be multiplixed/qualified)
   input  logic          lsu_tbre_resp_valid_i,
@@ -46,7 +46,7 @@ module cheri_tbre #(
   localparam ReqFifoDW = AddrHi-1;
 
 
-  logic        kick_q, kick_rise;
+  logic        tbre_go;
   logic        load_stop_cond, load_gnt;
   logic        store_gnt;
   logic        store_req_valid;
@@ -77,7 +77,7 @@ module cheri_tbre #(
   tbre_sch_t tbre_sch_q, tbre_sch_d;
 
   typedef struct packed {
-    logic         kick;
+    logic         go;
     logic [31:0]  start_addr;
     logic [31:0]  end_addr;
   } tbre_ctrl_t;
@@ -85,10 +85,10 @@ module cheri_tbre #(
   tbre_ctrl_t tbre_ctrl;
 
   // register interface
-  assign tbre_ctrl.kick       = tbre_ctrl_vec_i[64];
+  assign tbre_ctrl.go         = tbre_ctrl_vec_i[64];
   assign tbre_ctrl.start_addr = tbre_ctrl_vec_i[31:0];
   assign tbre_ctrl.end_addr   = tbre_ctrl_vec_i[63:32];
-  assign tbre_done_o          = (tbre_fsm_q != TBRE_IDLE) && (tbre_fsm_d == TBRE_IDLE);
+  assign tbre_stat_o          = (tbre_fsm_q != TBRE_IDLE);
 
   assign tbre_lsu_req_o    = ((tbre_sch_q == SCH_LOAD) | ((tbre_sch_q == SCH_STORE) && store_req_valid)) & ~wait_resp_q;
   assign tbre_lsu_is_cap_o = (tbre_sch_q == SCH_LOAD);
@@ -98,7 +98,6 @@ module cheri_tbre #(
          
   assign load_addr8_p1     = cur_load_addr8 + 1;
 
-  assign kick_rise       = tbre_ctrl.kick & ~kick_q;
   assign load_stop_cond  = (load_addr8_p1 > tbre_ctrl.end_addr[AddrHi:3]);
   assign load_gnt        = (tbre_sch_q == SCH_LOAD) & lsu_tbre_req_done_i;
   assign store_gnt       = (tbre_sch_q == SCH_STORE) & lsu_tbre_req_done_i;
@@ -113,7 +112,7 @@ module cheri_tbre #(
     logic load_stall, req_fifo_full;
 
     // state machine tracking the progress of memory walk
-    if ((tbre_fsm_q == TBRE_IDLE) && kick_rise)
+    if ((tbre_fsm_q == TBRE_IDLE) && tbre_ctrl.go)
       tbre_fsm_d = TBRE_LOAD;
     else if ((tbre_fsm_q == TBRE_LOAD) && load_gnt & load_stop_cond)
       tbre_fsm_d = TBRE_WAIT;
@@ -153,18 +152,16 @@ module cheri_tbre #(
   
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
-      kick_q          <= 1'b0;
       tbre_fsm_q      <= TBRE_IDLE;
       tbre_sch_q      <= SCH_NONE;
       cur_load_addr8  <= 'h0;
       wait_resp_q     <= 1'b0;
     end else begin
-      kick_q <= tbre_ctrl.kick;
 
       tbre_fsm_q <= tbre_fsm_d;
       tbre_sch_q <= tbre_sch_d;
 
-      if (kick_rise & (tbre_fsm_q == TBRE_IDLE))
+      if (tbre_ctrl.go & (tbre_fsm_q == TBRE_IDLE))
         cur_load_addr8 <= tbre_ctrl.start_addr[AddrHi:3];
       else if (load_gnt)
         cur_load_addr8 <= load_addr8_p1;

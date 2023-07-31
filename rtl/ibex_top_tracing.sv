@@ -43,7 +43,9 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   parameter bit          MemCapFmt        = 1'b0,
   parameter bit          CheriPPLBC       = 1'b1,
   parameter bit          CheriSBND2       = 1'b0,
-  parameter bit          CheriTBRE        = 1'b0
+  parameter bit          CheriTBRE        = 1'b0,
+  parameter int unsigned MMRegDinW        = 128,
+  parameter int unsigned MMRegDoutW       = 64
 ) (
   // Clock and Reset
   input  logic                         clk_i,
@@ -86,8 +88,8 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   output logic [15:0]                  tsmap_addr_o,
   input  logic [31:0]                  tsmap_rdata_i,
   input  logic [6:0]                   tsmap_rdata_intg_i,
-  input  logic [64:0]                  tbre_ctrl_vec_i,
-  output logic                         tbre_done_o,
+  input  logic [MMRegDinW-1:0]         mmreg_corein_i,
+  output logic [MMRegDoutW-1:0]        mmreg_coreout_o,
 
   // Interrupt inputs
   input  logic                         irq_software_i,
@@ -219,8 +221,8 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
     .tsmap_addr_o,
     .tsmap_rdata_i,
     .tsmap_rdata_intg_i,
-    .tbre_ctrl_vec_i,
-    .tbre_done_o,
+    .mmreg_corein_i,
+    .mmreg_coreout_o,
 
     .irq_software_i,
     .irq_timer_i,
