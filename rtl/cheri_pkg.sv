@@ -709,9 +709,9 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     regcap.otype  = msw[OTYPE_LO+:OTYPE_W];
 
     sealed = (regcap.otype != OTYPE_UNSEALED);
-    cperms_mem    = msw[CPERMS_LO+:CPERMS_W];
-    regcap.cperms = mask_clcperms(cperms_mem, clrperm, regcap.valid, sealed);
-    addrmi9         = addr33 >> regcap.exp;
+    cperms_mem      = msw[CPERMS_LO+:CPERMS_W];
+    regcap.cperms   = mask_clcperms(cperms_mem, clrperm, regcap.valid, sealed);
+    addrmi9         = {1'b0, addr33[31:0]} >> regcap.exp;   // ignore the tag valid bit 
     tmp4            = update_temp_fields(regcap.top, regcap.base, addrmi9);
     regcap.top_cor  = tmp4[3:2];
     regcap.base_cor = tmp4[1:0];
