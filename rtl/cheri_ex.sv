@@ -152,14 +152,14 @@ module cheri_ex import cheri_pkg::*; #(
 
   full_cap_t     rf_fullcap_a, rf_fullcap_b;
 
-  logic          is_load, is_store, is_cap;
+  reg_cap_t      csc_wcap;
+
+  logic          is_load_cap, is_store_cap, is_cap;
   logic          is_intl, is_lbc;
 
-
-  logic          lsu_error;
   logic          addr_bound_vio;
-  logic          perm_fault, perm_vio;
-  logic          lsu_error_rv32;
+  logic          perm_fault, perm_vio, store_local_vio;
+  logic          rv32_lsu_err;
   logic          addr_bound_vio_rv32;
   logic          perm_vio_rv32;
 
@@ -263,6 +263,7 @@ module cheri_ex import cheri_pkg::*; #(
     cheri_rf_we_raw      = 1'b0;
     result_data_o        = 32'h0;
     result_cap_o         = NULL_REG_CAP;
+    csc_wcap             = NULL_REG_CAP;
     cheri_ex_valid_raw   = 1'b0;
     cheri_ex_err_raw     = 1'b0;
     cheri_wb_err_raw     = 1'b0;
@@ -467,9 +468,9 @@ module cheri_ex import cheri_pkg::*; #(
             result_data_o        = clbc_data_q;
             result_cap_o         = clbc_cap_q;
             result_cap_o.valid   = ~clbc_revoked & clbc_cap_q.valid;
-            cheri_rf_we_raw      = clbc_done & ~(clbc_err | lsu_error);
+            cheri_rf_we_raw      = clbc_done & ~(clbc_err | cheri_lsu_err);
             cheri_ex_valid_raw   = clbc_done;
-            cheri_ex_err_raw     = clbc_err | lsu_error;
+            cheri_ex_err_raw     = clbc_err | cheri_lsu_err;
           end
         end
       cheri_operator_i[CSTORE_CAP]:
@@ -478,7 +479,9 @@ module cheri_ex import cheri_pkg::*; #(
           result_cap_o         = NULL_REG_CAP;
           cheri_rf_we_raw      = 1'b0;
           cheri_ex_valid_raw   = 1'b1;
-          cheri_ex_err_raw     = 1'b0;     // acc err passed to LSU and processed later in WB
+          cheri_ex_err_raw     = 1'b0;       // acc err passed to LSU and processed later in WB
+          csc_wcap             = rf_rcap_b;
+          csc_wcap.valid       = rf_rcap_b.valid & ~store_local_vio;
         end
       cheri_operator_i[CCSR_RW]:           // cd <-- scr; scr <-- cs1 if cs1 != C0
         begin
@@ -530,8 +533,8 @@ module cheri_ex import cheri_pkg::*; #(
     endcase
   end   // always_combi
 
-  assign is_load  = cheri_operator_i[CLOAD_CAP];
-  assign is_store = cheri_operator_i[CSTORE_CAP];
+  assign is_load_cap  = cheri_operator_i[CLOAD_CAP];
+  assign is_store_cap = cheri_operator_i[CSTORE_CAP];
 
   assign is_cap   = cheri_operator_i[CLOAD_CAP] | cheri_operator_i[CSTORE_CAP];
   assign is_lbc   = cheri_operator_i[CLOAD_CAP] & cheri_tsafe_en_i & ~CheriPPLBC;
@@ -552,16 +555,15 @@ module cheri_ex import cheri_pkg::*; #(
     assign cheri_lsu_req      = is_intl ? intl_lsu_req : is_cap & cheri_exec_id_i & instr_first_cycle_i;
   end
 
-  assign cheri_lsu_we       = is_intl ? 1'b0 : is_store;
+  assign cheri_lsu_we       = is_intl ? 1'b0 : is_store_cap;
   assign cheri_lsu_addr     = (is_intl ? intl_lsu_addr : cs1_addr_plusimm) + {addr_incr_req_i, 2'b00};
   assign cheri_lsu_is_cap   = is_intl ? intl_lsu_is_cap : is_cap;
   assign cheri_lsu_is_intl  = is_intl;
-  assign cheri_lsu_err      = lsu_error;
 
   assign cheri_lsu_wdata    = is_intl ? intl_lsu_wdata :
-                              (is_store ? {rf_rcap_b.valid, rf_rdata_b} : 33'h0);
+                              (is_store_cap ? {csc_wcap.valid, rf_rdata_b} : 33'h0);
   assign cheri_lsu_wcap     = is_intl ? intl_lsu_wcap :
-                              ((is_store && is_cap) ?  rf_rcap_b : NULL_REG_CAP);
+                              (is_store_cap  ? csc_wcap : NULL_REG_CAP);
 
   // RS1/CS1+offset is
   //  keep this separate to help timing on the memory interface
@@ -768,11 +770,16 @@ module cheri_ex import cheri_pkg::*; #(
 
   end
 
-  assign lsu_error_rv32 = cheri_pmode_i & ~debug_mode_i & (addr_bound_vio_rv32 | perm_vio_rv32);
+  assign rv32_lsu_err = cheri_pmode_i & ~debug_mode_i & (addr_bound_vio_rv32 | perm_vio_rv32);
 
   // Cheri instr address bound checking
   //   -- we choose to centralize the address bound checking here
   //      so that we can mux the inputs and save some area
+
+  // store_local error only causes tag clearing unless escalated to fault for debugging
+  assign store_local_vio = ~rf_fullcap_a.perms[PERM_SL] && rf_fullcap_b.valid &&
+                           ~rf_fullcap_b.perms[PERM_GL];
+
   always_comb begin : check_cheri
     logic [31:0] top_offset;
     logic [32:0] top_bound;
@@ -822,15 +829,15 @@ module cheri_ex import cheri_pkg::*; #(
     // main permission logic
     if (debug_mode_i)
       perm_vio = 1'b0;
-    else if (is_load)
+    else if (is_load_cap)
       perm_vio  = (~rf_fullcap_a.valid) || is_cap_sealed(rf_fullcap_a) ||
                   ~(rf_fullcap_a.perms[PERM_LD]) ||
                   (cs1_addr_plusimm[2:0] != 0);
-    else if (is_store)
+    else if (is_store_cap)
       perm_vio  = (~rf_fullcap_a.valid) || is_cap_sealed(rf_fullcap_a) ||
                   ~rf_fullcap_a.perms[PERM_SD] ||
                   (~rf_fullcap_a.perms[PERM_MC] && rf_fullcap_b.valid) ||
-                  (~rf_fullcap_a.perms[PERM_SL] && rf_fullcap_b.valid && ~rf_fullcap_b.perms[PERM_GL]);
+                  (csr_dbg_tclr_fault_i & store_local_vio);
     else if (cheri_operator_i[CSEAL])
       // cs2.addr check : ex: 0-7, non-ex: 9-15
       perm_vio = (~rf_fullcap_a.valid) || is_cap_sealed(rf_fullcap_a) ||
@@ -856,7 +863,7 @@ module cheri_ex import cheri_pkg::*; #(
   end
 
   // qualified by lsu_req later
-  assign lsu_error = addr_bound_vio | perm_vio;
+  assign cheri_lsu_err = addr_bound_vio | perm_vio;
 
   // report to csr as mtval
 
@@ -890,13 +897,13 @@ module cheri_ex import cheri_pkg::*; #(
       cheri_lsu_err_cause = 5'h02;
     else if (is_cap_sealed(rf_fullcap_a))
       cheri_lsu_err_cause = 5'h03;
-    else if (is_load & ~rf_fullcap_a.perms[PERM_LD])
+    else if (is_load_cap & ~rf_fullcap_a.perms[PERM_LD])
       cheri_lsu_err_cause = 5'h12;
-    else if (is_store & ~rf_fullcap_a.perms[PERM_SD])
+    else if (is_store_cap & ~rf_fullcap_a.perms[PERM_SD])
       cheri_lsu_err_cause = 5'h13;
-    else if (is_store & ~rf_fullcap_a.perms[PERM_MC] && rf_fullcap_b.valid) 
+    else if (is_store_cap & ~rf_fullcap_a.perms[PERM_MC] && rf_fullcap_b.valid) 
       cheri_lsu_err_cause = 5'h15;
-    else if (is_store & ~rf_fullcap_a.perms[PERM_SL] && rf_fullcap_b.valid && ~rf_fullcap_b.perms[PERM_GL]) 
+    else if (is_store_cap & csr_dbg_tclr_fault_i & store_local_vio) 
       cheri_lsu_err_cause = 5'h16;
     else
       cheri_lsu_err_cause = 5'h0;
@@ -920,10 +927,10 @@ module cheri_ex import cheri_pkg::*; #(
     if (cheri_operator_i[CCSR_RW] & cheri_ex_err_raw & cheri_exec_id_i)
       // cspecialrw traps
       cheri_ex_err_info_d = {1'b1, cheri_cs2_dec_i, cheri_ex_err_cause};
-    else if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load & lsu_error)  
+    else if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load_cap & cheri_lsu_err)  
       // 2-stage ppl load/store, error treated as EX error, cheri CLC check error
       cheri_ex_err_info_d = {1'b0, rf_raddr_a_i, cheri_lsu_err_cause};
-    else if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load & clbc_err)  
+    else if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load_cap & clbc_err)  
       // 2-stage ppl load/store, error treated as EX error, memory error
       cheri_ex_err_info_d = {1'b0, rf_raddr_a_i, 5'h1f};    
     else 
@@ -932,9 +939,9 @@ module cheri_ex import cheri_pkg::*; #(
     // cheri_wb_err_raw is already qualified by instr
     if (cheri_wb_err_raw  & cheri_exec_id_i)
       cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, cheri_wb_err_cause};
-    else if ((is_load | is_store) & cheri_lsu_err & cheri_exec_id_i)
+    else if ((is_load_cap | is_store_cap) & cheri_lsu_err & cheri_exec_id_i)
       cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, cheri_lsu_err_cause};
-    else if (rv32_lsu_req_i & lsu_error_rv32 & cheri_exec_id_i)
+    else if (rv32_lsu_req_i & rv32_lsu_err & cheri_exec_id_i)
       cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, rv32_lsu_err_cause};
     else 
       cheri_wb_err_info_d = cheri_wb_err_info_q;
@@ -946,7 +953,9 @@ module cheri_ex import cheri_pkg::*; #(
       cheri_wb_err_info_q <= 'h0;
       cheri_ex_err_info_q <= 'h0;
     end else begin
-      cheri_wb_err_q      <= cheri_wb_err_d;
+      // Simple flop here works since if cheri_wb_err, lsu request won't be generated 
+      //   so wb stage only takes 1 cycle. QQQ
+      cheri_wb_err_q      <= cheri_wb_err_d; 
       cheri_wb_err_info_q <= cheri_wb_err_info_d;
       cheri_ex_err_info_q <= cheri_ex_err_info_d;
     end
@@ -987,7 +996,7 @@ module cheri_ex import cheri_pkg::*; #(
         case (intl_fsm_q)
           INTL_IDLE:
             // we are loading a cap so req_done won't come till later
-            if (is_lbc && cheri_exec_id_i && ~lsu_error) intl_fsm_d = CLBC_WAIT_LSU1;
+            if (is_lbc && cheri_exec_id_i && ~cheri_lsu_err) intl_fsm_d = CLBC_WAIT_LSU1;
             else if (is_lbc && cheri_exec_id_i) intl_fsm_d = CLBC_DONE;
           CLBC_WAIT_LSU1:
             if (lsu_req_done_intl_i) intl_fsm_d = CLBC_WAIT_RESP1;
@@ -1007,7 +1016,7 @@ module cheri_ex import cheri_pkg::*; #(
       end
 
       intl_lsu_req = 1'b0;
-      if ((intl_fsm_q == INTL_IDLE) && is_lbc && cheri_exec_id_i && ~lsu_error)
+      if ((intl_fsm_q == INTL_IDLE) && is_lbc && cheri_exec_id_i && ~cheri_lsu_err)
         intl_lsu_req = 1'b1;
       else if ((intl_fsm_q == CLBC_MAP_REQ) && clbc_map_ok)
         intl_lsu_req = 1'b1;
@@ -1062,7 +1071,7 @@ module cheri_ex import cheri_pkg::*; #(
   assign cpu_lsu_dec_o   = (instr_is_cheri_i && is_cap) | instr_is_rv32lsu_i;
 
   // muxing tbre ctrl inputs and CPU ctrl inputs
-  assign lsu_cheri_err_o   = ~lsu_tbre_sel_i ? (instr_is_cheri_i ? cheri_lsu_err : lsu_error_rv32) : 1'b0;
+  assign lsu_cheri_err_o   = ~lsu_tbre_sel_i ? (instr_is_cheri_i ? cheri_lsu_err : rv32_lsu_err) : 1'b0;
   assign lsu_is_cap_o      = ~lsu_tbre_sel_i ? (instr_is_cheri_i & cheri_lsu_is_cap) : tbre_lsu_is_cap_i;
   assign lsu_is_intl_o     = ~lsu_tbre_sel_i & instr_is_cheri_i & cheri_lsu_is_intl;
   assign lsu_lc_clrperm_o  = (~lsu_tbre_sel_i & instr_is_cheri_i) ? cheri_lsu_lc_clrperm : 0;
@@ -1106,7 +1115,7 @@ module cheri_ex import cheri_pkg::*; #(
   logic [68:0] dbg_cs1_vec, dbg_cs2_vec, dbg_cd_vec;
 
   assign dbg_status = {4'h0,
-                       instr_is_rv32lsu_i, rv32_lsu_req_i, rv32_lsu_we_i,  lsu_error_rv32,
+                       instr_is_rv32lsu_i, rv32_lsu_req_i, rv32_lsu_we_i,  rv32_lsu_err,
                        cheri_exec_id_i, cheri_lsu_err, rf_fullcap_a.valid, result_cap_o.valid,
                        addr_bound_vio, perm_vio, addr_bound_vio_rv32, perm_vio_rv32};
 
