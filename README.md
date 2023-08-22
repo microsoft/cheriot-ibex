@@ -83,9 +83,12 @@ cheri-ibex design added the following configuration parameters,
 
 | Parameter | Description |
 | ----------- | ----------- |
-| CheriPPLBC | pipelined implementation of load-barrier CLC. <br />  0: non-pipelined implementation <br />  1: pipelined implementation (better performance but needs a separate memory read interface).|
-| CheriSBND2 | Select number of cycles taken by csetbounds* instructions. <br /> 0: csetbounds* takes 1 cycle. <br /> 1: csetbounds* takes 2 cycle (better fmax timing). |
-| MemCapFmt | Select the format used to store capabilities in memory. <br /> 0: use canonical memory capbility format. <br /> 1: use the alternative memory capability format (better memory access timing). |
+| CHERIoTEn  | Master enable of CHERIoT features. <br /> 0: disabes CHERIoT functionality <br /> 1: Enables CHERIoT functionality. |
+| DataWidth  | Data bus width for load/store interface. <br /> Use 32 when CHERIoTEn = 0, 33 when CHERIoTEn = 1. |
+| CheriPPLBC | Configures pipelined implementation of load-barrier CLC. <br />  0: non-pipelined implementation <br />  1: pipelined implementation (better performance but needs a separate memory read interface).|
+| CheriSBND2 | Selects number of cycles taken by csetbounds* instructions. <br /> 0: csetbounds* takes 1 cycle. <br /> 1: csetbounds* takes 2 cycle (better fmax timing). |
+| CheriTBRE | Configures the hardware background revoker engine (TBRE). <br /> 0: Disables TBRE. <br /> 1: Enables TBRE.
+| MemCapFmt | Selects the format used to store capabilities in memory. <br /> 0: use canonical memory capbility format. <br /> 1: use the alternative memory capability format (better memory access timing). |
 |HeapBase|32-bit starting address of the system heap memory. <br /> only capabilities whose base pointing to an address in the heap space are subject to load-barrier checks during CLC.|
 |TSMapSize|size of the shadow bits memory (in 32-bit words) used by the load-barrier operation. <br /> e.g., 1024 = 32k bits which covers 256kB heap memory. <br />This parameter is only used when CheriPPLSBC == 1.|
 |TSMapBase|Starting address of the shadow bits memory <br /> This parameter is only used when CheriPPLSBC == 0.|
@@ -98,11 +101,15 @@ cheri-ibex supports cheri-aware RISC-V debugging via JTAG interface. The debug m
 
 To debug capability-related software issues, cheri-ibex also provides a debug feature which when enabled, escalates tag-clearing events defined in the CherIoT ISA spec (e.g, csetbounds length violations) into exceptions. Writing a 0x1 to the CDBGCTRL SCR (address 27) to enable this feature.
 
-## Timing and area
+## Timing, area and power
 
-cheri-ibex (with 3-stage pipeline) has been synthesized at 330MHz using TSMC 28nm HPC+ libraries (HVT only) and > 1GHz using TSMC n5 libraries (SVT only). The design size is ~70k gate equivalents.
+cheri-ibex (configured as 3-stage pipeline) has been synthesized successfully using Synopsys DC-topo at 250MHz using TSMC 28nm HPCP libraries (ss 0.81v) and 550MHz using TSMC n5 libraries (ss 0.6v). Timing is mostly limited by TCM read access time (which approaches 1.6ns in the n5 case). 
 
-A detailed PPA analysis is under way at Microsoft.
+The design area is ~70k gate equivalents (~25% more the original ibex design). Both dynamic and leakage power are shown as close to the original ibex design.
 
-## Build the design
+
+## Build the design for simulation and emulation
 See [README-CHERI.md](https://github.com/microsoft/cheriot-ibex/blob/main/README-CHERI.md) for the list of RTL files need to compile/simulate/synthesize the cheriot_ibex design.
+
+In addition, [cheriot-safe](https://github.com/microsoft/cheriot-safe) provides an open-source FPGA platform for emulation and prototyping. 
+
