@@ -105,7 +105,7 @@ To debug capability-related software issues, cheriot-ibex also provides a debug 
 
 A PPA study conducted at Microsoft shows that cheriot-ibex is similar to the original ibex design in terms of area and power, however with moderate increase in area. 
 
-cheriot-ibex (configured as 3-stage pipeline) has been synthesized successfully using Synopsys DC-topo at 250MHz using TSMC 28nm HPCP libraries (ss 0.81v) and 550MHz using TSMC n5 libraries (ss 0.6v). Timing is mostly limited by TCM read access time (which approaches 1.6ns in the n5 case). 
+cheriot-ibex (configured as 3-stage pipeline) has been synthesized successfully using Synopsys DC-topo at 300MHz using TSMC 28nm (28LP) libraries (ss 1.03v) and 550MHz using TSMC 5nm (N5) libraries (ss 0.6v). Timing is mostly limited by TCM read access time (which approaches 1.6ns in the N5 case). 
 
 The design area is ~70k gate equivalents (~25% more the original ibex design). Both dynamic and leakage power are shown as similar to the original ibex design.
 
