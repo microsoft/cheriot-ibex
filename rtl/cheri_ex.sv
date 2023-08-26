@@ -842,7 +842,8 @@ module cheri_ex import cheri_pkg::*; #(
       // cs2.addr check : ex: 0-7, non-ex: 9-15
       perm_vio = (~rf_fullcap_a.valid) || is_cap_sealed(rf_fullcap_a) ||
                  (~rf_fullcap_b.valid) || is_cap_sealed(rf_fullcap_b) ||
-                 (rf_fullcap_a.perms[PERM_EX]  && (|rf_rdata_b[31:3])) ||
+                 (rf_fullcap_a.perms[PERM_EX]  && 
+                  ((rf_rdata_b[31:3]!=0) || (rf_rdata_b[2:0]==0) || (rf_rdata_b[2:0]==3'h4) || (rf_rdata_b[2:0]==3'h5))) ||
                  (~rf_fullcap_a.perms[PERM_EX] && ((|rf_rdata_b[31:4]) || (rf_rdata_b[3:0] <= 8))) ||
                  (~rf_fullcap_b.perms[PERM_SE]);
     else if (cheri_operator_i[CUNSEAL])
@@ -854,7 +855,10 @@ module cheri_ex import cheri_pkg::*; #(
       perm_vio = (~rf_fullcap_a.valid) ||
                  (is_cap_sealed(rf_fullcap_a) && (~is_cap_sentry(rf_fullcap_a))) ||
                  (is_cap_sentry(rf_fullcap_a) && (cheri_imm12_i != 0)) ||
+                 (addr_result[0]) || 
                  (~rf_fullcap_a.perms[PERM_EX]) || rf_fullcap_a.base32[0];
+    else if (cheri_operator_i[CJAL] & cheri_pmode_i)
+      perm_vio = (addr_result[0]); 
     else if (cheri_operator_i[CCSR_RW])
       perm_vio = ~pcc_fullcap_i.perms[PERM_SR] || (csr_addr_o < 27);
     else

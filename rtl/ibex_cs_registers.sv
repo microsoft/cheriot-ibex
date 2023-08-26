@@ -171,7 +171,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     | (0                 << 13)  // N - User level interrupts supported
     | (0                 << 18)  // S - Supervisor mode implemented
     | (1                 << 20)  // U - User mode implemented
-    | (0                 << 23)  // X - Non-standard extensions present
+    | (CHERIoTEn         << 23)  // X - Non-standard extensions present
     | (32'(CSR_MISA_MXL) << 30); // M-XLEN
 
   typedef struct packed {
@@ -1827,11 +1827,13 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     assign mepc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd31) && (cheri_csr_op_i == CHERI_CSR_RW);
 
     // let's not worry about non-stanard recoverable NMI/mstack for now QQQ
+    //   note we need to do set_address (representability check) when saving pcc_cap to mepc
+    //   otherwise an out-of-bound pcc_cap may cause mepc corruption 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni)
         mepc_cap <= MEPC_RESET_CAP;
       else if (csr_save_cause_i & (~debug_csr_save_i) & (~debug_mode_i))
-        mepc_cap <= full2regcap(pcc2fullcap(pcc_cap_q, exception_pc));
+        mepc_cap <= full2regcap(set_address(pcc2fullcap(pcc_cap_q, exception_pc), exception_pc, 0, 0));
       else if (cheri_pmode_i & mepc_en)            // legacy cssrw; NMI recover
         mepc_cap <= NULL_REG_CAP;
       else if (mepc_en_cheri)
