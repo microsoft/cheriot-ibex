@@ -11,7 +11,7 @@ package cheri_pkg;
   parameter int unsigned CEXP_W    = 4;
   parameter int unsigned EXP_W     = 5;
   parameter int unsigned OTYPE_W   = 3;
-  parameter int unsigned CPERMS_W  = 7;
+  parameter int unsigned CPERMS_W  = 6;
   parameter int unsigned PERMS_W   = 14;
 
   parameter int unsigned REGCAP_W  = 38;
@@ -52,6 +52,7 @@ package cheri_pkg;
     logic [BOT_W-1   :0] base;
     logic [OTYPE_W-1 :0] otype;
     logic [CPERMS_W-1:0] cperms;
+    logic                rsvd;
   } reg_cap_t;
 
   typedef struct packed {
@@ -67,6 +68,7 @@ package cheri_pkg;
     logic [BOT_W-1   :0] base;
     logic [CPERMS_W-1:0] cperms;
     logic [31:0]         maska;
+    logic                rsvd;
     logic [31:0]         rlen;
   } full_cap_t;
 
@@ -88,26 +90,20 @@ package cheri_pkg;
     logic [EXP_W-1:0] exp2;
   } bound_req_t;
 
-  parameter reg_cap_t  NULL_REG_CAP  = '{0, 0, 0, 0, 0, 0, 0, 0};
-  parameter full_cap_t NULL_FULL_CAP = '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  parameter reg_cap_t  NULL_REG_CAP  = '{0, 0, 0, 0, 0, 0, 0, 0, 0};
+  parameter full_cap_t NULL_FULL_CAP = '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   parameter pcc_cap_t  NULL_PCC_CAP  = '{0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-`ifndef USE_OLD_PERMS
-  parameter logic [6:0] CPERMS_TX = 7'b0101111;  // Tx (execution root)
-  parameter logic [6:0] CPERMS_TM = 7'b0111111;  // Tm (memory data root)
-  parameter logic [6:0] CPERMS_TS = 7'b0100111;  // Tx (seal root)
-`else
-  parameter logic [6:0] CPERMS_TX = 7'h57;  // Tx (execution root)
-  parameter logic [6:0] CPERMS_TM = 7'h7f;  // Tm (memory data root)
-  parameter logic [6:0] CPERMS_TS = 7'h4f;  // Tx (seal root)
-`endif
+  parameter logic [5:0] CPERMS_TX = 6'b101111;  // Tx (execution root)
+  parameter logic [5:0] CPERMS_TM = 6'b111111;  // Tm (memory data root)
+  parameter logic [5:0] CPERMS_TS = 6'b100111;  // Tx (seal root)
 
   parameter pcc_cap_t PCC_RESET_CAP   = '{1'b1, RESETEXP, 33'h10000_0000, 0, OTYPE_UNSEALED, 13'h1eb, 9'h100, 0, CPERMS_TX};   // Tx (execution root)
 
-  parameter reg_cap_t  MTVEC_RESET_CAP     = '{1'b1, 1'b0, 1'b0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TX};   // Tx (execution root)
-  parameter reg_cap_t  MTDC_RESET_CAP      = '{1'b1, 1'b0, 1'b0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TM};   // Tm
-  parameter reg_cap_t MEPC_RESET_CAP       = '{1'b1, 1'b0, 1'b0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TX};   // Tx
-  parameter reg_cap_t  MSCRATCHC_RESET_CAP = '{1'b1, 1'b0, 1'b0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TS};   // Ts
+  parameter reg_cap_t  MTVEC_RESET_CAP     = '{1'b1, 1'b0, 1'b0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TX, 1'b0};   // Tx (execution root)
+  parameter reg_cap_t  MTDC_RESET_CAP      = '{1'b1, 1'b0, 1'b0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TM, 1'b0};   // Tm
+  parameter reg_cap_t MEPC_RESET_CAP       = '{1'b1, 1'b0, 1'b0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TX, 1'b0};   // Tx
+  parameter reg_cap_t  MSCRATCHC_RESET_CAP = '{1'b1, 1'b0, 1'b0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TS, 1'b0};   // Ts
 
 
   parameter logic [PERMS_W-1: 0] PERM_MC_IMSK = (1<<PERM_LD) | (1<<PERM_MC) | (1<<PERM_SD);
@@ -117,7 +113,6 @@ package cheri_pkg;
   parameter logic [PERMS_W-1: 0] PERM_EX_IMSK = (1<<PERM_EX) | (1<<PERM_MC) | (1<<PERM_LD);
   parameter logic [PERMS_W-1: 0] PERM_SE_IMSK = 0;
 
- `ifndef USE_OLD_PERMS
   // expand the perms from memory representation
   function automatic logic [PERMS_W-1:0] expand_perms(logic [CPERMS_W-1:0] cperms);
     logic [PERMS_W-1:0] perms;
@@ -228,102 +223,6 @@ package cheri_pkg;
 
     return cperms_out;
   endfunction
-
-`else
-  // expand the perms from memory representation
-  function automatic logic [PERMS_W-1:0] expand_perms(logic [CPERMS_W-1:0] cperms);
-    logic [PERMS_W-1:0] perms;
-
-    perms = 0;
-
-    if (cperms[5]) begin                      // "memory" type capability
-      perms[PERM_LD] = 1'b1;
-      perms[PERM_GL] = cperms[6];
-      perms[PERM_MC] = cperms[4];
-      perms[PERM_SL] = cperms[3];
-      perms[PERM_LM] = cperms[2];
-      perms[PERM_SD] = cperms[1];
-      perms[PERM_LG] = cperms[0];
-    end else if (cperms[5:4] == 2'b01) begin  // "execute" type capability
-      perms[PERM_EX] = 1'b1;
-      perms[PERM_LD] = 1'b1;
-      perms[PERM_MC] = 1'b1;
-      perms[PERM_GL] = cperms[6];
-      perms[PERM_LM] = cperms[2];
-      perms[PERM_SR] = cperms[1];
-      perms[PERM_LG] = cperms[0];
-      perms[PERM_U2] = cperms[3];
-    end else if (cperms[5:4] == 2'b00) begin  // "execute" type capability
-      perms[PERM_GL] = cperms[6];
-      perms[PERM_U1] = cperms[3];
-      perms[PERM_U0] = cperms[2];
-      perms[PERM_SE] = cperms[1];
-      perms[PERM_US] = cperms[0];
-    end
-
-    return perms;
-  endfunction
-
-  // compress perms field to memory representation
-  function automatic logic [CPERMS_W-1:0] compress_perms(logic [PERMS_W-1:0] perms, logic [1:0] perm_type);
-    logic [CPERMS_W-1:0] cperms;
-
-    if (perm_type[1]) begin                    // "memory" type capabilities
-      cperms[6] = perms[PERM_GL];              // GL 1 MC SL LM SD LG
-      cperms[5] = 1'b1;
-      cperms[4] = perms[PERM_MC];
-      cperms[3] = perms[PERM_SL];
-      cperms[2] = perms[PERM_LM];
-      cperms[1] = perms[PERM_SD];
-      cperms[0] = perms[PERM_LG];
-    end else if (perm_type == 2'b01) begin     // "execute" tyep capabilities
-      cperms[6] = perms[PERM_GL];              // GL 0 1 0 LM SR LG
-      cperms[5] = 1'b0;
-      cperms[4] = 1'b1;
-      // cperms[3] = 1'b0;
-      cperms[3] = perms[PERM_U2];
-      cperms[2] = perms[PERM_LM];
-      cperms[1] = perms[PERM_SR];
-      cperms[0] = perms[PERM_LG];
-    end else begin                             // "sealing" tyep capabilities
-      cperms[6] = perms[PERM_GL];              // GL 0 0 U1 U0 SE US
-      cperms[5] = 1'b0;
-      cperms[4] = 1'b0;
-      cperms[3] = perms[PERM_U1];
-      cperms[2] = perms[PERM_U0];
-      cperms[1] = perms[PERM_SE];
-      cperms[0] = perms[PERM_US];
-    end
-
-    return cperms;
-  endfunction
-
-  // handling cperms in loaded cap based on the loading cap requirment
-  function automatic logic [CPERMS_W-1:0] mask_clcperms (logic [CPERMS_W-1:0] cperms_in, logic [3:0] clrperm,
-                                               logic valid_in, logic sealed);
-    logic [CPERMS_W-1:0] cperms_out;
-    logic [PERMS_W-1:0]  perms_tmp, perms_mask;
-    logic                clr_glg, clr_sdlm;
-
-    clr_glg   = clrperm[0];
-    clr_sdlm  = clrperm[1];
-
-    if (valid_in) begin    // only clear those fields for tagged(valid) caps
-      perms_mask          = {PERMS_W{1'b1}};
-      perms_mask[PERM_GL] = ~clr_glg;
-      perms_mask[PERM_LG] = ~clr_glg;
-      perms_mask[PERM_SD] = ~clr_sdlm | sealed;
-      perms_mask[PERM_LM] = ~clr_sdlm | sealed;
-      perms_tmp  = expand_perms(cperms_in) & perms_mask;
-      cperms_out = compress_perms(perms_tmp, cperms_in[5:4]);
-  //$display("%x %x %x", cperms_in, cperms_out, perms_mask);
-    end else begin
-      cperms_out = cperms_in;
-    end
-
-    return cperms_out;
-  endfunction
-`endif
 
   // caculate length (mem size) in bytes of a capability
   function automatic logic[31:0] get_cap_len (full_cap_t full_cap);
@@ -603,6 +502,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     full_cap.top      = reg_cap.top;
     full_cap.base     = reg_cap.base;
     full_cap.cperms   = reg_cap.cperms;
+    full_cap.rsvd     = reg_cap.rsvd;
 
     full_cap.top33  = get_bound33(reg_cap.top, reg_cap.top_cor, reg_cap.exp, addr);
     full_cap.base32 = get_bound33(reg_cap.base, reg_cap.base_cor, reg_cap.exp, addr);
@@ -628,6 +528,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     reg_cap.top      = full_cap.top;
     reg_cap.base     = full_cap.base;
     reg_cap.cperms   = full_cap.cperms;
+    reg_cap.rsvd     = full_cap.rsvd;
     reg_cap.otype    = full_cap.otype;
 
     return reg_cap;
@@ -655,6 +556,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     full_cap.otype    = pcc_cap.otype;
     full_cap.top33    = pcc_cap.top33;
     full_cap.base32   = pcc_cap.base32;
+    full_cap.rsvd     = 0;
     full_cap.maska    = 0;
     full_cap.rlen     = 0;
 
@@ -684,11 +586,12 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
   // format 0: lsw32 = addr, msw33 = cap fields
   //
   // p’7 otype’3 E’4 B’9 T’9
+  localparam integer RSVD_LO   = 31;
   localparam integer CPERMS_LO = 25;
   localparam integer OTYPE_LO  = 22;
   localparam integer CEXP_LO   = 18;
-  localparam integer BASE_LO   = 9;
-  localparam integer TOP_LO    = 0;
+  localparam integer TOP_LO    = 9;
+  localparam integer BASE_LO   = 0;
 
   function automatic reg_cap_t mem2regcap_fmt0 (logic [32:0] msw, logic [32:0] addr33, logic [3:0] clrperm);
     reg_cap_t regcap;
@@ -715,6 +618,9 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     tmp4            = update_temp_fields(regcap.top, regcap.base, addrmi9);
     regcap.top_cor  = tmp4[3:2];
     regcap.base_cor = tmp4[1:0];
+
+    regcap.rsvd     = msw[RSVD_LO];
+
     return regcap;
 
   endfunction
@@ -730,6 +636,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     msw[BASE_LO+:BOT_W]      = regcap.base  ;
     msw[OTYPE_LO+:OTYPE_W]   = regcap.otype ;
     msw[CPERMS_LO+:CPERMS_W] = regcap.cperms;
+    msw[RSVD_LO]             = regcap.rsvd;
 
     return msw;
 
@@ -757,8 +664,10 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     regcap.otype  = msw[25:23];
     sealed        = (regcap.otype != OTYPE_UNSEALED);
 
-    cperms_mem = {lsw[31], msw[31:26]};
+    // cperms_mem = {lsw[31], msw[31:26]};
+    cperms_mem    = msw[31:26];
     regcap.cperms = mask_clcperms(cperms_mem, clrperm, regcap.valid, sealed);
+    regcap.rsvd   = lsw[31];
 
     tmp32 = update_temp_fields(regcap.top, regcap.base, addrmi9);
     regcap.top_cor  = tmp32[3:2];
@@ -799,7 +708,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     msw[31:26] = reg_cap.cperms[5:0];
     msw[25:23] = reg_cap.otype;
     lsw[32]    = reg_cap.valid ;
-    lsw[31]    = reg_cap.cperms[6];
+    lsw[31]    = reg_cap.rsvd;
     lsw[26:18] = reg_cap.base;
     lsw[17:9]  = reg_cap.top;
 
@@ -833,6 +742,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     vec_out[19+:TOP_W]   = regcap.top   ;
     vec_out[10+:BOT_W]   = regcap.base  ;
     vec_out[7+:OTYPE_W]  = regcap.otype ;
+    vec_out[6+:1]        = regcap.rsvd;
     vec_out[0+:CPERMS_W] = regcap.cperms;
 
     return vec_out;
@@ -849,6 +759,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     regcap.top      = vec_in[19+:TOP_W];   
     regcap.base     = vec_in[10+:BOT_W];   
     regcap.otype    = vec_in[7+:OTYPE_W];  
+    regcap.rsvd     = vec_in[6+:1];  
     regcap.cperms   = vec_in[0+:CPERMS_W]; 
 
     return regcap;

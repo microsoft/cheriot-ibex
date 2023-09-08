@@ -382,27 +382,33 @@ module ibex_decoder import cheri_pkg::*; #(
         data_we_o          = 1'b1;
 
         if (instr[14]) begin
-          data_req_o       = 1'b0;
           illegal_insn     = 1'b1;
         end else begin
-          data_req_o       = 1'b1;     // default to rv32 data store
-          illegal_insn     = 1'b0;
-        end 
-
-        // store size
-        unique case (instr[13:12])
-          2'b00:   data_type_o  = 2'b10; // sb
-          2'b01:   data_type_o  = 2'b01; // sh
-          2'b10:   data_type_o  = 2'b00; // sw
-          2'b11:   begin
-            cheri_cstore_en  = CHERIoTEn; // csc
-            cheri_data_req_o = CHERIoTEn;
-            data_req_o       = 1'b0;
-            data_type_o      = 2'b00;
-            illegal_insn     = ~CHERIoTEn;
-          end
-          default: illegal_insn = 1'b1;    // shoudl never reach here
-        endcase
+          // store size
+          unique case (instr[13:12])
+            2'b00: begin
+              data_req_o   = 1'b1;
+              data_type_o  = 2'b10; // sb
+            end
+            2'b01: begin
+              data_req_o   = 1'b1;
+              data_type_o  = 2'b01; // sh
+            end 
+            2'b10: begin
+              data_req_o   = 1'b1;
+              data_type_o  = 2'b00; // sw
+            end
+            2'b11: begin
+              cheri_cstore_en  = CHERIoTEn; // csc
+              cheri_data_req_o = CHERIoTEn;
+              data_type_o      = 2'b00;
+              illegal_insn     = ~CHERIoTEn;
+            end
+            default: begin
+              illegal_insn = 1'b1;    // shoudl never reach here
+            end
+          endcase
+        end
       end
 
       OPCODE_LOAD: begin

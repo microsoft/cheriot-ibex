@@ -837,6 +837,7 @@ module cheri_ex import cheri_pkg::*; #(
       perm_vio  = (~rf_fullcap_a.valid) || is_cap_sealed(rf_fullcap_a) ||
                   ~rf_fullcap_a.perms[PERM_SD] ||
                   (~rf_fullcap_a.perms[PERM_MC] && rf_fullcap_b.valid) ||
+                  (cs1_addr_plusimm[2:0] != 0) ||
                   (csr_dbg_tclr_fault_i & store_local_vio);
     else if (cheri_operator_i[CSEAL])
       // cs2.addr check : ex: 0-7, non-ex: 9-15

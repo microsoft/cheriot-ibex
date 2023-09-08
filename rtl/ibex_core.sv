@@ -1050,10 +1050,10 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
 
   if (CHERIoTEn & CheriTBRE) begin : g_tbre
     logic        snoop_lsu_req_done;
-    logic [64:0] tbre_ctrl_vec;
+    logic [65:0] tbre_ctrl_vec;
 
     assign snoop_lsu_req_done = lsu_req_done | lsu_req_done_intl;
-    assign tbre_ctrl_vec      = mmreg_corein_i[64:0];
+    assign tbre_ctrl_vec      = mmreg_corein_i[65:0];
 
     cheri_tbre #(
       .FifoSize (4), 

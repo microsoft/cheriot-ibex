@@ -12,7 +12,7 @@ module cheri_tbre #(
   input  logic          rst_ni,
 
   // MMIO register interface 
-  input  logic [64:0]   tbre_ctrl_vec_i,
+  input  logic [65:0]   tbre_ctrl_vec_i,
   output logic          tbre_stat_o,
 
   // LSU req/resp interface (to be multiplixed/qualified)
@@ -47,6 +47,7 @@ module cheri_tbre #(
 
 
   logic        tbre_go;
+  logic        tbre_add1wait;
   logic        load_stop_cond, load_gnt;
   logic        store_gnt;
   logic        store_req_valid;
@@ -78,6 +79,7 @@ module cheri_tbre #(
 
   typedef struct packed {
     logic         go;
+    logic         add1wait;
     logic [31:0]  start_addr;
     logic [31:0]  end_addr;
   } tbre_ctrl_t;
@@ -86,11 +88,12 @@ module cheri_tbre #(
 
   // register interface
   assign tbre_ctrl.go         = tbre_ctrl_vec_i[64];
+  assign tbre_ctrl.add1wait   = tbre_ctrl_vec_i[65];
   assign tbre_ctrl.start_addr = tbre_ctrl_vec_i[31:0];
   assign tbre_ctrl.end_addr   = tbre_ctrl_vec_i[63:32];
   assign tbre_stat_o          = (tbre_fsm_q != TBRE_IDLE);
 
-  assign tbre_lsu_req_o    = ((tbre_sch_q == SCH_LOAD) | ((tbre_sch_q == SCH_STORE) && store_req_valid)) & ~wait_resp_q;
+  assign tbre_lsu_req_o    = ((tbre_sch_q == SCH_LOAD) | ((tbre_sch_q == SCH_STORE) && store_req_valid)) & (~wait_resp_q |  (lsu_tbre_resp_valid_i & ~tbre_ctrl.add1wait));
   assign tbre_lsu_is_cap_o = (tbre_sch_q == SCH_LOAD);
   assign tbre_lsu_we_o     = (tbre_sch_q == SCH_STORE);
   assign tbre_lsu_addr_o   = (tbre_sch_q == SCH_LOAD) ? load_addr + {lsu_tbre_addr_incr_i, 2'b00} : store_addr;
