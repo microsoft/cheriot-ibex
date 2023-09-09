@@ -38,7 +38,6 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   parameter int unsigned DataWidth        = 33,
   parameter int unsigned HeapBase         = 32'h2001_0000,
   parameter int unsigned TSMapBase        = 32'h2004_0000, // 4kB default
-  parameter int unsigned TSMapTop         = 32'h2004_1000,
   parameter int unsigned TSMapSize        = 1024,
   parameter bit          MemCapFmt        = 1'b0,
   parameter bit          CheriPPLBC       = 1'b1,
@@ -177,7 +176,6 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
     .DataWidth        (DataWidth),
     .HeapBase         (HeapBase   ),
     .TSMapBase        (TSMapBase  ),
-    .TSMapTop         (TSMapTop   ),
     .TSMapSize        (TSMapSize),
     .MemCapFmt        (MemCapFmt   ),
     .CheriPPLBC       (CheriPPLBC),
@@ -283,7 +281,6 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
 
 `ifdef RVFI
   ibex_tracer #(
-    .Cheri32E         (1'b0),
     .DataWidth        (DataWidth)
   ) u_ibex_tracer (
     .clk_i,

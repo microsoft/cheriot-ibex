@@ -18,8 +18,7 @@
 `include "prim_assert.sv"
 
 module ibex_compressed_decoder # (
-  parameter bit CHERIoTEn  = 1'b1,
-  parameter bit Cheri32E   = 1'b0
+  parameter bit CHERIoTEn  = 1'b1
 ) (
   input  logic        clk_i,
   input  logic        rst_ni,
@@ -135,10 +134,7 @@ module ibex_compressed_decoder # (
             instr_o = {{15 {instr_i[12]}}, instr_i[6:2], instr_i[11:7], {OPCODE_LUI}};
 
             // c.incaddr16csp -> cincoffsetimm csp, csp, nzimm
-            if (CHERIoTEn & cheri_pmode_i && Cheri32E && (instr_i[11:7] == 5'h02))  begin
-              instr_o = {{3 {instr_i[12]}}, instr_i[4:3], instr_i[5], instr_i[2],
-                         instr_i[6], 4'b0, instr_i[12], 4'h2, 3'b001, instr_i[12], 4'h2, {OPCODE_CHERI}};
-            end else if (CHERIoTEn & cheri_pmode_i &&  (instr_i[11:7] == 5'h02))  begin
+            if (CHERIoTEn & cheri_pmode_i &&  (instr_i[11:7] == 5'h02))  begin
               instr_o = {{3 {instr_i[12]}}, instr_i[4:3], instr_i[5], instr_i[2],
                          instr_i[6], 4'b0, 5'h02, 3'b001,  5'h02, {OPCODE_CHERI}};
             end else if (instr_i[11:7] == 5'h02)  begin
@@ -259,11 +255,7 @@ module ibex_compressed_decoder # (
 
           3'b100: begin
             if (instr_i[12] == 1'b0) begin
-              if (CHERIoTEn & cheri_pmode_i & Cheri32E & instr_i[6]) begin
-                // CHERI: rs2[4] == 1 -> CMOVE
-                // 0x7f 0 0xa 0 cs1 0x0 0 cd 0x5b
-                instr_o = {7'h7f, 5'ha, 1'b0, instr_i[5:2], 4'b0, instr_i[10:7], {OPCODE_CHERI}};
-              end else if (instr_i[6:2] != 5'b0) begin
+              if (instr_i[6:2] != 5'b0) begin
                 // c.mv -> add rd/rs1, x0, rs2
                 // (c.mv hints are translated into an add hint)
                 instr_o = {7'b0, instr_i[6:2], 5'b0, 3'b0, instr_i[11:7], {OPCODE_OP}};

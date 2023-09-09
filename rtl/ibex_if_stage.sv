@@ -374,8 +374,7 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
   // since it does not matter where we decompress instructions, we do it here
   // to ease timing closure
   ibex_compressed_decoder #(
-    .CHERIoTEn (CHERIoTEn),
-    .Cheri32E  (1'b0)
+    .CHERIoTEn (CHERIoTEn)
   ) compressed_decoder_i (
     .clk_i          (clk_i),
     .rst_ni         (rst_ni),

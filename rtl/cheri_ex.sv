@@ -6,8 +6,7 @@ module cheri_ex import cheri_pkg::*; #(
   parameter bit          WritebackStage = 1'b0,
   parameter int unsigned HeapBase,
   parameter int unsigned TSMapBase,
-  parameter int unsigned TSMapTop,
-  parameter bit          Cheri32E   = 1'b0,
+  parameter int unsigned TSMapSize,
   parameter bit          CheriPPLBC = 1'b1,
   parameter bit          CheriSBND2 = 1'b0
 )(
@@ -134,6 +133,8 @@ module cheri_ex import cheri_pkg::*; #(
   // debug feature
   input  logic          csr_dbg_tclr_fault_i
 );
+
+  localparam int unsigned TSMapTop = TSMapBase+TSMapSize*4;
 
   logic          cheri_lsu_req;
   logic          cheri_lsu_we;
@@ -568,12 +569,7 @@ module cheri_ex import cheri_pkg::*; #(
   // RS1/CS1+offset is
   //  keep this separate to help timing on the memory interface
   //   - the starting address for cheri L*/S*.CAP instructions
-  if (Cheri32E) begin
-    assign cs1_imm = (is_cap) ? {{18{cheri_imm14_i[13]}}, cheri_imm14_i} :
-                     (cheri_operator_i[CJALR] ? {{20{cheri_imm12_i[11]}}, cheri_imm12_i} : 0);
-  end else begin
-    assign cs1_imm = (is_cap|cheri_operator_i[CJALR]) ? {{20{cheri_imm12_i[11]}}, cheri_imm12_i} : 0;
-  end
+  assign cs1_imm = (is_cap|cheri_operator_i[CJALR]) ? {{20{cheri_imm12_i[11]}}, cheri_imm12_i} : 0;
 
   assign cs1_addr_plusimm   = rf_rdata_a + cs1_imm;
 
@@ -587,14 +583,11 @@ module cheri_ex import cheri_pkg::*; #(
 
     if      (cheri_operator_i[CJALR])           tmp32a = {{20{cheri_imm12_i[11]}}, cheri_imm12_i};
     else if (cheri_operator_i[CJAL])            tmp32a = {{11{cheri_imm21_i[20]}}, cheri_imm21_i};
-    else if (cheri_operator_i[CAUIPCC])         tmp32a = Cheri32E ? {cheri_imm20_i, 12'h0} :
-                                                         {cheri_imm20_i[19], cheri_imm20_i, 11'h0};
-    else if (cheri_operator_i[CAUICGP])         tmp32a = Cheri32E ? {cheri_imm20_i, 12'h0} :
-                                                         {cheri_imm20_i[19], cheri_imm20_i, 11'h0};
+    else if (cheri_operator_i[CAUIPCC])         tmp32a = {cheri_imm20_i[19], cheri_imm20_i, 11'h0};
+    else if (cheri_operator_i[CAUICGP])         tmp32a = {cheri_imm20_i[19], cheri_imm20_i, 11'h0};
     else if (cheri_operator_i[CSET_ADDR])       tmp32a = rf_rdata_b;
     else if (cheri_operator_i[CINC_ADDR])       tmp32a = rf_rdata_b;
-    else if (cheri_operator_i[CINC_ADDR_IMM])   tmp32a = Cheri32E ? {{18{cheri_imm14_i[13]}}, cheri_imm14_i} :
-                                                         {{20{cheri_imm12_i[11]}}, cheri_imm12_i};
+    else if (cheri_operator_i[CINC_ADDR_IMM])   tmp32a = {{20{cheri_imm12_i[11]}}, cheri_imm12_i};
     else                                        tmp32a = 0;
 
     if      (cheri_operator_i[CJALR])           tmp32b = rf_rdata_a;
@@ -676,7 +669,7 @@ module cheri_ex import cheri_pkg::*; #(
       tfcap3 = rf_fullcap_a;
       tmp_addr  = rf_rdata_a;
     end else if (cheri_operator_i[CSET_BOUNDS_IMM]) begin
-      newlen    = Cheri32E ? cheri_imm14_i : cheri_imm12_i;  // unsigned imm
+      newlen    = cheri_imm12_i;  // unsigned imm
       req_exact = 1'b0;
       tfcap3 = rf_fullcap_a;
       tmp_addr  = rf_rdata_a;

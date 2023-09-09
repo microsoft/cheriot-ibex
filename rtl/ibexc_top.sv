@@ -20,21 +20,26 @@
 module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   parameter int unsigned DmHaltAddr       = 32'h1A110800,
   parameter int unsigned DmExceptionAddr  = 32'h1A110808,
-  parameter bit          SecureIbex       = 1'b0,          // not used
-  parameter bit          WritebackStage   = 1'b1,          // not used
-  parameter int unsigned HeapBase         = 32'h2001_0000,
-  parameter int unsigned TSMapBase        = 32'h2002_f000, // 4kB default
-  parameter int unsigned TSMapTop         = 32'h2003_0000,
-  parameter int unsigned TSMapSize        = 1024,           // 32-bit words
-  parameter bit          MemCapFmt        = 1'b0,
+  parameter bit          DbgTriggerEn     = 1'b1,
+  parameter int unsigned DbgHwBreakNum    = 2,
+  parameter int unsigned MHPMCounterNum   = 0,
+  parameter int unsigned MHPMCounterWidth = 40,
   parameter bit          RV32E            = 1'b0,
+  parameter rv32b_e      RV32B            = RV32BNone,
+  parameter bit          WritebackStage   = 1'b1,
+  parameter bit          BranchPredictor  = 1'b0,
+  parameter bit          SecureIbex       = 1'b0,   // placeholder for TB compatbility
   parameter bit          CHERIoTEn        = 1'b1,
   parameter int unsigned DataWidth        = 33,
+  parameter int unsigned HeapBase         = 32'h2001_0000,
+  parameter int unsigned TSMapBase        = 32'h2002_f000, // 4kB default
+  parameter int unsigned TSMapSize        = 1024,
+  parameter bit          MemCapFmt        = 1'b0,
   parameter bit          CheriPPLBC       = 1'b1,
   parameter bit          CheriSBND2       = 1'b0,
   parameter bit          CheriTBRE        = 1'b0,
-  parameter int unsigned MMRegDinW         = 128,
-  parameter int unsigned MMRegDoutW        = 64
+  parameter int unsigned MMRegDinW        = 128,
+  parameter int unsigned MMRegDoutW       = 64
 ) (
   // Clock and Reset
   input  logic                         clk_i,
@@ -230,9 +235,9 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .PMPEnable        (1'b0),
     .PMPGranularity   (0),
     .PMPNumRegions    (4),
-    .MHPMCounterNum   (0),
-    .MHPMCounterWidth (40),
-    .RV32E            (1'b0),
+    .MHPMCounterNum   (MHPMCounterNum  ),
+    .MHPMCounterWidth (MHPMCounterWidth),
+    .RV32E            (RV32E),
     .RV32M            (RV32MFast),
     .RV32B            (RV32BNone),
     .BranchTargetALU  (1'b1),
@@ -241,10 +246,10 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .BusSizeECC       (BUS_SIZE),
     .TagSizeECC       (IC_TAG_SIZE),
     .LineSizeECC      (IC_LINE_SIZE),
-    .BranchPredictor  (1'b0),
-    .DbgTriggerEn     (1'b1),
-    .DbgHwBreakNum    (2),
-    .WritebackStage   (1'b1),
+    .BranchPredictor  (BranchPredictor),
+    .DbgTriggerEn     (DbgTriggerEn),
+    .DbgHwBreakNum    (DbgHwBreakNum),
+    .WritebackStage   (WritebackStage),
     .ResetAll         (ResetAll),
     .RndCnstLfsrSeed  (RndCnstLfsrSeedDefault),
     .RndCnstLfsrPerm  (RndCnstLfsrPermDefault),
@@ -254,11 +259,10 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .RegFileDataWidth (RegFileDataWidth),
     .DmHaltAddr       (DmHaltAddr),
     .DmExceptionAddr  (DmExceptionAddr),
-    .CHERIoTEn        (1'b1),
-    .DataWidth        (33),
+    .CHERIoTEn        (CHERIoTEn),
+    .DataWidth        (DataWidth),
     .HeapBase         (HeapBase),
     .TSMapBase        (TSMapBase),
-    .TSMapTop         (TSMapTop),
     .TSMapSize        (TSMapSize),
     .MemCapFmt        (MemCapFmt),
     .CheriPPLBC       (CheriPPLBC),

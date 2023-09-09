@@ -40,7 +40,6 @@
  */
 
 module ibex_tracer import cheri_pkg::*; # (
-  parameter bit          Cheri32E = 1'b1,
   parameter int unsigned DataWidth = 32
 ) (
   input logic        clk_i,
@@ -609,10 +608,6 @@ module ibex_tracer import cheri_pkg::*; # (
         data_accessed = RS1;
         decoded_str = $sformatf("%s\tx%0d", mnemonic, rvfi_rs1_addr);
       end
-    end else if (cheri_pmode_i & Cheri32E & rvfi_insn[6] && ~rvfi_insn[12]) begin
-      // CHERI c.cmove
-      data_accessed = CS1 | CD; // RS1 == RD
-      decoded_str = $sformatf("%s\tc%0d,c%0d", "c.CH.cmove", rvfi_rd_addr, rvfi_rs1_addr);
     end else begin
       data_accessed = RS1 | RS2 | RD; // RS1 == RD
       decoded_str = $sformatf("%s\tx%0d,x%0d", mnemonic, rvfi_rd_addr, rvfi_rs2_addr);
@@ -825,10 +820,7 @@ module ibex_tracer import cheri_pkg::*; # (
       return;
     end
 
-    if (cheri_pmode_i & Cheri32E)
-      imm = {rvfi_insn[11], rvfi_insn[19], rvfi_insn[31:20]};
-    else
-      imm = {{3{rvfi_insn[31]}},rvfi_insn[30:20]};
+    imm = {{3{rvfi_insn[31]}},rvfi_insn[30:20]};
 
     if (is_cap) begin
       data_accessed = CD | CS1 | MEMC;
@@ -865,10 +857,7 @@ module ibex_tracer import cheri_pkg::*; # (
       end
     endcase
 
-    if (cheri_pmode_i & Cheri32E)
-      imm = {rvfi_insn[24], rvfi_insn[19], rvfi_insn[31:25], rvfi_insn[11:7]};
-    else
-      imm = {{3{rvfi_insn[31]}},rvfi_insn[30:25], rvfi_insn[11:7]};
+    imm = {{3{rvfi_insn[31]}},rvfi_insn[30:25], rvfi_insn[11:7]};
 
     if (!rvfi_insn[14]) begin
       // regular store
@@ -960,10 +949,7 @@ module ibex_tracer import cheri_pkg::*; # (
     data_accessed =  CS1 | CD;
 
     // cincaddrimm and csetboundsimm
-    if (Cheri32E)
-      imm = {rvfi_insn[11], rvfi_insn[19], rvfi_insn[31:20]};  // extended CHERI RV32e imm14
-    else
-      imm = {{3{rvfi_insn[31]}}, rvfi_insn[30:20]};  // imm not extended
+    imm = {{3{rvfi_insn[31]}}, rvfi_insn[30:20]};  // imm not extended
 
     if (rvfi_insn[14:12] == 3'b001) // cincaddrimm
       decoded_str = $sformatf("%s\tc%0d,c%0d,%0d", mnemonic, rvfi_rd_addr, rvfi_rs1_addr, $signed(imm));
@@ -977,13 +963,8 @@ module ibex_tracer import cheri_pkg::*; # (
 
     // We cannot use rvfi_pc_wdata for conditional jumps.
     imm = rvfi_insn[31:12];
-    if (~Cheri32E | ~rvfi_insn[11] | ~cheri_pmode_i) begin
-      data_accessed =  CD;
-      decoded_str = $sformatf("%s\tc%0d, 0x%0x", "CH.auipcc", rvfi_rd_addr, imm);
-    end else begin
-      data_accessed =  CD | CS1;
-      decoded_str = $sformatf("%s\tc%0d, 0x%0x", "CH.auicgp", rvfi_rd_addr, imm);
-    end
+    data_accessed =  CD;
+    decoded_str = $sformatf("%s\tc%0d, 0x%0x", "CH.auipcc", rvfi_rd_addr, imm);
 
   endfunction
 

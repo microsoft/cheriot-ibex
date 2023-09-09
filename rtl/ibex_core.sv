@@ -52,7 +52,6 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   parameter int unsigned DataWidth         = 33,
   parameter int unsigned HeapBase          ,
   parameter int unsigned TSMapBase         ,
-  parameter int unsigned TSMapTop          ,
   parameter int unsigned TSMapSize         ,
   parameter bit          MemCapFmt         = 1'b0,
   parameter bit          CheriPPLBC        = 1'b1,
@@ -853,8 +852,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .WritebackStage       (WritebackStage),
       .HeapBase             (HeapBase),
       .TSMapBase            (TSMapBase),
-      .TSMapTop             (TSMapTop),
-      .Cheri32E             (1'b0),
+      .TSMapSize            (TSMapSize),
       .CheriPPLBC           (CheriPPLBC),
       .CheriSBND2           (CheriSBND2)
     ) u_cheri_ex (

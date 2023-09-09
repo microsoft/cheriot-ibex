@@ -123,7 +123,7 @@ module ibex_decoder import cheri_pkg::*; #(
 
   import ibex_pkg::*;
 
-  localparam bit Cheri32E = 1'b0;        // experimental encoding 
+  localparam bit CheriLimit16Regs = 1'b0;
 
   logic        illegal_insn;
   logic        illegal_reg_rv32e;
@@ -174,13 +174,8 @@ module ibex_decoder import cheri_pkg::*; #(
   assign imm_u_type_o = { instr[31:12], 12'b0 };
   assign imm_j_type_o = { {12{instr[31]}}, instr[19:12], instr[20], instr[30:21], 1'b0 };
 
-  if (Cheri32E) begin
-    assign imm_i_type_cheri_ext_o = { {19{instr[11]}}, instr[19], instr[31:20] };
-    assign imm_s_type_cheri_ext_o = { {19{instr[24]}}, instr[19], instr[31:25], instr[11:7] };
-  end else begin
-    assign imm_i_type_cheri_ext_o = imm_i_type_o;
-    assign imm_s_type_cheri_ext_o = imm_s_type_o;
-  end
+  assign imm_i_type_cheri_ext_o = imm_i_type_o;
+  assign imm_s_type_cheri_ext_o = imm_s_type_o;
 
   // immediate for CSR manipulation (zero extended)
   assign zimm_rs1_type_o = { 27'b0, instr_rs1 }; // rs1
@@ -219,7 +214,7 @@ module ibex_decoder import cheri_pkg::*; #(
   assign raddr_b = instr_rs2; // rs2
 
   // cheri only uses 16 registers and repurposes the MSB addr bits
-  if (Cheri32E) begin
+  if (CheriLimit16Regs) begin
     assign rf_raddr_a_o = cheri_pmode_i ?{1'b0,  raddr_a[3:0]} : raddr_a;
     assign rf_raddr_b_o = cheri_pmode_i ?{1'b0,  raddr_b[3:0]} : raddr_b;
   end else begin
@@ -229,7 +224,7 @@ module ibex_decoder import cheri_pkg::*; #(
 
   // destination register
   assign instr_rd = instr[11:7];
-  if (Cheri32E) begin
+  if (CheriLimit16Regs) begin
     assign rf_waddr_o   = cheri_pmode_i ? {1'b0, instr_rd[3:0]} : instr_rd; // rd
   end else begin
     assign rf_waddr_o   = instr_rd; // rd
@@ -462,8 +457,7 @@ module ibex_decoder import cheri_pkg::*; #(
 
       OPCODE_AUIPC: begin
         if (CHERIoTEn & cheri_pmode_i) begin
-          cheri_auipcc_en  = ~Cheri32E | ~instr_rd[4];
-          cheri_auicgp_en  = Cheri32E & instr_rd[4];
+          cheri_auipcc_en  = 1'b1;
           illegal_insn     = ~instr_is_legal_cheri;
         end else begin
           // OPCODE_AUIPC: begin  // Add Upper Immediate to PC
@@ -1358,7 +1352,6 @@ module ibex_decoder import cheri_pkg::*; #(
   // cheri decoder
   if (CHERIoTEn) begin : gen_cheri_decoder
     cheri_decoder # (
-      .Cheri32E                (Cheri32E),
       .CheriPPLBC              (CheriPPLBC),
       .CheriSBND2              (CheriSBND2)
     ) u_cheri_decoder (

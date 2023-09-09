@@ -7,7 +7,6 @@
 // a separate decoder PL stage later
 
 module cheri_decoder import cheri_pkg::*; # (
-  parameter bit Cheri32E   = 1'b0,
   parameter bit CheriPPLBC = 1'b1,
   parameter bit CheriSBND2 = 1'b0
 ) (
@@ -99,20 +98,10 @@ module cheri_decoder import cheri_pkg::*; # (
 
   assign cheri_cs2_dec_o  = cheri_operator_o[CCSR_RW] ? imm5_op : 0;
 
-  if (Cheri32E) begin
-    assign cheri_imm12_o    = (cheri_operator_o[CJALR]) ?
-                              {func7_op, imm5_op} : 0;
-    assign cheri_imm14_o    = (cheri_operator_o[CSET_BOUNDS_IMM] | cheri_operator_o[CINC_ADDR_IMM] |
-                               cheri_operator_o[CLOAD_CAP]) ?
-                              {instr_rdata_i[11], instr_rdata_i[19], func7_op, imm5_op} :
-                               (cheri_operator_o[CSTORE_CAP] ?
-                                {instr_rdata_i[24], instr_rdata_i[19], func7_op, rd_op} : 0);
-  end else begin
-    assign cheri_imm12_o    = (cheri_operator_o[CJALR]|cheri_operator_o[CSET_BOUNDS_IMM]|
-                               cheri_operator_o[CINC_ADDR_IMM]|cheri_operator_o[CLOAD_CAP]) ?
-                              {func7_op, imm5_op}:(cheri_operator_o[CSTORE_CAP]?{func7_op, rd_op}:0);
-    assign cheri_imm14_o    = 14'h0;
-  end
+  assign cheri_imm12_o    = (cheri_operator_o[CJALR]|cheri_operator_o[CSET_BOUNDS_IMM]|
+                             cheri_operator_o[CINC_ADDR_IMM]|cheri_operator_o[CLOAD_CAP]) ?
+                            {func7_op, imm5_op}:(cheri_operator_o[CSTORE_CAP]?{func7_op, rd_op}:0);
+  assign cheri_imm14_o    = 14'h0;
 
   assign cheri_imm20_o    = (cheri_operator_o[CAUIPCC]|cheri_operator_o[CAUICGP])  ? instr_rdata_i[31:12] : 0;
 

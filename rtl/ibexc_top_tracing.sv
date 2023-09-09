@@ -11,41 +11,14 @@
  */
 
 module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
-  // parameter bit          PMPEnable        = 1'b0,
-  // parameter int unsigned PMPGranularity   = 0,
-  // parameter int unsigned PMPNumRegions    = 4,
-  // parameter int unsigned MHPMCounterNum   = 0,
-  // parameter int unsigned MHPMCounterWidth = 40,
-  // parameter bit          RV32E            = 1'b0,
-  // parameter rv32m_e      RV32M            = RV32MFast,
-  // parameter rv32b_e      RV32B            = RV32BNone,
-  // parameter regfile_e    RegFile          = RegFileFF,
-  // parameter bit          BranchTargetALU  = 1'b0,
-  // parameter bit          WritebackStage   = 1'b0,
-  // parameter bit          ICache           = 1'b0,
-  // parameter bit          ICacheECC        = 1'b0,
-  // parameter bit          BranchPredictor  = 1'b0,
-  // parameter bit          DbgTriggerEn     = 1'b0,
-  // parameter int unsigned DbgHwBreakNum    = 1,
-  // parameter bit          SecureIbex       = 1'b0,
-  // parameter bit          ICacheScramble   = 1'b0,
-  // parameter lfsr_seed_t  RndCnstLfsrSeed  = RndCnstLfsrSeedDefault,
-  // parameter lfsr_perm_t  RndCnstLfsrPerm  = RndCnstLfsrPermDefault,
-  parameter bit          HWTraceEn        = 1'b0,
   parameter int unsigned DmHaltAddr       = 32'h1A110800,
   parameter int unsigned DmExceptionAddr  = 32'h1A110808,
   parameter int unsigned HeapBase         = 32'h2001_0000,
   parameter int unsigned TSMapBase        = 32'h2004_0000, // 4kB default
-  parameter int unsigned TSMapTop         = 32'h2004_1000,
-  parameter int unsigned TSMapSize        = 1024,
-  parameter bit          CHERIoTEn        = 1'b1,
-  parameter int unsigned DataWidth        = 33,
-  parameter bit          MemCapFmt        = 1'b0,
-  parameter bit          CheriPPLBC       = 1'b1,
-  parameter bit          CheriSBND2       = 1'b0,
-  parameter bit          CheriTBRE        = 1'b0,
-  parameter int unsigned MMRegDinW         = 128,
-  parameter int unsigned MMRegDoutW        = 64
+  parameter int unsigned TSMapSize        = 1024,          // in words
+  parameter int unsigned MMRegDinW        = 128,
+  parameter int unsigned MMRegDoutW       = 64,
+  parameter int unsigned DataWidth        = 33      // this enables testbench to use defparam to override
 ) (
   // Clock and Reset
   input  logic                         clk_i,
@@ -144,10 +117,6 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   logic        rvfi_mem_is_cap;
   reg_cap_t     rvfi_mem_rcap;
   reg_cap_t     rvfi_mem_wcap;
-  logic [31:0] rvfi_mem2_addr;
-  logic        rvfi_mem2_we;
-  logic [65:0] rvfi_mem2_rdata;
-  logic [65:0] rvfi_mem2_wdata;
   logic [31:0] rvfi_ext_mip;
   logic        rvfi_ext_nmi;
   logic        rvfi_ext_debug_req;
@@ -166,17 +135,27 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   assign unused_rvfi_ext_mcycle = rvfi_ext_mcycle;
 
   ibex_top #(
+    .DmHaltAddr       (DmHaltAddr       ),
+    .DmExceptionAddr  (DmExceptionAddr  ),
+    .MHPMCounterNum   (13  ),
+    .MHPMCounterWidth (40),
+    .DbgTriggerEn     (1'b1),
+    .DbgHwBreakNum    (4),
     .RV32E            (1'b0),
-    .DmHaltAddr       ( DmHaltAddr       ),
-    .DmExceptionAddr  ( DmExceptionAddr  ),
-    .HeapBase         ( HeapBase   ),
-    .TSMapBase        ( TSMapBase  ),
-    .TSMapTop         ( TSMapTop   ),
-    .TSMapSize        ( TSMapSize),
-    .MemCapFmt        (MemCapFmt   ),
-    .CheriPPLBC       (CheriPPLBC),
-    .CheriSBND2       (CheriSBND2),
-    .CheriTBRE        (CheriTBRE)
+    .RV32B            (RV32BFull),
+    .WritebackStage   (1'b1),
+    .BranchPredictor  (1'b0),
+    .CHERIoTEn        (1'b1),
+    .DataWidth        (DataWidth),
+    .HeapBase         (HeapBase ),
+    .TSMapBase        (TSMapBase),
+    .TSMapSize        (TSMapSize),
+    .MemCapFmt        (1'b0),
+    .CheriPPLBC       (1'b1),
+    .CheriSBND2       (1'b0),
+    .CheriTBRE        (1'b1),
+    .MMRegDinW        (MMRegDinW),
+    .MMRegDoutW       (MMRegDoutW)
   ) u_ibex_top (
     .clk_i,
     .rst_ni,
@@ -282,7 +261,6 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
 
 `ifdef RVFI
   ibex_tracer #(
-    .Cheri32E         (1'b0),
     .DataWidth        (DataWidth)
   ) u_ibex_tracer (
     .clk_i,
