@@ -433,7 +433,7 @@ module cheri_ex import cheri_pkg::*; #(
         end
       cheri_operator_i[CIS_EQUAL]:       // rd <-- (cs1 == cs2)
         begin
-          result_data_o       = is_equal(rf_fullcap_a, rf_fullcap_b) && (rf_rdata_a == rf_rdata_b);
+          result_data_o       = is_equal(rf_fullcap_a, rf_fullcap_b, rf_rdata_a, rf_rdata_b);
           result_cap_o        = NULL_REG_CAP;
           cheri_rf_we_raw     = 1'b1;
           cheri_ex_valid_raw  = 1'b1;

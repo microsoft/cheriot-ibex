@@ -766,12 +766,14 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
   endfunction
 
   // test whether 2 caps are equal
-  function automatic logic is_equal (full_cap_t cap_a, full_cap_t cap_b);
+  function automatic logic is_equal (full_cap_t cap_a, full_cap_t cap_b, 
+                                     logic [31:0] addra, logic[31:0] addrb);
 
     is_equal =  (cap_a.valid  == cap_b.valid) &&
-                (cap_a.top33  == cap_b.top33) && (cap_a.base32 == cap_b.base32) &&
-                (cap_a.perms  == cap_b.perms) &&
-                (cap_a.exp    == cap_b.exp) && (cap_a.otype  == cap_b.otype);
+                (cap_a.top  == cap_b.top) && (cap_a.base == cap_b.base) &&
+                (cap_a.cperms  == cap_b.cperms) && (cap_a.rsvd == cap_b.rsvd) && 
+                (cap_a.exp    == cap_b.exp) && (cap_a.otype  == cap_b.otype) && 
+                (addra == addrb);
     return is_equal;
 
   endfunction
