@@ -8,7 +8,8 @@ module cheri_regfile import cheri_pkg::*; #(
   parameter int unsigned NCAPS      = 32,
   parameter bit          RegFileECC = 1'b0,
   parameter int unsigned DataWidth  = 32,
-  parameter bit          CheriPPLBC = 1'b0
+  parameter bit          CheriPPLBC = 1'b0,
+  parameter bit          TRVKBypass = 1'b1
 ) (
    // Clock and Reset
   input  logic                  clk_i,
@@ -55,18 +56,19 @@ module cheri_regfile import cheri_pkg::*; #(
   logic [31:0] rf_reg   [NREGS-1:0];
   logic [31:0] rf_reg_q [NREGS-1:1];
   
-  logic [6:0] rf_reg_par   [NREGS-1:0];
-  logic [6:0] rf_reg_par_q [NREGS-1:0];
+  logic [6:0]  rf_reg_par   [NREGS-1:0];
+  logic [6:0]  rf_reg_par_q [NREGS-1:0];
   
-  
-  reg_cap_t             rf_cap   [NCAPS-1:0] ;
-  reg_cap_t             rf_cap_q [NCAPS-1:1] ;
+  reg_cap_t         rf_cap   [NCAPS-1:0];
+  reg_cap_t         rf_cap_q [NCAPS-1:1];
 
-  logic [NREGS-1:1]     we_a_dec;
-  logic [NREGS-1:1]     trvk_dec, trsv_dec;
-  logic [31:0]          reg_rdy_vec;
+  reg_cap_t         rcap_a, rcap_b;
+
+  logic [NREGS-1:1] we_a_dec;
+  logic [NREGS-1:1] trvk_dec, trsv_dec;
+  logic [31:0]      reg_rdy_vec;
   
-  logic                 pplbc_alert;
+  logic             pplbc_alert;
   
   always_comb begin : we_a_decoder
     for (int unsigned i = 1; i < NREGS; i++) begin
@@ -127,7 +129,7 @@ module cheri_regfile import cheri_pkg::*; #(
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
         rf_cap_q[i] <= NULL_REG_CAP;
-      end else if (CheriPPLBC & trvk_dec[i] & trvk_en_i & trvk_clrtag_i ) begin
+      end else if (CheriPPLBC & trvk_dec[i] & trvk_en_i & trvk_clrtag_i) begin
         // prioritize revocation (later in pipeline)
         rf_cap_q[i].valid <= 1'b0;
       end else if (we_a_dec[i]) begin
@@ -141,10 +143,19 @@ module cheri_regfile import cheri_pkg::*; #(
     assign rf_cap[i] = rf_cap_q[i];
   end
 
-  assign rcap_a_o = (raddr_a_i < NCAPS) ? rf_cap[raddr_a_i] : NULL_REG_CAP;
-  assign rcap_b_o = (raddr_b_i < NCAPS) ? rf_cap[raddr_b_i] : NULL_REG_CAP;
+  assign rcap_a = (raddr_a_i < NCAPS) ? rf_cap[raddr_a_i] : NULL_REG_CAP;
+  assign rcap_b = (raddr_b_i < NCAPS) ? rf_cap[raddr_b_i] : NULL_REG_CAP;
 
   if (CheriPPLBC) begin : g_regrdy
+
+// QQQ_09112023 (contention when TRVKBypass=1)
+//   Note, when 33-bit memory bus is used, trsv and trvk should NEVER point to the same register
+//   -- trsv_en and trvk_en could active in the same cycle but should be pointing to different registers
+//   -- since trsv_en can only be asserted by CLC&lsu_req_done. Even in trvk_bypass case, trsv can only 
+//   -- happen 1 cycle later than trvk_en (to the same register)
+//   However when 65-bit memory is used, trsv and trvk can point to the same register at the same time
+//   -- here lsu_req/req_done happens at the same time as the bypassed TRVK uninstall the instruction.
+//   -- to resolve the contention we need to prioritize trsv over trvk when updating the flopped reg_rdy_vec
     
     for (genvar i=0; i<32; i++) begin
       if ((i == 0) || (i >= NCAPS)) begin
@@ -153,10 +164,10 @@ module cheri_regfile import cheri_pkg::*; #(
         always_ff @(posedge clk_i or negedge rst_ni) begin
           if (!rst_ni)
             reg_rdy_vec[i] <= 1'b1;
+          else if (trsv_dec[i] & trsv_en_i)   // prioritize trsv to address the corner case in the QQQ_09112023
+            reg_rdy_vec[i] <= 1'b0;
           else if (trvk_dec[i] & trvk_en_i)
             reg_rdy_vec[i] <= 1'b1;
-          else if (trsv_dec[i] & trsv_en_i)
-          reg_rdy_vec[i] <= 1'b0;
         end  // always_ff
       end    // if 
     end      // for
@@ -166,7 +177,7 @@ module cheri_regfile import cheri_pkg::*; #(
       logic  [4:0] trvk_addr_q;
       logic        trvk_en_q;
       logic        trvk_clrtag_q;
-      logic  [6:0] trvk_par_q;     // make sure this is included in lockstep compare QQQ     
+      logic  [6:0] trvk_par_q;     // make sure this is included in lockstep compare QQQ
       logic  [4:0] trsv_addr_q;
       logic        trsv_en_q;
       logic  [6:0] trsv_par_q;
@@ -212,10 +223,10 @@ module cheri_regfile import cheri_pkg::*; #(
           always_ff @(posedge clk_i or negedge par_rst_ni) begin
             if (!par_rst_ni)
               reg_rdy_vec_shdw[i] <= 1'b1;
-            else if (trvk_dec_shdw[i] & trvk_en_q)
-              reg_rdy_vec_shdw[i] <= 1'b1;
             else if (trsv_dec_shdw[i] & trsv_en_q)
             reg_rdy_vec_shdw[i] <= 1'b0;
+            else if (trvk_dec_shdw[i] & trvk_en_q)
+              reg_rdy_vec_shdw[i] <= 1'b1;
           end  // always_ff
         end
       end
@@ -321,7 +332,27 @@ module cheri_regfile import cheri_pkg::*; #(
     assign reg_rdbk_err = 1'b0;
   end 
   
-  assign reg_rdy_o = reg_rdy_vec;
   assign alert_o   = pplbc_alert | reg_rdbk_err;
+
+  if (TRVKBypass) begin
+    // Bypass the registier update cycle and directly update the read ports
+    always_comb begin
+      reg_rdy_o = reg_rdy_vec | ({NREGS{trvk_en_i}} & {trvk_dec, 1'b0});
+      
+      rcap_a_o = rcap_a;
+      if (trvk_en_i && trvk_clrtag_i && (trvk_addr_i == raddr_a_i))
+        rcap_a_o.valid = 1'b0;
+
+      rcap_b_o = rcap_b;
+      if (trvk_en_i && trvk_clrtag_i && (trvk_addr_i == raddr_b_i))
+        rcap_b_o.valid = 1'b0;
+    end
+  end else begin
+    assign reg_rdy_o = reg_rdy_vec;
+    assign rcap_a_o  = rcap_a;
+    assign rcap_b_o  = rcap_b;
+  end
+   
+
 
 endmodule
