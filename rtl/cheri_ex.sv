@@ -526,8 +526,10 @@ module cheri_ex import cheri_pkg::*; #(
 
           cheri_wb_err_raw     = instr_fault;
           cheri_ex_err_raw     = 1'b0;
-          csr_set_mie_raw      = ~instr_fault && (rf_fullcap_a.otype == OTYPE_SENTRY_IE);
-          csr_clr_mie_raw      = ~instr_fault && (rf_fullcap_a.otype == OTYPE_SENTRY_ID);
+          csr_set_mie_raw      = ~instr_fault && cheri_operator_i[CJALR] && 
+                                 (rf_fullcap_a.otype == OTYPE_SENTRY_IE);
+          csr_clr_mie_raw      = ~instr_fault && (cheri_operator_i[CJALR] && 
+                                 rf_fullcap_a.otype == OTYPE_SENTRY_ID);
           cheri_ex_valid_raw   = 1'b1;
         end
       default:;
