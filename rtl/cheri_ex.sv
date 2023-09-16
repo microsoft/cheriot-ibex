@@ -40,7 +40,7 @@ module cheri_ex import cheri_pkg::*; #(
   input  logic [31:0]   pc_id_i,
 
   // use branch_req_o also to update pcc cap
-  output logic          branch_req_o,
+  output logic          branch_req_o,          // update PCC (goes to cs_registers)
   output logic          branch_req_spec_o,     // speculative branch request (go to IF)
   output logic [31:0]   branch_target_o,
 
@@ -490,8 +490,15 @@ module cheri_ex import cheri_pkg::*; #(
           csr_op_o             = CHERI_CSR_RW;
           csr_op_en_raw        = ~perm_vio && (rf_raddr_a_i != 0);
           csr_addr_o           = cheri_cs2_dec_i;
-          csr_wdata_o          = rf_rdata_a;
-          csr_wcap_o           = rf_rcap_a;
+
+          if ((cheri_cs2_dec_i == 28) || (cheri_cs2_dec_i == 31)) begin   // MTVEC/MTCC or MEPCC 
+            csr_wdata_o          = {rf_rdata_a[31:1], 1'b0};          
+            csr_wcap_o           = full2regcap(setaddr1_outcap);
+          end else begin
+            csr_wdata_o          = rf_rdata_a;          
+            csr_wcap_o           = rf_rcap_a;
+          end 
+
           result_data_o        = csr_rdata_i;
           result_cap_o         = csr_rcap_i;
           cheri_rf_we_raw      = ~perm_vio;
@@ -521,15 +528,15 @@ module cheri_ex import cheri_pkg::*; #(
           instr_fault           = ~pcc_fullcap_o.valid | perm_vio;
 
           cheri_rf_we_raw      = ~instr_fault;    // err -> wb exception
-          branch_req_raw       = ~instr_fault;    // update PCC in CSR
+          branch_req_raw       = ~instr_fault & cheri_operator_i[CJALR];    // update PCC in CSR
           branch_req_spec_raw  = 1'b1;
 
           cheri_wb_err_raw     = instr_fault;
           cheri_ex_err_raw     = 1'b0;
           csr_set_mie_raw      = ~instr_fault && cheri_operator_i[CJALR] && 
                                  (rf_fullcap_a.otype == OTYPE_SENTRY_IE);
-          csr_clr_mie_raw      = ~instr_fault && (cheri_operator_i[CJALR] && 
-                                 rf_fullcap_a.otype == OTYPE_SENTRY_ID);
+          csr_clr_mie_raw      = ~instr_fault && cheri_operator_i[CJALR] && 
+                                 (rf_fullcap_a.otype == OTYPE_SENTRY_ID);
           cheri_ex_valid_raw   = 1'b1;
         end
       default:;
@@ -623,6 +630,9 @@ module cheri_ex import cheri_pkg::*; #(
                  cheri_operator_i[CINC_ADDR_IMM] | cheri_operator_i[CAUICGP]) begin
       tfcap1  = rf_fullcap_a;
       taddr1  = addr_result;
+    end else if (cheri_operator_i[CCSR_RW]) begin
+      tfcap1  = rf_fullcap_a;
+      taddr1  = csr_wdata_o;
     end else begin
       tfcap1  = NULL_FULL_CAP;
       taddr1  = 32'h0;
@@ -732,16 +742,21 @@ module cheri_ex import cheri_pkg::*; #(
     logic [31:0] base_bound;
     logic        top_vio, base_vio;
     logic [32:0] top_chkaddr, base_chkaddr;
+    logic        top_size_ok;
 
     // generate the address used to check top bound violation
     base_chkaddr = rv32_lsu_addr_i;
 
-    if (rv32_lsu_type_i == 2'b00)
-      top_offset = 32'h4;
-    else if (rv32_lsu_type_i == 2'b01)
-      top_offset = 32'h2;
-    else
+    if (rv32_lsu_type_i == 2'b00) begin
+      top_offset  = 32'h4;
+      top_size_ok = |rf_fullcap_a.top33[31:2];     // at least 4 bytes
+    end else if (rv32_lsu_type_i == 2'b01) begin
+      top_offset  = 32'h2;
+      top_size_ok = |rf_fullcap_a.top33[31:1];
+    end else begin
       top_offset = 32'h1;
+      top_size_ok = |rf_fullcap_a.top33[31:0];
+    end
 
     //top_chkaddr = base_chkaddr + top_offset;
     top_chkaddr = base_chkaddr;
@@ -750,7 +765,7 @@ module cheri_ex import cheri_pkg::*; #(
     top_bound  = rf_fullcap_a.top33 - top_offset;
     base_bound = rf_fullcap_a.base32;
 
-    top_vio  = (top_chkaddr  > top_bound);
+    top_vio  = (top_chkaddr  > top_bound) && top_size_ok;
     base_vio = (base_chkaddr < base_bound);
 
     // timing critical (data_req_o) path - don't add any unnecssary terms.

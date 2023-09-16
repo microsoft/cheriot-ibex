@@ -1724,8 +1724,8 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   //////////////////////
 
   if (CHERIoTEn) begin: gen_scr
-    pcc_cap_t    pcc_cap_q, pcc_cap_d;
-
+    pcc_cap_t     pcc_cap_q, pcc_cap_d;
+    reg_cap_t     pcc_exc_reg_cap;
     reg_cap_t     mtdc_cap;
     logic [31:0]  mtdc_data;
     reg_cap_t     mscratchc_cap;
@@ -1785,7 +1785,8 @@ module ibex_cs_registers import cheri_pkg::*;  #(
       endcase
     end
 
-    assign pcc_fullcap_o  = pcc2fullcap(pcc_cap_q, pc_id_i);
+    assign pcc_fullcap_o   = pcc2fullcap(pcc_cap_q);
+    assign pcc_exc_reg_cap = full2regcap(set_address(pcc_fullcap_o, exception_pc, 0, 0));
 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
@@ -1800,12 +1801,29 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     //     CHER CJALR or exceptions. Legacy RV32 jumps/branches can change PC but not the PCC
     //     bounds/perms, so they are still limited by the orginal bounds in IF stage checking
     always_comb begin
+      full_cap_t   tf_cap;
+      reg_cap_t    tr_cap;
+      logic [31:0] tr_addr;
+     
       if (csr_save_cause_i) begin              // Exception cases
-        pcc_cap_d = full2pcap(reg2fullcap(mtvec_cap, mtvec_q));
+        tr_cap  = mtvec_cap;
+        tr_addr = mtvec_q;
       end else if (csr_restore_mret_i) begin
-        pcc_cap_d = full2pcap(reg2fullcap(mepc_cap, mepc_q));
+        tr_cap  = mepc_cap;
+        tr_addr = mepc_q;
       end else if (csr_restore_dret_i & debug_mode_i) begin
-        pcc_cap_d = full2pcap(reg2fullcap(depc_cap, depc_q));
+        tr_cap  = depc_cap;
+        tr_addr = depc_q;
+      end else begin
+        tr_cap  = NULL_REG_CAP;
+        tr_addr = 32'h0;
+      end
+
+      tf_cap = reg2fullcap(tr_cap, tr_addr);
+
+      // Exception cases
+      if (csr_save_cause_i | csr_restore_mret_i | (csr_restore_dret_i & debug_mode_i)) begin 
+        pcc_cap_d = full2pcap(tf_cap);
       end else if (cheri_branch_req_i) begin
         pcc_cap_d = full2pcap(pcc_fullcap_i);
       end else begin
@@ -1833,7 +1851,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
       if (!rst_ni)
         mepc_cap <= MEPC_RESET_CAP;
       else if (csr_save_cause_i & (~debug_csr_save_i) & (~debug_mode_i))
-        mepc_cap <= full2regcap(set_address(pcc2fullcap(pcc_cap_q, exception_pc), exception_pc, 0, 0));
+        mepc_cap <= pcc_exc_reg_cap;
       else if (cheri_pmode_i & mepc_en)            // legacy cssrw; NMI recover
         mepc_cap <= NULL_REG_CAP;
       else if (mepc_en_cheri)
@@ -1873,7 +1891,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
       if (!rst_ni)
         depc_cap <= NULL_REG_CAP;
       else if (csr_save_cause_i & debug_csr_save_i)
-        depc_cap <= full2regcap(pcc2fullcap(pcc_cap_q, exception_pc));
+        depc_cap <= pcc_exc_reg_cap;
       else if (depc_en_cheri)
         depc_cap <= cheri_csr_wcap_i;
     end

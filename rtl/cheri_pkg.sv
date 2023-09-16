@@ -537,18 +537,19 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
   // pcc_cap expansion (to full_cap).
   //  -- pcc is a special case since the address (PC) moves around..
   //     so have to adjust correction factors and validate bounds here
-  function automatic full_cap_t pcc2fullcap (pcc_cap_t pcc_cap, logic [31:0] pc_addr);
-    logic [3:0] tmp4;
+  // function automatic full_cap_t pcc2fullcap (pcc_cap_t pcc_cap, logic [31:0] pc_addr);
+  function automatic full_cap_t pcc2fullcap (pcc_cap_t pcc_cap);
+    // logic [3:0] tmp4;
     full_cap_t full_cap;
-    logic [BOT_W-1:0] pcmi9;
+    // logic [BOT_W-1:0] pcmi9;
 
-    pcmi9             = pc_addr >> pcc_cap.exp;
-    tmp4              = update_temp_fields(pcc_cap.top, pcc_cap.base, pcmi9);
+    // pcmi9             = pc_addr >> pcc_cap.exp;
+    // tmp4              = update_temp_fields(pcc_cap.top, pcc_cap.base, pcmi9);
     full_cap          = NULL_REG_CAP;
     full_cap.valid    = pcc_cap.valid;
     full_cap.perms    = pcc_cap.perms;
-    full_cap.top_cor  = tmp4[3:2];
-    full_cap.base_cor = tmp4[1:0];
+    full_cap.top_cor  = 0;
+    full_cap.base_cor = 0;
     full_cap.exp      = pcc_cap.exp;
     full_cap.top      = pcc_cap.top;
     full_cap.base     = pcc_cap.base;
