@@ -131,7 +131,7 @@ module ibex_load_store_unit import cheri_pkg::*; #(
   logic         cur_req_is_tbre, req_is_tbre_q;
   logic         resp_is_tbre_q;
   logic         tbre_req_good;
-  logic         outstanding_resp_q, tbre_resp_wait;
+  logic         outstanding_resp_q, resp_wait;
   logic         lsu_resp_valid;
   logic         lsu_go;
 
@@ -434,7 +434,7 @@ module ibex_load_store_unit import cheri_pkg::*; #(
         pmp_err_d   = 1'b0;
         cheri_err_d = 1'b0;
 
-        if (CHERIoTEn & lsu_req_i & lsu_cheri_err_i & ~tbre_resp_wait) begin
+        if (CHERIoTEn & lsu_req_i & lsu_cheri_err_i & ~resp_wait) begin
           // cheri access error case, don't issue data_req but send error response back to WB stage
           data_req_o   = 1'b0;          
           cheri_err_d  = 1'b1;
@@ -445,7 +445,7 @@ module ibex_load_store_unit import cheri_pkg::*; #(
           perf_load_o  = 1'b0;
           lsu_go       = 1'b1;         // decision to move forward with a request
           ls_fsm_ns    = IDLE;
-        end else if (CHERIoTEn & (lsu_req_i | tbre_req_good) & lsu_is_cap_i & ~tbre_resp_wait) begin
+        end else if (CHERIoTEn & (lsu_req_i | tbre_req_good) & lsu_is_cap_i & ~resp_wait) begin
           // normal cap access case
           data_req_o   = 1'b1;
           cheri_err_d  = 1'b0;
@@ -462,7 +462,7 @@ module ibex_load_store_unit import cheri_pkg::*; #(
           end else begin
             ls_fsm_ns           = CTX_WAIT_GNT1;
           end
-        end else if ((lsu_req_i | tbre_req_good) & ~tbre_resp_wait) begin   
+        end else if ((lsu_req_i | tbre_req_good) & ~resp_wait) begin   
           // normal data access case
           data_req_o   = 1'b1;
           cheri_err_d  = 1'b0;
@@ -605,7 +605,8 @@ module ibex_load_store_unit import cheri_pkg::*; #(
   end
 
   assign tbre_req_good  = CHERIoTEn & CheriTBRE & tbre_lsu_req_i & ~cpu_lsu_dec_i;
-  assign tbre_resp_wait = CHERIoTEn & CheriTBRE & outstanding_resp_q & ~lsu_resp_valid;
+
+  assign resp_wait = CHERIoTEn & CheriTBRE & outstanding_resp_q & ~lsu_resp_valid;
 
   // we assume ctrl will be held till req_done asserted 
   // (once req captured in IDLE, it can be deasserted)
@@ -616,7 +617,7 @@ module ibex_load_store_unit import cheri_pkg::*; #(
   assign lsu_req_done_intl_o = lsu_req_done & (lsu_is_intl_i)  & (~cur_req_is_tbre);
   assign lsu_tbre_req_done_o = lsu_req_done & cur_req_is_tbre;
 
-  assign cur_req_is_tbre = CHERIoTEn & CheriTBRE & ((ls_fsm_cs == IDLE) ? (tbre_req_good & ~tbre_resp_wait) : req_is_tbre_q);
+  assign cur_req_is_tbre = CHERIoTEn & CheriTBRE & ((ls_fsm_cs == IDLE) ? (tbre_req_good & ~resp_wait) : req_is_tbre_q);
 
   // registers for FSM
   always_ff @(posedge clk_i or negedge rst_ni) begin

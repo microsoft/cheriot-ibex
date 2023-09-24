@@ -7,8 +7,9 @@ module cheri_ex import cheri_pkg::*; #(
   parameter int unsigned HeapBase,
   parameter int unsigned TSMapBase,
   parameter int unsigned TSMapSize,
-  parameter bit          CheriPPLBC = 1'b1,
-  parameter bit          CheriSBND2 = 1'b0
+  parameter bit          CheriPPLBC  = 1'b1,
+  parameter bit          CheriSBND2  = 1'b0,
+  parameter bit          CheriStkClr = 1'b1
 )(
    // Clock and Reset
   input  logic          clk_i,
@@ -129,6 +130,12 @@ module cheri_ex import cheri_pkg::*; #(
   input  logic [31:0]   csr_mshwmb_i,
   output logic          csr_mshwm_set_o,
   output logic [31:0]   csr_mshwm_new_o,
+  
+  // stack fast clearing control signals
+  input  logic          stkclr_active_i,
+  input  logic          stkclr_abort_i,
+  input  logic [31:0]   stkclr_ptr_i,
+  input  logic [31:0]   stkclr_base_i,
 
   // debug feature
   input  logic          csr_dbg_tclr_fault_i
@@ -198,6 +205,10 @@ module cheri_ex import cheri_pkg::*; #(
   logic          set_bounds_done;
 
   logic   [4:0]  cheri_wb_err_cause, cheri_ex_err_cause, cheri_lsu_err_cause, rv32_lsu_err_cause;
+  logic          cpu_stkclr_stall, cpu_stkclr_err;
+  logic   [31:0] cpu_lsu_addr;
+  logic   [32:0] cpu_lsu_wdata;
+  logic          cpu_lsu_cheri_err, cpu_lsu_is_cap;
 
   // data forwarding for CHERI instructions
   //  - note address 0 is a read-only location per RISC-V
@@ -1082,19 +1093,29 @@ module cheri_ex import cheri_pkg::*; #(
   // muxing in cheri LSU signals with the rv32 signals
   //
 
-  assign lsu_req_o       = instr_is_cheri_i ? cheri_lsu_req     : rv32_lsu_req_i;
-  assign cpu_lsu_dec_o   = (instr_is_cheri_i && is_cap) | instr_is_rv32lsu_i;
+  assign lsu_req_o         = ~cpu_stkclr_stall & (instr_is_cheri_i ? cheri_lsu_req : rv32_lsu_req_i);
+
+  // cpu_lsu_dec_o is meant to be an early signal to help LSU to generate mux selects for 
+  // address/ctrl/wdata (eventually to help timing on those output ports)
+  assign cpu_lsu_dec_o     = ~cpu_stkclr_stall & ((instr_is_cheri_i && is_cap) | instr_is_rv32lsu_i);  
+
+  assign cpu_lsu_cheri_err = cpu_stkclr_err | (instr_is_cheri_i ? cheri_lsu_err : rv32_lsu_err); 
+  assign cpu_lsu_addr      = instr_is_cheri_i ? cheri_lsu_addr : rv32_lsu_addr_i;
+  assign cpu_lsu_we        = instr_is_cheri_i ? cheri_lsu_we : rv32_lsu_we_i;
+  assign cpu_lsu_wdata     = instr_is_cheri_i ? cheri_lsu_wdata : {1'b0, rv32_lsu_wdata_i};
+  assign cpu_lsu_is_cap    = instr_is_cheri_i & cheri_lsu_is_cap;
 
   // muxing tbre ctrl inputs and CPU ctrl inputs
-  assign lsu_cheri_err_o   = ~lsu_tbre_sel_i ? (instr_is_cheri_i ? cheri_lsu_err : rv32_lsu_err) : 1'b0;
-  assign lsu_is_cap_o      = ~lsu_tbre_sel_i ? (instr_is_cheri_i & cheri_lsu_is_cap) : tbre_lsu_is_cap_i;
+
+  assign lsu_cheri_err_o   = ~lsu_tbre_sel_i ? cpu_lsu_cheri_err : 1'b0;
+  assign lsu_we_o          = ~lsu_tbre_sel_i ? cpu_lsu_we   : tbre_lsu_we_i;
+  assign lsu_addr_o        = ~lsu_tbre_sel_i ? cpu_lsu_addr : tbre_lsu_addr_i;
+  assign lsu_wdata_o       = ~lsu_tbre_sel_i ? cpu_lsu_wdata : tbre_lsu_wdata_i;
+  assign lsu_is_cap_o      = ~lsu_tbre_sel_i ? cpu_lsu_is_cap : tbre_lsu_is_cap_i;
+
   assign lsu_is_intl_o     = ~lsu_tbre_sel_i & instr_is_cheri_i & cheri_lsu_is_intl;
   assign lsu_lc_clrperm_o  = (~lsu_tbre_sel_i & instr_is_cheri_i) ? cheri_lsu_lc_clrperm : 0;
-  assign lsu_we_o          = ~lsu_tbre_sel_i ? (instr_is_cheri_i ? cheri_lsu_we : rv32_lsu_we_i) : tbre_lsu_we_i;
-  assign lsu_addr_o        = ~lsu_tbre_sel_i ? (instr_is_cheri_i ? cheri_lsu_addr : rv32_lsu_addr_i) : tbre_lsu_addr_i;
   assign lsu_type_o        = (~lsu_tbre_sel_i & ~instr_is_cheri_i) ? rv32_lsu_type_i : 2'b00;
-  assign lsu_wdata_o       = ~lsu_tbre_sel_i ? (instr_is_cheri_i ? cheri_lsu_wdata : {1'b0, rv32_lsu_wdata_i}) : 
-                                               tbre_lsu_wdata_i;
   assign lsu_wcap_o        = (~lsu_tbre_sel_i & instr_is_cheri_i) ? cheri_lsu_wcap    : NULL_REG_CAP;
   assign lsu_sign_ext_o    = (~lsu_tbre_sel_i & ~instr_is_cheri_i) ? rv32_lsu_sign_ext_i : 1'b0;
 
@@ -1122,6 +1143,44 @@ module cheri_ex import cheri_pkg::*; #(
   assign csr_mshwm_set_o = lsu_req_o & ~lsu_cheri_err_o & lsu_we_o & 
                            (lsu_addr_o[31:4] >= csr_mshwmb_i[31:4]) & (lsu_addr_o[31:4] < csr_mshwm_i[31:4]);
   assign csr_mshwm_new_o = {lsu_addr_o[31:4], 4'h0};
+
+
+  //
+  // Stack fast clearing support
+  //
+
+  if (CheriStkClr) begin
+    logic        lsu_addr_in_range, stkclr_stall_q;
+    logic [31:0] stkclr_base;
+
+    // can't directly use csr_mshwm_i (high watermark) as the stack base here
+    // since mshwm itself will be updated by lsu write request
+    assign lsu_addr_in_range = (cpu_lsu_addr[31:4] >= stkclr_base_i[31:4]) && 
+                               (cpu_lsu_addr[31:2] < stkclr_ptr_i[31:2]);
+
+    assign cpu_stkclr_stall = (stkclr_active_i & instr_first_cycle_i) | stkclr_stall_q; 
+
+    // load/store takes 2 cycles when stkclr_active. 
+    //   -- we are doing this such that cpu_lsu_dec doesn't have to wait for address range
+    //      check results combinatorially
+    //   -- Note stkclr_active_i is asserted synchronously by writing to the new stkclr_ptr CSR. 
+    //      As such it is not possible for active to go from '0' to '1' in the middle of an 
+    //      load/store instruction when we want to keep lsu_req high while waiting for lsu_req_done
+    //      QQQ may need an assertion for this. 
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        stkclr_stall_q <= 1'b0;
+        cpu_stkclr_err <= 1'b0;
+      end else begin
+        stkclr_stall_q <= stkclr_active_i & lsu_addr_in_range;
+        cpu_stkclr_err <= stkclr_abort_i & lsu_addr_in_range;
+      end
+    end
+
+  end else begin
+    assign cpu_stkclr_stall  = 1'b0;
+    assign cpu_stkclr_err    = 1'b0;
+  end
 
   //
   // debug signal for FPGA only

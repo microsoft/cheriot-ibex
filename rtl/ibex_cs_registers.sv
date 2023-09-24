@@ -71,11 +71,14 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   output logic [31:0]          cheri_csr_rdata_o,
   output reg_cap_t             cheri_csr_rcap_o,
 
-  // stack highwatermark function
+  // stack highwatermark and fast-clearing function
   output logic [31:0]          csr_mshwm_o,
   output logic [31:0]          csr_mshwmb_o,
   input  logic                 csr_mshwm_set_i,
   input  logic [31:0]          csr_mshwm_new_i,
+  output logic                 csr_stkclr_ptr_wr_o,
+  output logic [31:0]          csr_stkclr_ptr_wdata_o,
+  input  logic [31:0]          stkclr_ptr_i,
 
   // interrupts
   input  logic                 irq_software_i,
@@ -150,7 +153,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   output full_cap_t            pcc_fullcap_o,
 
   output logic                 csr_dbg_tclr_fault_o
-);
+  );
 
   import ibex_pkg::*;
 
@@ -553,6 +556,8 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
       CSR_MSHWMB: csr_rdata_int = mshwmb_q;
 
+      CSR_STKCLR_PTR: csr_rdata_int = stkclr_ptr_i;
+
       default: begin
         illegal_csr = 1'b1;
       end
@@ -601,6 +606,8 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
     mshwm_en     = 1'b0;
     mshwmb_en    = 1'b0;
+
+    csr_stkclr_ptr_wr_o = 1'b0;
 
     double_fault_seen_o = 1'b0;
 
@@ -706,8 +713,10 @@ module ibex_cs_registers import cheri_pkg::*;  #(
           cpuctrl_we = 1'b1;
         end
 
-        CSR_MSHWM:  mshwm_en  = 1'b1;
-        CSR_MSHWMB: mshwmb_en = 1'b1;
+        CSR_MSHWM:      mshwm_en  = CHERIoTEn;
+        CSR_MSHWMB:     mshwmb_en = CHERIoTEn;
+
+        CSR_STKCLR_PTR: csr_stkclr_ptr_wr_o = CHERIoTEn;
 
         default:;
       endcase
@@ -848,13 +857,8 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   assign csr_depc_o  = depc_q;
   assign csr_mtvec_o = mtvec_q;
 
-  if (CHERIoTEn) begin
-    assign csr_mshwm_o  = mshwm_q;
-    assign csr_mshwmb_o = mshwmb_q;
-  end else begin
-    assign csr_mshwm_o  = 32'h0;
-    assign csr_mshwmb_o = 32'h0;
-  end
+  assign csr_mshwm_o  = mshwm_q;
+  assign csr_mshwmb_o = mshwmb_q;
 
   assign csr_mstatus_mie_o   = mstatus_q.mie;
   assign csr_mstatus_tw_o    = mstatus_q.tw;
@@ -1115,33 +1119,42 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   // MSHWM and HSHWMB
   logic        mshwm_en_combi;
   assign mshwm_en_combi = mshwm_en | csr_mshwm_set_i;
-  assign mshwm_d = csr_mshwm_set_i ? csr_mshwm_new_i : csr_wdata_int;
+  assign mshwm_d = csr_mshwm_set_i ? csr_mshwm_new_i : {csr_wdata_int[31:4], 4'h0};
 
-  ibex_csr #(
-    .Width     (32),
-    .ShadowCopy(ShadowCSR),
-    .ResetValue(32'd0)
-  ) u_mshwm_csr (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
-    .wr_data_i (mshwm_d),
-    .wr_en_i   (mshwm_en_combi),
-    .rd_data_o (mshwm_q),
-    .rd_error_o()
-  );
-
-  ibex_csr #(
-    .Width     (32),
-    .ShadowCopy(ShadowCSR),
-    .ResetValue(32'd0)
-  ) u_mshwmb_csr (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
-    .wr_data_i (csr_wdata_int),
-    .wr_en_i   (mshwmb_en),
-    .rd_data_o (mshwmb_q),
-    .rd_error_o()
+  if (CHERIoTEn) begin: g_mshwm
+    ibex_csr #(
+      .Width     (32),
+      .ShadowCopy(ShadowCSR),
+      .ResetValue(32'd0)
+    ) u_mshwm_csr (
+      .clk_i     (clk_i),
+      .rst_ni    (rst_ni),
+      .wr_data_i (mshwm_d),
+      .wr_en_i   (mshwm_en_combi),
+      .rd_data_o (mshwm_q),
+      .rd_error_o()
     );
+
+    ibex_csr #(
+      .Width     (32),
+      .ShadowCopy(ShadowCSR),
+      .ResetValue(32'd0)
+    ) u_mshwmb_csr (
+      .clk_i     (clk_i),
+      .rst_ni    (rst_ni),
+      .wr_data_i ({csr_wdata_int[31:4], 4'h0}),
+      .wr_en_i   (mshwmb_en),
+      .rd_data_o (mshwmb_q),
+      .rd_error_o()
+      );
+
+    assign csr_stkclr_ptr_wdata_o = csr_wdata_i;
+  end else begin
+    assign mshwm_q  = 32'h0;
+    assign mshwmb_q = 32'h0;
+
+    assign csr_stkclr_ptr_wdata_o = 32'h0;
+  end
 
   // -----------------
   // PMP registers

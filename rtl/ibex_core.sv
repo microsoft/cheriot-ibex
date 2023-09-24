@@ -459,6 +459,13 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic [31:0]   csr_mshwmb;
   logic          csr_mshwm_set;
   logic [31:0]   csr_mshwm_new;
+  logic          csr_stkclr_ptr_wr;
+  logic [31:0]   csr_stkclr_ptr_wdata;
+
+  logic          stkclr_active;
+  logic          stkclr_abort;
+  logic [31:0]   stkclr_ptr;
+  logic [31:0]   stkclr_base;
 
   logic          lsu_tbre_resp_valid;
   logic          lsu_tbre_resp_err;
@@ -476,6 +483,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
 
   logic          lsu_tbre_sel, cpu_lsu_dec;
   logic          rf_trsv_en;
+
+  
 
 
   //////////////////////
@@ -854,7 +863,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .TSMapBase            (TSMapBase),
       .TSMapSize            (TSMapSize),
       .CheriPPLBC           (CheriPPLBC),
-      .CheriSBND2           (CheriSBND2)
+      .CheriSBND2           (CheriSBND2),
+      .CheriStkClr          (CheriTBRE)
     ) u_cheri_ex (
       .clk_i                (clk_i),
       .rst_ni               (rst_ni),
@@ -947,6 +957,10 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .csr_mshwmb_i         (csr_mshwmb),
       .csr_mshwm_set_o      (csr_mshwm_set),
       .csr_mshwm_new_o      (csr_mshwm_new),
+      .stkclr_active_i      (stkclr_active),
+      .stkclr_abort_i       (stkclr_abort),
+      .stkclr_ptr_i         (stkclr_ptr),
+      .stkclr_base_i        (stkclr_base),
       .csr_dbg_tclr_fault_i (csr_dbg_tclr_fault)
     );
 
@@ -1042,57 +1056,55 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   //////////////////////////////////////////
   // cheri TS background revocation engine//
   //////////////////////////////////////////
-  logic  tbre_stat;
 
-  assign mmreg_coreout_o = {{(MMRegDoutW-1){1'b0}}, tbre_stat};
+  logic snoop_lsu_req_done;
+  logic unmasked_intr;
 
-  if (CHERIoTEn & CheriTBRE) begin : g_tbre
-    logic        snoop_lsu_req_done;
-    logic [65:0] tbre_ctrl_vec;
+  assign snoop_lsu_req_done = lsu_req_done | lsu_req_done_intl;
+  assign unmasked_intr = irq_pending_o & csr_mstatus_mie;
 
-    assign snoop_lsu_req_done = lsu_req_done | lsu_req_done_intl;
-    assign tbre_ctrl_vec      = mmreg_corein_i[65:0];
-
-    cheri_tbre #(
-      .FifoSize (4), 
-      .AddrHi   (23)
-    ) cheri_tbre_i (
-     // Clock and Reset
-      .clk_i                   (clk_i),                 
-      .rst_ni                  (rst_ni),
-      .tbre_ctrl_vec_i         (tbre_ctrl_vec),
-      .tbre_stat_o             (tbre_stat),
-      .lsu_tbre_resp_valid_i   (lsu_tbre_resp_valid),
-      .lsu_tbre_resp_err_i     (lsu_tbre_resp_err),
-      .lsu_tbre_resp_is_wr_i   (lsu_resp_is_wr),
-      .lsu_tbre_raw_lsw_i      (lsu_tbre_raw_lsw),   
-      .lsu_tbre_req_done_i     (lsu_tbre_req_done),   
-      .lsu_tbre_addr_incr_i    (lsu_addr_incr_req),
-      .tbre_lsu_req_o          (tbre_lsu_req),
-      .tbre_lsu_is_cap_o       (tbre_lsu_is_cap),
-      .tbre_lsu_we_o           (tbre_lsu_we),
-      .tbre_lsu_addr_o         (tbre_lsu_addr),
-      .tbre_lsu_wdata_o        (tbre_lsu_wdata),
-      .snoop_lsu_req_done_i    (snoop_lsu_req_done),  
-      .snoop_lsu_req_i         (lsu_req),
-      .snoop_lsu_is_cap_i      (lsu_is_cap),
-      .snoop_lsu_we_i          (lsu_we),
-      .snoop_lsu_cheri_err_i   (lsu_cheri_err),
-      .snoop_lsu_addr_i        (lsu_addr),
-      .trvk_en_i               (tbre_trvk_en),
-      .trvk_clrtag_i           (tbre_trvk_clrtag)          
-  );
-
-  end else begin
-    assign tbre_stat       = 1'b0;
-    assign tbre_lsu_req    = 1'b0;
-    assign tbre_lsu_is_cap = 1'b0;
-    assign tbre_lsu_we     = 1'b0;
-    assign tbre_lsu_addr   = 32'h0;
-    assign tbre_lsu_wdata  = 33'h0;
-  end
-
-
+  cheri_tbre_wrapper #(
+    .CHERIoTEn   (CHERIoTEn),
+    .CheriTBRE   (CheriTBRE),
+    .CheriStkClr (CheriTBRE),
+    .MMRegDinW   (MMRegDinW),
+    .MMRegDoutW  (MMRegDoutW)
+  ) cheri_tbre_wrapper_i (
+   // Clock and Reset
+    .clk_i                   (clk_i),                 
+    .rst_ni                  (rst_ni),
+    .mmreg_corein_i          (mmreg_corein_i),
+    .mmreg_coreout_o         (mmreg_coreout_o),
+    .lsu_tbre_resp_valid_i   (lsu_tbre_resp_valid),
+    .lsu_tbre_resp_err_i     (lsu_tbre_resp_err),
+    .lsu_tbre_resp_is_wr_i   (lsu_resp_is_wr),
+    .lsu_tbre_raw_lsw_i      (lsu_tbre_raw_lsw),   
+    .lsu_tbre_req_done_i     (lsu_tbre_req_done),   
+    .lsu_tbre_addr_incr_i    (lsu_addr_incr_req),
+    .tbre_lsu_req_o          (tbre_lsu_req),
+    .tbre_lsu_is_cap_o       (tbre_lsu_is_cap),
+    .tbre_lsu_we_o           (tbre_lsu_we),
+    .tbre_lsu_addr_o         (tbre_lsu_addr),
+    .tbre_lsu_wdata_o        (tbre_lsu_wdata),
+    .snoop_lsu_req_done_i    (snoop_lsu_req_done),  
+    .snoop_lsu_req_i         (lsu_req),
+    .snoop_lsu_is_cap_i      (lsu_is_cap),
+    .snoop_lsu_we_i          (lsu_we),
+    .snoop_lsu_cheri_err_i   (lsu_cheri_err),
+    .snoop_lsu_addr_i        (lsu_addr),
+    .trvk_en_i               (tbre_trvk_en),
+    .trvk_clrtag_i           (tbre_trvk_clrtag),
+    .csr_stkclr_ptr_wr_i     (csr_stkclr_ptr_wr),   
+    .csr_stkclr_ptr_wdata_i  (csr_stkclr_ptr_wdata),
+    .csr_mshwm_i             (csr_mshwm),
+    .unmasked_intr_i         (unmasked_intr),
+    .stkclr_active_o         (stkclr_active),
+    .stkclr_abort_o          (stkclr_abort),
+    .stkclr_ptr_o            (stkclr_ptr),
+    .stkclr_base_o           (stkclr_base)          
+  ) ;
+   
+   
   /////////////////////
   // Load/store unit //
   /////////////////////
@@ -1529,6 +1541,10 @@ end
     .csr_mshwmb_o         (csr_mshwmb),
     .csr_mshwm_set_i      (csr_mshwm_set),
     .csr_mshwm_new_i      (csr_mshwm_new),
+    .csr_stkclr_ptr_wr_o    (csr_stkclr_ptr_wr),
+    .csr_stkclr_ptr_wdata_o (csr_stkclr_ptr_wdata),
+    .stkclr_ptr_i           (stkclr_ptr),
+
 
     // Interrupt related control signals
     .irq_software_i   (irq_software_i),

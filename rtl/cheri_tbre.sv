@@ -14,6 +14,7 @@ module cheri_tbre #(
   // MMIO register interface 
   input  logic [65:0]   tbre_ctrl_vec_i,
   output logic          tbre_stat_o,
+  output logic          tbre_err_o,
 
   // LSU req/resp interface (to be multiplixed/qualified)
   input  logic          lsu_tbre_resp_valid_i,
@@ -93,6 +94,8 @@ module cheri_tbre #(
   assign tbre_ctrl.end_addr   = tbre_ctrl_vec_i[63:32];
   assign tbre_stat_o          = (tbre_fsm_q != TBRE_IDLE);
 
+  // QQQ note having resp_valid here improves performance but making timing a bit worse 
+  //     (data_rvalid --> tbre_lsu_req --> core/tbre mux select --> data_wdata_o
   assign tbre_lsu_req_o    = ((tbre_sch_q == SCH_LOAD) | ((tbre_sch_q == SCH_STORE) && store_req_valid)) & (~wait_resp_q |  (lsu_tbre_resp_valid_i & ~tbre_ctrl.add1wait));
   assign tbre_lsu_is_cap_o = (tbre_sch_q == SCH_LOAD);
   assign tbre_lsu_we_o     = (tbre_sch_q == SCH_STORE);
@@ -159,6 +162,7 @@ module cheri_tbre #(
       tbre_sch_q      <= SCH_NONE;
       cur_load_addr8  <= 'h0;
       wait_resp_q     <= 1'b0;
+      tbre_err_o      <= 1'b0;
     end else begin
 
       tbre_fsm_q <= tbre_fsm_d;
@@ -173,6 +177,12 @@ module cheri_tbre #(
         wait_resp_q <= 1'b1;
       else if (lsu_tbre_resp_valid_i)
         wait_resp_q <= 1'b0;
+
+      // for now just capture/latch errors and flag it to firmware
+      if ((tbre_fsm_q == TBRE_IDLE) && tbre_ctrl.go)
+        tbre_err_o <= 1'b0;
+      else if (lsu_tbre_resp_valid_i && lsu_tbre_resp_err_i)
+        tbre_err_o <= 1'b1;
     end
   end
 
