@@ -459,13 +459,16 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic [31:0]   csr_mshwmb;
   logic          csr_mshwm_set;
   logic [31:0]   csr_mshwm_new;
-  logic          csr_stkclr_ptr_wr;
-  logic [31:0]   csr_stkclr_ptr_wdata;
+  logic          scr_ztop_wr;
+  logic [31:0]   scr_ztop_wdata;
+  reg_cap_t      scr_ztop_wcap;
+  logic [31:0]   scr_ztop_rdata;
+  reg_cap_t      scr_ztop_rcap;
 
-  logic          stkclr_active;
-  logic          stkclr_abort;
-  logic [31:0]   stkclr_ptr;
-  logic [31:0]   stkclr_base;
+  logic          stkz_active;
+  logic          stkz_abort;
+  logic [31:0]   stkz_ptr;
+  logic [31:0]   stkz_base;
 
   logic          lsu_tbre_resp_valid;
   logic          lsu_tbre_resp_err;
@@ -864,7 +867,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .TSMapSize            (TSMapSize),
       .CheriPPLBC           (CheriPPLBC),
       .CheriSBND2           (CheriSBND2),
-      .CheriStkClr          (CheriTBRE)
+      .CheriStkZ            (CheriTBRE)
     ) u_cheri_ex (
       .clk_i                (clk_i),
       .rst_ni               (rst_ni),
@@ -957,10 +960,10 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .csr_mshwmb_i         (csr_mshwmb),
       .csr_mshwm_set_o      (csr_mshwm_set),
       .csr_mshwm_new_o      (csr_mshwm_new),
-      .stkclr_active_i      (stkclr_active),
-      .stkclr_abort_i       (stkclr_abort),
-      .stkclr_ptr_i         (stkclr_ptr),
-      .stkclr_base_i        (stkclr_base),
+      .stkz_active_i        (stkz_active),
+      .stkz_abort_i         (stkz_abort),
+      .stkz_ptr_i           (stkz_ptr),
+      .stkz_base_i          (stkz_base),
       .csr_dbg_tclr_fault_i (csr_dbg_tclr_fault)
     );
 
@@ -1066,7 +1069,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   cheri_tbre_wrapper #(
     .CHERIoTEn   (CHERIoTEn),
     .CheriTBRE   (CheriTBRE),
-    .CheriStkClr (CheriTBRE),
+    .CheriStkZ   (CheriTBRE),
     .MMRegDinW   (MMRegDinW),
     .MMRegDoutW  (MMRegDoutW)
   ) cheri_tbre_wrapper_i (
@@ -1094,14 +1097,16 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .snoop_lsu_addr_i        (lsu_addr),
     .trvk_en_i               (tbre_trvk_en),
     .trvk_clrtag_i           (tbre_trvk_clrtag),
-    .csr_stkclr_ptr_wr_i     (csr_stkclr_ptr_wr),   
-    .csr_stkclr_ptr_wdata_i  (csr_stkclr_ptr_wdata),
-    .csr_mshwm_i             (csr_mshwm),
+    .scr_ztop_wr_i     (scr_ztop_wr),  
+    .scr_ztop_wdata_i  (scr_ztop_wdata),
+    .scr_ztop_wcap_i   (scr_ztop_wcap),
+    .scr_ztop_rdata_o  (scr_ztop_rdata),
+    .scr_ztop_rcap_o   (scr_ztop_rcap),
     .unmasked_intr_i         (unmasked_intr),
-    .stkclr_active_o         (stkclr_active),
-    .stkclr_abort_o          (stkclr_abort),
-    .stkclr_ptr_o            (stkclr_ptr),
-    .stkclr_base_o           (stkclr_base)          
+    .stkz_active_o           (stkz_active),
+    .stkz_abort_o            (stkz_abort),
+    .stkz_ptr_o              (stkz_ptr),
+    .stkz_base_o             (stkz_base)          
   ) ;
    
    
@@ -1541,10 +1546,11 @@ end
     .csr_mshwmb_o         (csr_mshwmb),
     .csr_mshwm_set_i      (csr_mshwm_set),
     .csr_mshwm_new_i      (csr_mshwm_new),
-    .csr_stkclr_ptr_wr_o    (csr_stkclr_ptr_wr),
-    .csr_stkclr_ptr_wdata_o (csr_stkclr_ptr_wdata),
-    .stkclr_ptr_i           (stkclr_ptr),
-
+    .scr_ztop_wr_o    (scr_ztop_wr),  
+    .scr_ztop_wdata_o (scr_ztop_wdata),
+    .scr_ztop_wcap_o  (scr_ztop_wcap),
+    .scr_ztop_rdata_i (scr_ztop_rdata),
+    .scr_ztop_rcap_i  (scr_ztop_rcap),
 
     // Interrupt related control signals
     .irq_software_i   (irq_software_i),

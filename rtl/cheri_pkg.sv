@@ -824,4 +824,13 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     CHERI_CSR_RW
   } cheri_csr_op_e;
 
+  parameter logic[4:0] CHERI_SCR_MEPCC      = 5'd31;
+  parameter logic[4:0] CHERI_SCR_MSCRATCHC  = 5'd30;
+  parameter logic[4:0] CHERI_SCR_MTDC       = 5'd29;
+  parameter logic[4:0] CHERI_SCR_MTCC       = 5'd28;
+  parameter logic[4:0] CHERI_SCR_ZTOPC      = 5'd27;
+  parameter logic[4:0] CHERI_SCR_DSCRATCHC1 = 5'd26;
+  parameter logic[4:0] CHERI_SCR_DSCRATCHC0 = 5'd25;
+  parameter logic[4:0] CHERI_SCR_DEPCC      = 5'd24;
+
 endpackage

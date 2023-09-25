@@ -222,7 +222,7 @@ module ibex_tracer import cheri_pkg::*; # (
   // Get a SCR name for a CHERI SCR address.
   function automatic string get_scr_name(input logic [4:0] scr_addr);
     unique case (scr_addr)
-      5'd27:   return "mdbgctrl";
+      5'd27:   return "ztopc";
       5'd28:   return "mtcc";
       5'd29:   return "mtdc";
       5'd30:   return "mscratchc";
@@ -472,6 +472,9 @@ module ibex_tracer import cheri_pkg::*; # (
       12'd900: return "mdbase";
       12'd901: return "mdbound";
       12'd800: return "mcountinhibit";
+      12'd3009: return "mshwm";
+      12'd3010: return "mshwmb";
+      12'd3012: return "cdbgctrl";
       default: return $sformatf("0x%x", csr_addr);
     endcase
   endfunction

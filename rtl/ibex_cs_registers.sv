@@ -76,9 +76,12 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   output logic [31:0]          csr_mshwmb_o,
   input  logic                 csr_mshwm_set_i,
   input  logic [31:0]          csr_mshwm_new_i,
-  output logic                 csr_stkclr_ptr_wr_o,
-  output logic [31:0]          csr_stkclr_ptr_wdata_o,
-  input  logic [31:0]          stkclr_ptr_i,
+
+  output logic                 scr_ztop_wr_o,
+  output logic [31:0]          scr_ztop_wdata_o,
+  output reg_cap_t             scr_ztop_wcap_o,
+  input  logic [31:0]          scr_ztop_rdata_i,
+  input  reg_cap_t             scr_ztop_rcap_i,
 
   // interrupts
   input  logic                 irq_software_i,
@@ -254,6 +257,8 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   logic [31:0] mshwm_q, mshwm_d;
   logic [31:0] mshwmb_q;
   logic        mshwm_en, mshwmb_en;
+  logic [31:0] cdbg_ctrl_q;
+  logic        cdbg_ctrl_en;
 
   // CSRs for recoverable NMIs
   // NOTE: these CSRS are nonstandard, see https://github.com/riscv/riscv-isa-manual/issues/261
@@ -556,7 +561,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
       CSR_MSHWMB: csr_rdata_int = mshwmb_q;
 
-      CSR_STKCLR_PTR: csr_rdata_int = stkclr_ptr_i;
+      CSR_CDBG_CTRL: csr_rdata_int = cdbg_ctrl_q;
 
       default: begin
         illegal_csr = 1'b1;
@@ -606,8 +611,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
     mshwm_en     = 1'b0;
     mshwmb_en    = 1'b0;
-
-    csr_stkclr_ptr_wr_o = 1'b0;
+    cdbg_ctrl_en = 1'b0;
 
     double_fault_seen_o = 1'b0;
 
@@ -715,8 +719,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
         CSR_MSHWM:      mshwm_en  = CHERIoTEn;
         CSR_MSHWMB:     mshwmb_en = CHERIoTEn;
-
-        CSR_STKCLR_PTR: csr_stkclr_ptr_wr_o = CHERIoTEn;
+        CSR_CDBG_CTRL:  cdbg_ctrl_en = CHERIoTEn;
 
         default:;
       endcase
@@ -1148,12 +1151,27 @@ module ibex_cs_registers import cheri_pkg::*;  #(
       .rd_error_o()
       );
 
-    assign csr_stkclr_ptr_wdata_o = csr_wdata_i;
+    // cheri debug feature control
+    ibex_csr #(
+      .Width     (32),
+      .ShadowCopy(ShadowCSR),
+      .ResetValue(32'd0)
+    ) u_cdbg_ctrl_csr (
+      .clk_i     (clk_i),
+      .rst_ni    (rst_ni),
+      .wr_data_i ({31'h0, csr_wdata_int[0]}),
+      .wr_en_i   (cdbg_ctrl_en),
+      .rd_data_o (cdbg_ctrl_q),
+      .rd_error_o()
+      );
+
+    assign csr_dbg_tclr_fault_o = cdbg_ctrl_q[0];
+
   end else begin
     assign mshwm_q  = 32'h0;
     assign mshwmb_q = 32'h0;
 
-    assign csr_stkclr_ptr_wdata_o = 32'h0;
+    assign csr_dbg_tclr_fault_o = 1'b0;
   end
 
   // -----------------
@@ -1744,48 +1762,47 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     reg_cap_t     mscratchc_cap;
     logic [31:0]  mscratchc_data;  // note this is separate from legacy mscratch
 
-    logic [3:0]   mdbg_ctrl;
 
     logic mtdc_en_cheri, mscratchc_en_cheri;
 
     always_comb begin
       case (cheri_csr_addr_i)
-        5'd24:
+        CHERI_SCR_DEPCC:
           begin
             cheri_csr_rdata_o = debug_mode_i ? depc_q : 0;
             cheri_csr_rcap_o  = debug_mode_i ? depc_cap : NULL_REG_CAP;
           end
-        5'd25:
+        CHERI_SCR_DSCRATCHC0:
           begin
             cheri_csr_rdata_o = debug_mode_i ? dscratch0_q : 0;
             cheri_csr_rcap_o  = debug_mode_i ? dscratch0_cap : NULL_REG_CAP;
           end
-        5'd26:
+        CHERI_SCR_DSCRATCHC1:
           begin
             cheri_csr_rdata_o = debug_mode_i ? dscratch1_q : 0;
             cheri_csr_rcap_o  = debug_mode_i ? dscratch1_cap : NULL_REG_CAP;
           end
-        5'd27:
+        CHERI_SCR_ZTOPC:
           begin
-            cheri_csr_rdata_o = {28'h0, mdbg_ctrl};
-            cheri_csr_rcap_o  = NULL_REG_CAP;
+            cheri_csr_rdata_o = scr_ztop_rdata_i;
+            cheri_csr_rcap_o  = scr_ztop_rcap_i;
           end
-        5'd28:
+        CHERI_SCR_MTCC:
           begin
             cheri_csr_rdata_o = mtvec_q;
             cheri_csr_rcap_o  = mtvec_cap;
           end
-        5'd29:
+        CHERI_SCR_MTDC:
           begin
             cheri_csr_rdata_o = mtdc_data;
             cheri_csr_rcap_o  = mtdc_cap;
           end
-        5'd30:
+        CHERI_SCR_MSCRATCHC:
           begin
             cheri_csr_rdata_o = mscratchc_data;
             cheri_csr_rcap_o  = mscratchc_cap;
           end
-        5'd31:
+        CHERI_SCR_MEPCC:
           begin
             cheri_csr_rdata_o = mepc_q;
             cheri_csr_rcap_o  = mepc_cap;
@@ -1845,7 +1862,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     end
 
     // mtvec extended capability
-    assign mtvec_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd28) && (cheri_csr_op_i == CHERI_CSR_RW);
+    assign mtvec_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == CHERI_SCR_MTCC) && (cheri_csr_op_i == CHERI_CSR_RW);
 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni)
@@ -1855,7 +1872,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     end
 
     // mepc extended capability
-    assign mepc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd31) && (cheri_csr_op_i == CHERI_CSR_RW);
+    assign mepc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == CHERI_SCR_MEPCC) && (cheri_csr_op_i == CHERI_CSR_RW);
 
     // let's not worry about non-stanard recoverable NMI/mstack for now QQQ
     //   note we need to do set_address (representability check) when saving pcc_cap to mepc
@@ -1872,7 +1889,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     end
 
     // MTDC capability
-    assign mtdc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd29) && (cheri_csr_op_i == CHERI_CSR_RW);
+    assign mtdc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == CHERI_SCR_MTDC) && (cheri_csr_op_i == CHERI_CSR_RW);
 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
@@ -1885,7 +1902,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     end
 
     // MSCRATCHC capability
-    assign mscratchc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd30) && (cheri_csr_op_i == CHERI_CSR_RW);
+    assign mscratchc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == CHERI_SCR_MSCRATCHC) && (cheri_csr_op_i == CHERI_CSR_RW);
 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
@@ -1897,8 +1914,13 @@ module ibex_cs_registers import cheri_pkg::*;  #(
       end
     end
 
+    // ztop capability (implemented externally)
+    assign scr_ztop_wr_o    = cheri_csr_op_en_i && (cheri_csr_addr_i == CHERI_SCR_ZTOPC) && (cheri_csr_op_i == CHERI_CSR_RW);
+    assign scr_ztop_wdata_o = cheri_csr_wdata_i;
+    assign scr_ztop_wcap_o  = cheri_csr_wcap_i;
+
     // depc extended capability
-    assign depc_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd24) && (cheri_csr_op_i == CHERI_CSR_RW);
+    assign depc_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == CHERI_SCR_DEPCC) && (cheri_csr_op_i == CHERI_CSR_RW);
 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni)
@@ -1910,8 +1932,8 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     end
 
     // dscratch0/1 extended capability
-    assign dscratch0_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd25) && (cheri_csr_op_i == CHERI_CSR_RW);
-    assign dscratch1_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd26) && (cheri_csr_op_i == CHERI_CSR_RW);
+    assign dscratch0_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == CHERI_SCR_DSCRATCHC0) && (cheri_csr_op_i == CHERI_CSR_RW);
+    assign dscratch1_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == CHERI_SCR_DSCRATCHC1) && (cheri_csr_op_i == CHERI_CSR_RW);
 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
@@ -1924,16 +1946,6 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
     end
 
-    // cheri debug feature control
-    always_ff @(posedge clk_i or negedge rst_ni) begin
-      if (!rst_ni)
-        mdbg_ctrl <= 4'h0;
-      else if (cheri_csr_op_en_i && (cheri_csr_addr_i == 5'd27) && (cheri_csr_op_i == CHERI_CSR_RW))
-        mdbg_ctrl <= cheri_csr_wdata_i[3:0];
-    end
-
-    assign csr_dbg_tclr_fault_o = mdbg_ctrl[0];
-
   end else begin: gen_no_scr
     
     assign cheri_csr_rdata_o = 32'h0;
@@ -1941,13 +1953,15 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
     assign pcc_fullcap_o = NULL_FULL_CAP;
 
-    assign csr_dbg_tclr_fault_o = 1'b0;
-
     assign mtvec_en_cheri      = 1'b0;
     assign mepc_en_cheri       = 1'b0;
     assign depc_en_cheri       = 1'b0;
     assign dscratch0_en_cheri  = 1'b0;
     assign dscratch1_en_cheri  = 1'b0;
+
+    assign scr_ztop_wr_o    = 1'b0;
+    assign scr_ztop_wdata_o = 32'h0;
+    assign scr_ztop_wcap_o  = NULL_REG_CAP; 
     
   end
 

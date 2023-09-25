@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 
-module cheri_tbre_wrapper #(
+module cheri_tbre_wrapper import cheri_pkg::*; #(
   parameter bit          CHERIoTEn   = 1'b1,
   parameter bit          CheriTBRE   = 1'b1,
-  parameter bit          CheriStkClr = 1'b1,
+  parameter bit          CheriStkZ   = 1'b1,
   parameter int unsigned MMRegDinW   = 128,
   parameter int unsigned MMRegDoutW  = 64
   
@@ -45,16 +45,18 @@ module cheri_tbre_wrapper #(
   input  logic          trvk_clrtag_i,
 
   // Stack fast-clearing signals
-  input  logic          csr_stkclr_ptr_wr_i,
-  input  logic [31:0]   csr_stkclr_ptr_wdata_i,
-  input  logic [31:0]   csr_mshwm_i,
-
+  input  logic          scr_ztop_wr_i,
+  input  logic [31:0]   scr_ztop_wdata_i,
+  input  reg_cap_t      scr_ztop_wcap_i,
+  output logic [31:0]   scr_ztop_rdata_o,
+  output reg_cap_t      scr_ztop_rcap_o,
+ 
   input  logic          unmasked_intr_i,
 
-  output logic          stkclr_active_o,
-  output logic          stkclr_abort_o,
-  output logic [31:0]   stkclr_ptr_o,
-  output logic [31:0]   stkclr_base_o
+  output logic          stkz_active_o,
+  output logic          stkz_abort_o,
+  output logic [31:0]   stkz_ptr_o,
+  output logic [31:0]   stkz_base_o
 );
 
   localparam nMSTR = 2;
@@ -76,9 +78,9 @@ module cheri_tbre_wrapper #(
   logic [32:0]   blk0_lsu_wdata;
 
 
-  logic          tbre_stat, tbre_err, stkclr_err;
+  logic          tbre_stat, tbre_err, stkz_err;
 
-  assign mmreg_coreout_o = {{(MMRegDoutW-2){1'b0}}, stkclr_err, tbre_err, tbre_stat};
+  assign mmreg_coreout_o = {{(MMRegDoutW-2){1'b0}}, stkz_err, tbre_err, tbre_stat};
 
   if (CHERIoTEn & CheriTBRE) begin : g_tbre
     logic [65:0] tbre_ctrl_vec;
@@ -125,36 +127,41 @@ module cheri_tbre_wrapper #(
     assign blk1_lsu_wdata  = 33'h0;
   end
 
-  if (CHERIoTEn & CheriStkClr) begin : g_stkclr
-    cheri_stkclr cheri_stkclr_i (
-      .clk_i                    (clk_i                  ),
-      .rst_ni                   (rst_ni                 ),
-      .csr_stkclr_ptr_wr_i      (csr_stkclr_ptr_wr_i    ),
-      .csr_stkclr_ptr_wdata_i   (csr_stkclr_ptr_wdata_i ),
-      .csr_mshwm_i              (csr_mshwm_i            ),
-      .unmasked_intr_i          (unmasked_intr_i        ),
-      .stkclr_active_o          (stkclr_active_o        ),
-      .stkclr_abort_o           (stkclr_abort_o         ),
-      .stkclr_ptr_o             (stkclr_ptr_o           ),
-      .stkclr_base_o            (stkclr_base_o          ),
-      .stkclr_err_o             (stkclr_err             ),
-      .lsu_stkclr_resp_valid_i  (lsu_blk0_resp_valid    ),
-      .lsu_stkclr_resp_err_i    (lsu_tbre_resp_err_i    ),
-      .lsu_stkclr_req_done_i    (lsu_blk0_req_done      ),
-      .stkclr_lsu_req_o         (blk0_lsu_req           ),
-      .stkclr_lsu_we_o          (blk0_lsu_we            ),
-      .stkclr_lsu_is_cap_o      (blk0_lsu_is_cap        ),
-      .stkclr_lsu_addr_o        (blk0_lsu_addr          ),
-      .stkclr_lsu_wdata_o       (blk0_lsu_wdata         ),
-      .snoop_lsu_req_done_i     (snoop_lsu_req_done_i   )
+  if (CHERIoTEn & CheriStkZ) begin : g_stkz
+    cheri_stkz cheri_stkz_i (
+      .clk_i                    (clk_i             ),
+      .rst_ni                   (rst_ni            ),
+      .scr_ztop_wr_i     (scr_ztop_wr_i),  
+      .scr_ztop_wdata_i  (scr_ztop_wdata_i),
+      .scr_ztop_wcap_i   (scr_ztop_wcap_i),
+      .scr_ztop_rdata_o  (scr_ztop_rdata_o),
+      .scr_ztop_rcap_o   (scr_ztop_rcap_o),
+      .unmasked_intr_i          (unmasked_intr_i    ),
+      .stkz_active_o          (stkz_active_o        ),
+      .stkz_abort_o           (stkz_abort_o         ),
+      .stkz_ptr_o             (stkz_ptr_o           ),
+      .stkz_base_o            (stkz_base_o          ),
+      .stkz_err_o             (stkz_err             ),
+      .lsu_stkz_resp_valid_i  (lsu_blk0_resp_valid    ),
+      .lsu_stkz_resp_err_i    (lsu_tbre_resp_err_i    ),
+      .lsu_stkz_req_done_i    (lsu_blk0_req_done      ),
+      .stkz_lsu_req_o         (blk0_lsu_req           ),
+      .stkz_lsu_we_o          (blk0_lsu_we            ),
+      .stkz_lsu_is_cap_o      (blk0_lsu_is_cap        ),
+      .stkz_lsu_addr_o        (blk0_lsu_addr          ),
+      .stkz_lsu_wdata_o       (blk0_lsu_wdata         ),
+      .snoop_lsu_req_done_i     (snoop_lsu_req_done_i )
       );
 
   end else begin
-    assign stkclr_active_o = 1'b0;
-    assign stkclr_abort_o  = 1'b0;
-    assign stkclr_ptr_o    = 32'h3;     // use this to flag stkclr feature doesn't exist
-    assign stkclr_base_o   = 32'h0;
-    assign stkclr_err      = 1'b0;
+    assign stkz_active_o = 1'b0;
+    assign stkz_abort_o  = 1'b0;
+    assign stkz_ptr_o    = 32'h3;     // use this to flag stkz feature doesn't exist
+    assign stkz_base_o   = 32'h0;
+    assign stkz_err      = 1'b0;
+
+    assign scr_ztop_rcap_o  = NULL_REG_CAP;
+    assign scr_ztop_rdata_o = 32'h0;
 
     assign blk0_lsu_req    = 1'b0;
     assign blk0_lsu_is_cap = 1'b0;
@@ -164,7 +171,7 @@ module cheri_tbre_wrapper #(
   end
 
   //
-  // Arbitration for LSU interface between tbre and stkclr engines
+  // Arbitration for LSU interface between tbre and stkz engines
   //  reuse the obimux logic
   //
   logic [nMSTR-1:0] mstr_arbit, mstr_arbit_q, mstr_arbit_comb;
