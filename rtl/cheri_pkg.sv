@@ -79,9 +79,8 @@ package cheri_pkg;
     logic [ADDR_W-1  :0] base32;
     logic [OTYPE_W-1 :0] otype;
     logic [PERMS_W-1: 0] perms;
-    logic [TOP_W-1   :0] top;
-    logic [BOT_W-1   :0] base;
     logic [CPERMS_W-1:0] cperms;
+    logic                rsvd;
   } pcc_cap_t;
 
   typedef struct packed {
@@ -92,13 +91,13 @@ package cheri_pkg;
 
   parameter reg_cap_t  NULL_REG_CAP  = '{0, 0, 0, 0, 0, 0, 0, 0, 0};
   parameter full_cap_t NULL_FULL_CAP = '{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-  parameter pcc_cap_t  NULL_PCC_CAP  = '{0, 0, 0, 0, 0, 0, 0, 0, 0};
+  parameter pcc_cap_t  NULL_PCC_CAP  = '{0, 0, 0, 0, 0, 0, 0, 0};
 
   parameter logic [5:0] CPERMS_TX = 6'b101111;  // Tx (execution root)
   parameter logic [5:0] CPERMS_TM = 6'b111111;  // Tm (memory data root)
   parameter logic [5:0] CPERMS_TS = 6'b100111;  // Tx (seal root)
 
-  parameter pcc_cap_t PCC_RESET_CAP   = '{1'b1, RESETEXP, 33'h10000_0000, 0, OTYPE_UNSEALED, 13'h1eb, 9'h100, 0, CPERMS_TX};   // Tx (execution root)
+  parameter pcc_cap_t PCC_RESET_CAP   = '{1'b1, RESETEXP, 33'h10000_0000, 0, OTYPE_UNSEALED, 13'h1eb, CPERMS_TX, 1'b0};   // Tx (execution root)
 
   parameter reg_cap_t  MTVEC_RESET_CAP     = '{1'b1, 1'b0, 1'b0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TX, 1'b0};   // Tx (execution root)
   parameter reg_cap_t  MTDC_RESET_CAP      = '{1'b1, 1'b0, 1'b0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TM, 1'b0};   // Tm
@@ -215,6 +214,7 @@ package cheri_pkg;
     end else if (cperms_in[4:0] == 5'b10000) begin
       cperms_out[4:0] = clr_sdlm? 5'h0 : cperms_in[4:0];   // clear SD will results in NULL permission
     end else if (cperms_in[4:2] == 3'b100) begin
+      cperms_out[4] = ~(clr_sdlm & ~cperms_in[1]);    // must decode to 5'h0 if both ld/sd are 0.
       cperms_out[0] = cperms_in[0] & ~clr_sdlm;
     end else if (cperms_in[4:3] == 2'b01) begin
       cperms_out[0] = cperms_in[0] & ~clr_glg;       // LG
@@ -328,6 +328,7 @@ package cheri_pkg;
 
     return out_cap;
   endfunction
+
 
   // utillity function
   // return the size (bit length) of input number without leading zeros
@@ -538,49 +539,53 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
   //  -- pcc is a special case since the address (PC) moves around..
   //     so have to adjust correction factors and validate bounds here
   // function automatic full_cap_t pcc2fullcap (pcc_cap_t pcc_cap, logic [31:0] pc_addr);
-  function automatic full_cap_t pcc2fullcap (pcc_cap_t pcc_cap);
-    // logic [3:0] tmp4;
-    full_cap_t full_cap;
-    // logic [BOT_W-1:0] pcmi9;
+  function automatic full_cap_t pcc2fullcap (pcc_cap_t in_pcap);
+    full_cap_t pcc_fullcap;
 
-    // pcmi9             = pc_addr >> pcc_cap.exp;
-    // tmp4              = update_temp_fields(pcc_cap.top, pcc_cap.base, pcmi9);
-    full_cap          = NULL_REG_CAP;
-    full_cap.valid    = pcc_cap.valid;
-    full_cap.perms    = pcc_cap.perms;
-    full_cap.top_cor  = 0;
-    full_cap.base_cor = 0;
-    full_cap.exp      = pcc_cap.exp;
-    full_cap.top      = pcc_cap.top;
-    full_cap.base     = pcc_cap.base;
-    full_cap.cperms   = pcc_cap.cperms;
-    full_cap.otype    = pcc_cap.otype;
-    full_cap.top33    = pcc_cap.top33;
-    full_cap.base32   = pcc_cap.base32;
-    full_cap.rsvd     = 0;
-    full_cap.maska    = 0;
-    full_cap.rlen     = 0;
-
-    return full_cap;
+    pcc_fullcap.valid    = in_pcap.valid;   
+    pcc_fullcap.exp      = in_pcap.exp; 
+    pcc_fullcap.top33    = in_pcap.top33;
+    pcc_fullcap.base32   = in_pcap.base32;
+    pcc_fullcap.otype    = in_pcap.otype;
+    pcc_fullcap.perms    = in_pcap.perms;
+    pcc_fullcap.top_cor  = 1'b0;          // will be updated by set_address()
+    pcc_fullcap.base_cor = 1'b0;
+    pcc_fullcap.top      = in_pcap.top33  >> (in_pcap.exp);
+    pcc_fullcap.base     = in_pcap.base32 >> (in_pcap.exp);
+    pcc_fullcap.cperms   = in_pcap.cperms;
+    pcc_fullcap.maska    = 0;             // not used in pcc_cap
+    pcc_fullcap.rsvd     = in_pcap.rsvd;
+    pcc_fullcap.rlen     = 0;             // not used in pcc_cap
+ 
+    return pcc_fullcap;
   endfunction
 
   // compress full_cap to pcc_cap
   function automatic pcc_cap_t full2pcap (full_cap_t full_cap);
     pcc_cap_t pcc_cap;
 
-    pcc_cap.perms    = full_cap.perms;
     pcc_cap.valid    = full_cap.valid;
     pcc_cap.exp      = full_cap.exp;
-    pcc_cap.otype    = full_cap.otype;
-    pcc_cap.top      = full_cap.top;
-    pcc_cap.base     = full_cap.base;
-    pcc_cap.cperms   = full_cap.cperms;
     pcc_cap.top33    = full_cap.top33;
     pcc_cap.base32   = full_cap.base32;
+    pcc_cap.otype    = full_cap.otype;
+    pcc_cap.perms    = full_cap.perms;
+    pcc_cap.cperms   = full_cap.cperms;
+    pcc_cap.rsvd     = full_cap.rsvd;
 
     return pcc_cap;
   endfunction
 
+  function automatic reg_cap_t pcc2regcap (pcc_cap_t pcc_cap, logic [31:0] address);
+    reg_cap_t  reg_cap;
+    full_cap_t tfcap0, tfcap1;
+
+    tfcap0  = pcc2fullcap(pcc_cap);
+    tfcap1  = set_address(tfcap0, address, 0, 0);
+    reg_cap = full2regcap(tfcap1);
+
+    return reg_cap;
+  endfunction
 
   //
   // pack/unpack the cap+addr between reg and memory
@@ -597,12 +602,14 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
   function automatic reg_cap_t mem2regcap_fmt0 (logic [32:0] msw, logic [32:0] addr33, logic [3:0] clrperm);
     reg_cap_t regcap;
     logic [31:0] tmp32;
-    logic  [3:0] tmp4;
+    logic [3:0]  tmp4;
     logic [CPERMS_W-1:0] cperms_mem;
     logic [BOT_W-1:0]    addrmi9;
     logic                sealed;
+    logic                valid_in;
 
-    regcap.valid  = msw[32] & addr33[32] & ~clrperm[3];   // AND the valid bits for now
+    valid_in      = msw[32] & addr33[32];
+    regcap.valid  = valid_in & ~clrperm[3];   
 
     tmp32    = msw[CEXP_LO+:CEXP_W];
     if (tmp32 == RESETCEXP) tmp32 = RESETEXP;
@@ -614,7 +621,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
     sealed = (regcap.otype != OTYPE_UNSEALED);
     cperms_mem      = msw[CPERMS_LO+:CPERMS_W];
-    regcap.cperms   = mask_clcperms(cperms_mem, clrperm, regcap.valid, sealed);
+    regcap.cperms   = mask_clcperms(cperms_mem, clrperm, valid_in, sealed);
     addrmi9         = {1'b0, addr33[31:0]} >> regcap.exp;   // ignore the tag valid bit 
     tmp4            = update_temp_fields(regcap.top, regcap.base, addrmi9);
     regcap.top_cor  = tmp4[3:2];
@@ -654,9 +661,11 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     logic        sealed;
     logic [8:0]  addrmi9;
     logic [CPERMS_W-1:0] cperms_mem;
+    logic        valid_in;
 
     // lsw is now EXP+B+T+A
-    regcap.valid  = msw[32] & lsw[32] & ~clrperm[3];   // AND the valid bits for now
+    valid_in      = msw[32] & lsw[32];
+    regcap.valid  = valid_in & ~clrperm[3];   
     regcap.exp    = (lsw[30:27] == RESETCEXP) ?  RESETEXP : {1'b0, lsw[30:27]};
     regcap.base   = lsw[26:18];
     regcap.top    = lsw[17:9];
@@ -667,7 +676,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
     // cperms_mem = {lsw[31], msw[31:26]};
     cperms_mem    = msw[31:26];
-    regcap.cperms = mask_clcperms(cperms_mem, clrperm, regcap.valid, sealed);
+    regcap.cperms = mask_clcperms(cperms_mem, clrperm, valid_in, sealed);
     regcap.rsvd   = lsw[31];
 
     tmp32 = update_temp_fields(regcap.top, regcap.base, addrmi9);

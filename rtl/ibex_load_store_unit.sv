@@ -765,7 +765,9 @@ module ibex_load_store_unit import cheri_pkg::*; #(
   `ASSERT(IbexDataAddrUnaligned, data_req_o |-> (data_addr_o[1:0] == 2'b00))
 
   // tbre_req_good and CPU req can't be active at the same time
-  `ASSERT(TBREReqOverlap, $onehot0({lsu_req_i, tbre_req_good}))
+  // `ASSERT(TBREReqOverlap, $onehot0({lsu_req_i, tbre_req_good}))  -- no longer valid w/ stkZ.
+  // QQQ - we should look out for atomicity of access (no address/wdata change in the middle of a
+  //  transaction, etc.
   
 
 

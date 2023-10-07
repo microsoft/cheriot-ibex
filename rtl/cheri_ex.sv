@@ -7,9 +7,10 @@ module cheri_ex import cheri_pkg::*; #(
   parameter int unsigned HeapBase,
   parameter int unsigned TSMapBase,
   parameter int unsigned TSMapSize,
-  parameter bit          CheriPPLBC = 1'b1,
-  parameter bit          CheriSBND2 = 1'b0,
-  parameter bit          CheriStkZ  = 1'b1
+  parameter bit          CheriPPLBC  = 1'b1,
+  parameter bit          CheriSBND2  = 1'b0,
+  parameter bit          CheriStkZ   = 1'b1,
+  parameter bit          StkZ1Cycle  = 1'b1
 )(
    // Clock and Reset
   input  logic          clk_i,
@@ -36,8 +37,8 @@ module cheri_ex import cheri_pkg::*; #(
   output logic          rf_trsv_en_o,
 
   // pcc interface
-  input  full_cap_t     pcc_fullcap_i,
-  output full_cap_t     pcc_fullcap_o,
+  input  pcc_cap_t      pcc_cap_i,
+  output pcc_cap_t      pcc_cap_o,
   input  logic [31:0]   pc_id_i,
 
   // use branch_req_o also to update pcc cap
@@ -137,6 +138,12 @@ module cheri_ex import cheri_pkg::*; #(
   input  logic [31:0]   stkz_ptr_i,
   input  logic [31:0]   stkz_base_i,
 
+  output logic          ztop_wr_o,
+  output logic [31:0]   ztop_wdata_o,
+  output full_cap_t     ztop_wfcap_o,
+  input  logic [31:0]   ztop_rdata_i,
+  input  reg_cap_t      ztop_rcap_i,
+
   // debug feature
   input  logic          csr_dbg_tclr_fault_i
 );
@@ -194,6 +201,7 @@ module cheri_ex import cheri_pkg::*; #(
   logic          csr_op_en_raw;
   logic          cheri_wb_err_raw;
   logic          cheri_wb_err_q, cheri_wb_err_d; 
+  logic          ztop_wr_raw;
 
   logic   [3:0]  cheri_lsu_lc_clrperm;
   logic          lc_cglg, lc_csdlm, lc_ctag;
@@ -205,7 +213,6 @@ module cheri_ex import cheri_pkg::*; #(
   logic          set_bounds_done;
 
   logic   [4:0]  cheri_wb_err_cause, cheri_ex_err_cause, cheri_lsu_err_cause, rv32_lsu_err_cause;
-  logic          cpu_stkz_stall, cpu_stkz_err;
   logic   [31:0] cpu_lsu_addr;
   logic   [32:0] cpu_lsu_wdata;
   logic          cpu_lsu_cheri_err, cpu_lsu_is_cap;
@@ -253,6 +260,7 @@ module cheri_ex import cheri_pkg::*; #(
   assign csr_set_mie_o     = csr_set_mie_raw & cheri_exec_id_i;
   assign csr_clr_mie_o     = csr_clr_mie_raw & cheri_exec_id_i;
   assign csr_op_en_o       = csr_op_en_raw & cheri_exec_id_i;
+  assign ztop_wr_o         = ztop_wr_raw & cheri_exec_id_i;
 
   // ex_valid only used in multicycle case
   // ex_err is used for id exceptions
@@ -293,12 +301,15 @@ module cheri_ex import cheri_pkg::*; #(
     csr_set_mie_raw      = 1'b0;
     csr_clr_mie_raw      = 1'b0;
     branch_target_o      = 32'h0;
-    pcc_fullcap_o        = NULL_FULL_CAP;
+    pcc_cap_o            = NULL_PCC_CAP;
     tfcap                = NULL_FULL_CAP;
     lc_cglg              = 1'b0;
     lc_csdlm             = 1'b0;
     lc_ctag              = 1'b0;
     rf_trsv_en_o         = 1'b0;
+    ztop_wr_raw          = 1'b0;
+    ztop_wdata_o         = 32'h0;
+    ztop_wfcap_o         = NULL_FULL_CAP;
 
     unique case (1'b1)
       cheri_operator_i[CGET_PERM]:
@@ -497,24 +508,41 @@ module cheri_ex import cheri_pkg::*; #(
         end
       cheri_operator_i[CCSR_RW]:           // cd <-- scr; scr <-- cs1 if cs1 != C0
         begin
-          csr_access_o         = ~perm_vio;
-          csr_op_o             = CHERI_CSR_RW;
-          csr_op_en_raw        = ~perm_vio && (rf_raddr_a_i != 0);
-          csr_addr_o           = cheri_cs2_dec_i;
+          logic [31:0] tmp32;
+          logic        is_ztop, is_write;
+          
+          is_ztop            = (cheri_cs2_dec_i==CHERI_SCR_ZTOPC);
+          is_write           = (rf_raddr_a_i != 0);
+                            
+          csr_access_o       = ~perm_vio;
+          csr_op_o           = CHERI_CSR_RW;
+          csr_op_en_raw      = ~perm_vio && is_write && ~is_ztop;
+          ztop_wr_raw        = ~perm_vio && is_write && is_ztop;
+          csr_addr_o         = cheri_cs2_dec_i;
 
-          if ((cheri_cs2_dec_i == 28) || (cheri_cs2_dec_i == 31)) begin   // MTVEC/MTCC or MEPCC 
-            csr_wdata_o          = {rf_rdata_a[31:1], 1'b0};          
-            csr_wcap_o           = full2regcap(setaddr1_outcap);
+          if ((cheri_cs2_dec_i==CHERI_SCR_MTCC)||(cheri_cs2_dec_i==CHERI_SCR_MEPCC)) begin
+            // MTVEC/MTCC or MEPCC 
+            csr_wdata_o      = rf_rdata_a;          
+            csr_wcap_o       = full2regcap(setaddr1_outcap);
           end else begin
-            csr_wdata_o          = rf_rdata_a;          
-            csr_wcap_o           = rf_rcap_a;
+            csr_wdata_o      = rf_rdata_a;          
+            csr_wcap_o       = rf_rcap_a;
           end 
 
-          result_data_o        = csr_rdata_i;
-          result_cap_o         = csr_rcap_i;
-          cheri_rf_we_raw      = ~perm_vio;
-          cheri_ex_valid_raw   = 1'b1;
-          cheri_ex_err_raw     = perm_vio; 
+          if (is_ztop) begin
+            result_data_o    = ztop_rdata_i;
+            result_cap_o     = ztop_rcap_i;
+            ztop_wfcap_o     = rf_fullcap_a;
+            ztop_wdata_o     = rf_rdata_a;
+          end else begin
+            result_data_o    = csr_rdata_i;
+            result_cap_o     = csr_rcap_i;
+            ztop_wfcap_o     = NULL_FULL_CAP;
+            ztop_wdata_o     = 32'h0; 
+          end
+          cheri_rf_we_raw    = ~perm_vio;
+          cheri_ex_valid_raw = 1'b1;
+          cheri_ex_err_raw   = perm_vio; 
         end
       (cheri_operator_i[CJALR] | cheri_operator_i[CJAL]):
         begin                  // cd <-- pcc; pcc <-- cs1/pc+offset; pcc.address[0] <--'0'; pcc.sealed <--'0'
@@ -523,7 +551,7 @@ module cheri_ex import cheri_pkg::*; #(
 
           // note this is the RV32 definition of JALR arithmetic (add first then mask of lsb)
           branch_target_o      = {addr_result[31:1], 1'b0};
-          pcc_fullcap_o        = setaddr2_outcap;
+          pcc_cap_o            = full2pcap(unseal_cap(rf_fullcap_a));
           // Note we can't directly use pc_if here
           // (link address == pc_id + delta, but pc_if should be the next executed PC (the jump target)
           //  if branch prediction works)
@@ -536,7 +564,8 @@ module cheri_ex import cheri_pkg::*; #(
           // -- use the speculative version for instruction fetch
           // -- the ID exception (cheri_ex_err) flushes the pipeline and re-set PC so
           //    the speculatively fetched instruction will be flushed
-          instr_fault           = ~pcc_fullcap_o.valid | perm_vio;
+          instr_fault           = (cheri_operator_i[CJALR] & ~pcc_cap_o.valid) | 
+                                  addr_bound_vio | perm_vio;
 
           cheri_rf_we_raw      = ~instr_fault;    // err -> wb exception
           branch_req_raw       = ~instr_fault & cheri_operator_i[CJALR];    // update PCC in CSR
@@ -632,10 +661,10 @@ module cheri_ex import cheri_pkg::*; #(
 
     // set_addr operation 1
     if (cheri_operator_i[CJAL] | cheri_operator_i[CJALR]) begin
-      tfcap1  = pcc_fullcap_i;        // link register
+      tfcap1  = pcc2fullcap(pcc_cap_i);        // link register
       taddr1  = pc_id_nxt;
     end else if (cheri_operator_i[CAUIPCC]) begin
-      tfcap1  = pcc_fullcap_i;
+      tfcap1  = pcc2fullcap(pcc_cap_i);
       taddr1  = addr_result;
     end else if (cheri_operator_i[CSET_ADDR] | cheri_operator_i[CINC_ADDR] |
                  cheri_operator_i[CINC_ADDR_IMM] | cheri_operator_i[CAUICGP]) begin
@@ -643,7 +672,9 @@ module cheri_ex import cheri_pkg::*; #(
       taddr1  = addr_result;
     end else if (cheri_operator_i[CCSR_RW]) begin
       tfcap1  = rf_fullcap_a;
-      taddr1  = csr_wdata_o;
+      taddr1  = (cheri_cs2_dec_i == CHERI_SCR_MTCC) ? {rf_rdata_a[31:2], 2'b00} :
+                ((cheri_cs2_dec_i == CHERI_SCR_MEPCC) ? {rf_rdata_a[31:1], 1'b0} :
+                 rf_rdata_a);
     end else begin
       tfcap1  = NULL_FULL_CAP;
       taddr1  = 32'h0;
@@ -651,25 +682,6 @@ module cheri_ex import cheri_pkg::*; #(
 
     // representability check only
     setaddr1_outcap = set_address(tfcap1, taddr1, 0, 0);
-
-    // set_addr operation 2 (jump target).
-    if (cheri_operator_i[CJAL]) begin
-      tfcap2  = pcc_fullcap_i;
-      taddr2  = branch_target_o;
-    end else if (cheri_operator_i[CJALR]) begin
-      tfcap2  = unseal_cap(rf_fullcap_a);
-      taddr2  = branch_target_o;
-    end else begin
-      tfcap2  = NULL_FULL_CAP;
-      taddr2  = 32'h0;
-    end
-
-    // we only do address bound check for jump targets (updating pcc), 
-    //   - no need to check when forming the link register
-    //   - note we can't simply depend on the IF stage fetch address checking
-    //     since that would defer exceptions to the fetched instruction.
-
-    setaddr2_outcap = set_address(tfcap2, taddr2, 1, 1);
   end
 
   bound_req_t bound_req1, bound_req2;
@@ -760,13 +772,13 @@ module cheri_ex import cheri_pkg::*; #(
 
     if (rv32_lsu_type_i == 2'b00) begin
       top_offset  = 32'h4;
-      top_size_ok = |rf_fullcap_a.top33[31:2];     // at least 4 bytes
+      top_size_ok = |rf_fullcap_a.top33[32:2];     // at least 4 bytes
     end else if (rv32_lsu_type_i == 2'b01) begin
       top_offset  = 32'h2;
-      top_size_ok = |rf_fullcap_a.top33[31:1];
+      top_size_ok = |rf_fullcap_a.top33[32:1];
     end else begin
       top_offset = 32'h1;
-      top_size_ok = |rf_fullcap_a.top33[31:0];
+      top_size_ok = |rf_fullcap_a.top33[32:0];
     end
 
     //top_chkaddr = base_chkaddr + top_offset;
@@ -776,13 +788,14 @@ module cheri_ex import cheri_pkg::*; #(
     top_bound  = rf_fullcap_a.top33 - top_offset;
     base_bound = rf_fullcap_a.base32;
 
-    top_vio  = (top_chkaddr  > top_bound) && top_size_ok;
+    top_vio  = (top_chkaddr  > top_bound) || ~top_size_ok;
     base_vio = (base_chkaddr < base_bound);
 
     // timing critical (data_req_o) path - don't add any unnecssary terms.
     // we will chose with is_cheri on the LSU interface later.
-    // addr_bound_vio_rv32 =  instr_is_rv32lsu_i & (top_vio | base_vio);
-    addr_bound_vio_rv32 =  top_vio | base_vio;
+    //   for unaligned access, only check the starting (1st) address
+    //   (if there is an error, addr_incr_req won't be thre anyway
+    addr_bound_vio_rv32 =  (top_vio | base_vio) & ~addr_incr_req_i ;
 
     // main permission logic
     perm_vio_rv32 =  (~rf_fullcap_a.valid || is_cap_sealed(rf_fullcap_a) ||
@@ -814,21 +827,34 @@ module cheri_ex import cheri_pkg::*; #(
     // generate the address used to check top bound violation
     if (cheri_operator_i[CSEAL] | cheri_operator_i[CUNSEAL])
       base_chkaddr = rf_rdata_b;           // cs2.address
+    else if (cheri_operator_i[CJAL] | cheri_operator_i[CJALR])
+      base_chkaddr = branch_target_o;
     else if (cheri_operator_i[CIS_SUBSET])
       base_chkaddr = rf_fullcap_b.base32;  // cs2.base32
-    else
+    else   // CLC/CSC
       base_chkaddr = cs1_addr_plusimm;     // cs1.address + offset
 
     if (cheri_operator_i[CIS_SUBSET])
       top_chkaddr = rf_fullcap_b.top33;
-    else if (is_cap)
-      top_chkaddr = base_chkaddr + 8;
-    else
+    else if (cheri_operator_i[CJAL] | cheri_operator_i[CJALR])
+      top_chkaddr = {base_chkaddr[31:1], 1'b0};
+    else if (is_cap)  // CLC/CSC
+      top_chkaddr = {base_chkaddr[31:3], 3'b000};
+    else 
       top_chkaddr = base_chkaddr;
 
     if (cheri_operator_i[CSEAL] | cheri_operator_i[CUNSEAL]) begin
       top_bound  = rf_fullcap_b.top33;
       base_bound = rf_fullcap_b.base32;
+    end else if (cheri_operator_i[CJAL]) begin
+      top_bound  = {pcc_cap_i.top33[32:1], 1'b0};
+      base_bound = pcc_cap_i.base32;
+    end else if (cheri_operator_i[CJALR]) begin
+      top_bound  = {rf_fullcap_a.top33[32:1], 1'b0};
+      base_bound = rf_fullcap_a.base32;
+    end else if (is_cap) begin // CLC/CSC
+      top_bound  = {rf_fullcap_a.top33[32:3], 3'b000};       // 8-byte aligned access only
+      base_bound = rf_fullcap_a.base32;
     end else begin
       top_bound  = rf_fullcap_a.top33;
       base_bound = rf_fullcap_a.base32;
@@ -840,8 +866,10 @@ module cheri_ex import cheri_pkg::*; #(
 
     if (debug_mode_i)
       addr_bound_vio = 1'b0;
-    else if (is_cap | cheri_operator_i[CIS_SUBSET])
+    else if (is_cap | cheri_operator_i[CIS_SUBSET]) 
       addr_bound_vio = top_vio | base_vio;
+    else if (cheri_operator_i[CJAL] | cheri_operator_i[CJALR])
+      addr_bound_vio = top_vio | base_vio | top_equal;
     else if (cheri_operator_i[CSEAL] | cheri_operator_i[CUNSEAL])
       addr_bound_vio = top_vio | base_vio | top_equal;
     else
@@ -882,7 +910,7 @@ module cheri_ex import cheri_pkg::*; #(
     else if (cheri_operator_i[CJAL] & cheri_pmode_i)
       perm_vio = (addr_result[0]); 
     else if (cheri_operator_i[CCSR_RW])
-      perm_vio = ~pcc_fullcap_i.perms[PERM_SR] || (csr_addr_o < 27);
+      perm_vio = ~pcc_cap_i.perms[PERM_SR] || (csr_addr_o < 27);
     else
       perm_vio  = 1'b0;
 
@@ -934,7 +962,7 @@ module cheri_ex import cheri_pkg::*; #(
     else
       cheri_lsu_err_cause = 5'h0;
 
-    if ((cheri_operator_i[CJAL] | cheri_operator_i[CJALR])  && ~pcc_fullcap_o.valid) 
+    if ((cheri_operator_i[CJAL] | cheri_operator_i[CJALR])  && ~pcc_cap_o.valid) 
       cheri_wb_err_cause = 5'h01;
     else if (cheri_operator_i[CJALR] && ~rf_fullcap_a.valid)
       cheri_wb_err_cause = 5'h02;
@@ -1092,12 +1120,24 @@ module cheri_ex import cheri_pkg::*; #(
   //
   // muxing in cheri LSU signals with the rv32 signals
   //
+logic cpu_stkz_stall0, cpu_stkz_stall1;
+logic cpu_stkz_err;
 
-  assign lsu_req_o         = ~cpu_stkz_stall & (instr_is_cheri_i ? cheri_lsu_req : rv32_lsu_req_i);
+if (CheriStkZ & ~StkZ1Cycle) begin
+  // load/store takes 2 cycles when stkz_active
+  // always stall both lsu_req and cpu_lsu_dec duing first_cycle
+  assign lsu_req_o         = ~cpu_stkz_stall0 & (instr_is_cheri_i ? cheri_lsu_req : rv32_lsu_req_i);
+  assign cpu_lsu_dec_o     = ~cpu_stkz_stall1 & ((instr_is_cheri_i && is_cap) | instr_is_rv32lsu_i);  
 
-  // cpu_lsu_dec_o is meant to be an early signal to help LSU to generate mux selects for 
-  // address/ctrl/wdata (eventually to help timing on those output ports)
-  assign cpu_lsu_dec_o     = ~cpu_stkz_stall & ((instr_is_cheri_i && is_cap) | instr_is_rv32lsu_i);  
+end else if (CheriStkZ & StkZ1Cycle) begin
+  // load/store takes 1 cycle when stkz_active
+  assign lsu_req_o         = ~cpu_stkz_stall0 & (instr_is_cheri_i ? cheri_lsu_req : rv32_lsu_req_i);
+  assign cpu_lsu_dec_o     = ~cpu_stkz_stall1 & ((instr_is_cheri_i && is_cap) | instr_is_rv32lsu_i);  
+end else begin
+  assign lsu_req_o         = (instr_is_cheri_i ? cheri_lsu_req : rv32_lsu_req_i);
+  assign cpu_lsu_dec_o     = ((instr_is_cheri_i && is_cap) | instr_is_rv32lsu_i);  
+
+end
 
   assign cpu_lsu_cheri_err = cpu_stkz_err | (instr_is_cheri_i ? cheri_lsu_err : rv32_lsu_err); 
   assign cpu_lsu_addr      = instr_is_cheri_i ? cheri_lsu_addr : rv32_lsu_addr_i;
@@ -1149,15 +1189,16 @@ module cheri_ex import cheri_pkg::*; #(
   // Stack fast clearing support
   //
 
-  if (CheriStkZ) begin
-    logic        lsu_addr_in_range, stkz_stall_q;
+  if (CheriStkZ & ~StkZ1Cycle) begin
+    logic lsu_addr_in_range, stkz_stall_q;
 
     // can't directly use csr_mshwm_i (high watermark) as the stack base here
     // since mshwm itself will be updated by lsu write request
     assign lsu_addr_in_range = (cpu_lsu_addr[31:4] >= stkz_base_i[31:4]) && 
                                (cpu_lsu_addr[31:2] < stkz_ptr_i[31:2]);
 
-    assign cpu_stkz_stall = (stkz_active_i & instr_first_cycle_i) | stkz_stall_q; 
+    assign cpu_stkz_stall0 = (stkz_active_i & instr_first_cycle_i) | stkz_stall_q; 
+    assign cpu_stkz_stall1 = cpu_stkz_stall0;
 
     // load/store takes 2 cycles when stkz_active. 
     //   -- we are doing this such that cpu_lsu_dec doesn't have to wait for address range
@@ -1172,13 +1213,43 @@ module cheri_ex import cheri_pkg::*; #(
         cpu_stkz_err <= 1'b0;
       end else begin
         stkz_stall_q <= stkz_active_i & lsu_addr_in_range;
-        cpu_stkz_err <= stkz_abort_i & lsu_addr_in_range;
+        cpu_stkz_err <= lsu_req_done_i & stkz_abort_i & lsu_addr_in_range;    // QQQ see the 1cyle case
       end
     end
+
+  end else if (CheriStkZ & StkZ1Cycle) begin
+    logic lsu_addr_in_range, stkz_stall_q;
+
+    assign lsu_addr_in_range = (cpu_lsu_addr[31:4] >= stkz_base_i[31:4]) && 
+                               (cpu_lsu_addr[31:2] < stkz_ptr_i[31:2]);
+
+    // cpu_lsu_dec_o is meant to be an early hint to help LSU to generate mux selects for 
+    // address/ctrl/wdata (eventually to help timing on those output ports)
+    // - we always suppress lsu_req if stkclr active and address-in-range (to be cleared)
+    // - however in the first cycle we speculatively still assert cpu_lsu_dec_o to let LSU choose 
+    //   the address from cpu core (and hold back stkz/tbre_req). In the next cycle we can deassert
+    //   cpu_lsu_dec_o to let stkz/tbre_req go through
+    assign cpu_stkz_stall0 = (instr_first_cycle_i & stkz_active_i & lsu_addr_in_range) | stkz_stall_q; 
+    assign cpu_stkz_stall1 = ~instr_first_cycle_i & stkz_stall_q;
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        stkz_stall_q <= 1'b0;
+        cpu_stkz_err <= 1'b0;
+      end else begin
+        stkz_stall_q <= stkz_active_i & lsu_addr_in_range;
+        if (lsu_req_done_i)
+          cpu_stkz_err <= 1'b0;
+        else if (stkz_abort_i & lsu_addr_in_range & (cheri_lsu_req | rv32_lsu_req_i))
+          cpu_stkz_err <= 1'b1;
+      end
+    end
+    assign  cpu_stkz_stall_q = stkz_stall_q;
 
   end else begin
     assign cpu_stkz_stall  = 1'b0;
     assign cpu_stkz_err    = 1'b0;
+    assign cpu_stkz_stall_q = 1'b0;
   end
 
   //

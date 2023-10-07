@@ -77,12 +77,6 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   input  logic                 csr_mshwm_set_i,
   input  logic [31:0]          csr_mshwm_new_i,
 
-  output logic                 scr_ztop_wr_o,
-  output logic [31:0]          scr_ztop_wdata_o,
-  output reg_cap_t             scr_ztop_wcap_o,
-  input  logic [31:0]          scr_ztop_rdata_i,
-  input  reg_cap_t             scr_ztop_rcap_i,
-
   // interrupts
   input  logic                 irq_software_i,
   input  logic                 irq_timer_i,
@@ -152,8 +146,8 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
   input  logic                 cheri_branch_req_i,
   input  logic [31:0]          cheri_branch_target_i,
-  input  full_cap_t            pcc_fullcap_i,
-  output full_cap_t            pcc_fullcap_o,
+  input  pcc_cap_t             pcc_cap_i,
+  output pcc_cap_t             pcc_cap_o,
 
   output logic                 csr_dbg_tclr_fault_o
   );
@@ -259,6 +253,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   logic        mshwm_en, mshwmb_en;
   logic [31:0] cdbg_ctrl_q;
   logic        cdbg_ctrl_en;
+  pcc_cap_t    pcc_cap_q, pcc_cap_d;
 
   // CSRs for recoverable NMIs
   // NOTE: these CSRS are nonstandard, see https://github.com/riscv/riscv-isa-manual/issues/261
@@ -849,10 +844,11 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   //     for now we are allowing reading the M-mode counters (assuming only use single priv level)
 
   logic read_ok;
-  assign read_ok = ~CHERIoTEn || ~cheri_pmode_i || debug_mode_i || pcc_fullcap_o.perms[PERM_SR] || 
-                   ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<CSR_MSHWM));
+  assign read_ok = ~CHERIoTEn || ~cheri_pmode_i || debug_mode_i || pcc_cap_q.perms[PERM_SR] || 
+                   ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<=CSR_CDBG_CTRL));
+                   // ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<CSR_MSHWM));
 
-  assign csr_we_int  = csr_wr & csr_op_en_i & (~CHERIoTEn | ~cheri_pmode_i | debug_mode_i | pcc_fullcap_o.perms[PERM_SR]) & ~illegal_csr_insn_o;
+  assign csr_we_int  = csr_wr & csr_op_en_i & (~CHERIoTEn | ~cheri_pmode_i | debug_mode_i | pcc_cap_q.perms[PERM_SR]) & ~illegal_csr_insn_o;
   assign csr_rdata_o = read_ok ? csr_rdata_int : 0;
 
   // directly output some registers
@@ -989,13 +985,14 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
   assign mtvec_en_combi = mtvec_en | mtvec_en_cheri;
 
-  assign mtvec_d_combi = ({32{mtvec_en}} & mtvec_d) | ({32{mtvec_en_cheri}} & cheri_csr_wdata_i[31:0]);
+  assign mtvec_d_combi = ({32{mtvec_en}} & mtvec_d) | ({32{mtvec_en_cheri}} & 
+                          {cheri_csr_wdata_i[31:2],2'b00});
 
   // MTVEC
   ibex_csr #(
     .Width     (32),
     .ShadowCopy(ShadowCSR),
-    .ResetValue(32'd1)
+    .ResetValue({31'h0, ~CHERIoTEn})   // use only 2'b00 (direct mode) for CHERIoT
   ) u_mtvec_csr (
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),
@@ -1755,7 +1752,6 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   //////////////////////
 
   if (CHERIoTEn) begin: gen_scr
-    pcc_cap_t     pcc_cap_q, pcc_cap_d;
     reg_cap_t     pcc_exc_reg_cap;
     reg_cap_t     mtdc_cap;
     logic [31:0]  mtdc_data;
@@ -1781,11 +1777,6 @@ module ibex_cs_registers import cheri_pkg::*;  #(
           begin
             cheri_csr_rdata_o = debug_mode_i ? dscratch1_q : 0;
             cheri_csr_rcap_o  = debug_mode_i ? dscratch1_cap : NULL_REG_CAP;
-          end
-        CHERI_SCR_ZTOPC:
-          begin
-            cheri_csr_rdata_o = scr_ztop_rdata_i;
-            cheri_csr_rcap_o  = scr_ztop_rcap_i;
           end
         CHERI_SCR_MTCC:
           begin
@@ -1815,8 +1806,10 @@ module ibex_cs_registers import cheri_pkg::*;  #(
       endcase
     end
 
-    assign pcc_fullcap_o   = pcc2fullcap(pcc_cap_q);
-    assign pcc_exc_reg_cap = full2regcap(set_address(pcc_fullcap_o, exception_pc, 0, 0));
+    assign pcc_cap_o = pcc_cap_q;
+
+    // assign pcc_exc_reg_cap = full2regcap(set_address(pcc_fullcap_o, exception_pc, 0, 0));
+    assign pcc_exc_reg_cap = pcc2regcap(pcc_cap_q, exception_pc);
 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
@@ -1855,7 +1848,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
       if (csr_save_cause_i | csr_restore_mret_i | (csr_restore_dret_i & debug_mode_i)) begin 
         pcc_cap_d = full2pcap(tf_cap);
       end else if (cheri_branch_req_i) begin
-        pcc_cap_d = full2pcap(pcc_fullcap_i);
+        pcc_cap_d = pcc_cap_i;
       end else begin
         pcc_cap_d = pcc_cap_q;
       end
@@ -1914,11 +1907,6 @@ module ibex_cs_registers import cheri_pkg::*;  #(
       end
     end
 
-    // ztop capability (implemented externally)
-    assign scr_ztop_wr_o    = cheri_csr_op_en_i && (cheri_csr_addr_i == CHERI_SCR_ZTOPC) && (cheri_csr_op_i == CHERI_CSR_RW);
-    assign scr_ztop_wdata_o = cheri_csr_wdata_i;
-    assign scr_ztop_wcap_o  = cheri_csr_wcap_i;
-
     // depc extended capability
     assign depc_en_cheri = debug_mode_i & cheri_csr_op_en_i && (cheri_csr_addr_i == CHERI_SCR_DEPCC) && (cheri_csr_op_i == CHERI_CSR_RW);
 
@@ -1951,7 +1939,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     assign cheri_csr_rdata_o = 32'h0;
     assign cheri_csr_rcap_o  = NULL_REG_CAP;
 
-    assign pcc_fullcap_o = NULL_FULL_CAP;
+    assign pcc_cap_o         = NULL_PCC_CAP;
 
     assign mtvec_en_cheri      = 1'b0;
     assign mepc_en_cheri       = 1'b0;
@@ -1959,10 +1947,6 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     assign dscratch0_en_cheri  = 1'b0;
     assign dscratch1_en_cheri  = 1'b0;
 
-    assign scr_ztop_wr_o    = 1'b0;
-    assign scr_ztop_wdata_o = 32'h0;
-    assign scr_ztop_wcap_o  = NULL_REG_CAP; 
-    
   end
 
 endmodule

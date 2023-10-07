@@ -59,7 +59,10 @@ module cheri_trvk_stage #(
   assign tsmap_ptr = (base32 - HeapBase) >> 3;
 
   assign tsmap_addr_o  = tsmap_ptr[15:5];
-  assign range_ok      = (tsmap_ptr[31:5] <= TSMapSize);
+
+  // not a sealling cap and pointing to valid TSMAP range
+  assign range_ok      = (tsmap_ptr[31:5] <= TSMapSize) && 
+                         ~((in_cap_q.cperms[4:3]==2'b00) && (|in_cap_q.cperms[2:0]));
   assign tsmap_cs_o    = (cpu_op_valid_q[0] | tbre_op_valid_q[0]) & cap_good_q[0];
 
   assign rf_trvk_en_o     =  cpu_op_valid_q[2];
@@ -103,10 +106,10 @@ module cheri_trvk_stage #(
       // control signal per stage
       cpu_op_valid_q  <= {cpu_op_valid_q[1:0], cpu_op_valid};
       tbre_op_valid_q <= {tbre_op_valid_q[1:0], tbre_op_valid};
-      cap_good_q  <= {cap_good_q[1:0], cap_good};
-      trsv_addr_q[0] <= trsv_addr;
-      trsv_addr_q[1] <= trsv_addr_q[0];
-      trsv_addr_q[2] <= trsv_addr_q[1];
+      cap_good_q      <= {cap_good_q[1:0], cap_good};
+      trsv_addr_q[0]  <= trsv_addr;
+      trsv_addr_q[1]  <= trsv_addr_q[0];
+      trsv_addr_q[2]  <= trsv_addr_q[1];
 
       // stage 0 status: register loaded cap
       if ((cpu_op_valid & ~lsu_load_err_i) | (tbre_op_valid & ~lsu_tbre_resp_err_i)) begin

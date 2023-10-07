@@ -405,7 +405,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   // for RVFI
   logic        illegal_insn_id, unused_illegal_insn_id; // ID stage sees an illegal instruction
 
-  full_cap_t     pcc_fullcap_r, pcc_fullcap_w;
+  pcc_cap_t     pcc_cap_r, pcc_cap_w;
 
   logic          cheri_branch_req;
   logic          cheri_branch_req_spec;
@@ -459,11 +459,11 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic [31:0]   csr_mshwmb;
   logic          csr_mshwm_set;
   logic [31:0]   csr_mshwm_new;
-  logic          scr_ztop_wr;
-  logic [31:0]   scr_ztop_wdata;
-  reg_cap_t      scr_ztop_wcap;
-  logic [31:0]   scr_ztop_rdata;
-  reg_cap_t      scr_ztop_rcap;
+  logic          ztop_wr;
+  logic [31:0]   ztop_wdata;
+  full_cap_t     ztop_wfcap;
+  logic [31:0]   ztop_rdata;
+  reg_cap_t      ztop_rcap;
 
   logic          stkz_active;
   logic          stkz_abort;
@@ -592,7 +592,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
 
     .pc_mismatch_alert_o(pc_mismatch_alert),
     .if_busy_o          (if_busy),
-    .pcc_fullcap_i      (pcc_fullcap_r)
+    .pcc_cap_i          (pcc_cap_r)
   );
 
   // Core is waiting for the ISide when ID/EX stage is ready for a new instruction but none are
@@ -715,7 +715,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .csr_mstatus_tw_i     (csr_mstatus_tw),
     .illegal_csr_insn_i   (illegal_csr_insn_id),
     .data_ind_timing_i    (data_ind_timing),
-    .csr_pcc_perm_sr_i    (pcc_fullcap_r.perms[PERM_SR]),
+    .csr_pcc_perm_sr_i    (pcc_cap_r.perms[PERM_SR]),
 
     // LSU
     .lsu_req_o        (rv32_lsu_req),  // to load store unit
@@ -867,7 +867,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .TSMapSize            (TSMapSize),
       .CheriPPLBC           (CheriPPLBC),
       .CheriSBND2           (CheriSBND2),
-      .CheriStkZ            (CheriTBRE)
+      .CheriStkZ            (CheriTBRE),
+      .StkZ1Cycle           (1'b1)
     ) u_cheri_ex (
       .clk_i                (clk_i),
       .rst_ni               (rst_ni),
@@ -885,8 +886,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .rf_rdata_b_i         (rf_rdata_b),
       .rf_rcap_b_i          (rf_rcap_b_i),
       .rf_trsv_en_o         (rf_trsv_en),
-      .pcc_fullcap_i        (pcc_fullcap_r),
-      .pcc_fullcap_o        (pcc_fullcap_w),
+      .pcc_cap_i            (pcc_cap_r),
+      .pcc_cap_o            (pcc_cap_w),
       .pc_id_i              (pc_id),
       .branch_req_o         (cheri_branch_req),
       .branch_req_spec_o    (cheri_branch_req_spec),
@@ -964,6 +965,11 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .stkz_abort_i         (stkz_abort),
       .stkz_ptr_i           (stkz_ptr),
       .stkz_base_i          (stkz_base),
+      .ztop_wr_o            (ztop_wr),  
+      .ztop_wdata_o         (ztop_wdata),
+      .ztop_wfcap_o         (ztop_wfcap),
+      .ztop_rdata_i         (ztop_rdata),
+      .ztop_rcap_i          (ztop_rcap),
       .csr_dbg_tclr_fault_i (csr_dbg_tclr_fault)
     );
 
@@ -977,7 +983,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     assign cheri_branch_reqc      = 1'b0;
     assign cheri_branch_req_spec  = 1'b0;
     assign branch_target_ex       = branch_target_ex_rv32;
-    assign pcc_fullcap_w          = NULL_FULL_CAP;
+    assign pcc_cap_w              = NULL_PCC_CAP;
                                   
     assign cheri_rf_we            = 1'b0;
     assign cheri_result_data      = 32'h0;
@@ -1097,11 +1103,11 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .snoop_lsu_addr_i        (lsu_addr),
     .trvk_en_i               (tbre_trvk_en),
     .trvk_clrtag_i           (tbre_trvk_clrtag),
-    .scr_ztop_wr_i     (scr_ztop_wr),  
-    .scr_ztop_wdata_i  (scr_ztop_wdata),
-    .scr_ztop_wcap_i   (scr_ztop_wcap),
-    .scr_ztop_rdata_o  (scr_ztop_rdata),
-    .scr_ztop_rcap_o   (scr_ztop_rcap),
+    .ztop_wr_i               (ztop_wr),  
+    .ztop_wdata_i            (ztop_wdata),
+    .ztop_wfcap_i            (ztop_wfcap),
+    .ztop_rdata_o            (ztop_rdata),
+    .ztop_rcap_o             (ztop_rcap),
     .unmasked_intr_i         (unmasked_intr),
     .stkz_active_o           (stkz_active),
     .stkz_abort_o            (stkz_abort),
@@ -1546,11 +1552,6 @@ end
     .csr_mshwmb_o         (csr_mshwmb),
     .csr_mshwm_set_i      (csr_mshwm_set),
     .csr_mshwm_new_i      (csr_mshwm_new),
-    .scr_ztop_wr_o    (scr_ztop_wr),  
-    .scr_ztop_wdata_o (scr_ztop_wdata),
-    .scr_ztop_wcap_o  (scr_ztop_wcap),
-    .scr_ztop_rdata_i (scr_ztop_rdata),
-    .scr_ztop_rcap_i  (scr_ztop_rcap),
 
     // Interrupt related control signals
     .irq_software_i   (irq_software_i),
@@ -1620,8 +1621,8 @@ end
 
     .cheri_branch_req_i     (cheri_branch_req),
     .cheri_branch_target_i  (branch_target_ex_cheri),
-    .pcc_fullcap_i          (pcc_fullcap_w),
-    .pcc_fullcap_o          (pcc_fullcap_r),
+    .pcc_cap_i              (pcc_cap_w),
+    .pcc_cap_o              (pcc_cap_r),
     .csr_dbg_tclr_fault_o   (csr_dbg_tclr_fault)
   );
 

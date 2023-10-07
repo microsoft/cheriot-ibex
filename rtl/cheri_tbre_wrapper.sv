@@ -7,6 +7,7 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   parameter bit          CHERIoTEn   = 1'b1,
   parameter bit          CheriTBRE   = 1'b1,
   parameter bit          CheriStkZ   = 1'b1,
+  parameter  bit         StkZIntrOK  = 1'b0,
   parameter int unsigned MMRegDinW   = 128,
   parameter int unsigned MMRegDoutW  = 64
   
@@ -45,11 +46,11 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   input  logic          trvk_clrtag_i,
 
   // Stack fast-clearing signals
-  input  logic          scr_ztop_wr_i,
-  input  logic [31:0]   scr_ztop_wdata_i,
-  input  reg_cap_t      scr_ztop_wcap_i,
-  output logic [31:0]   scr_ztop_rdata_o,
-  output reg_cap_t      scr_ztop_rcap_o,
+  input  logic          ztop_wr_i,
+  input  logic [31:0]   ztop_wdata_i,
+  input  full_cap_t     ztop_wfcap_i,
+  output logic [31:0]   ztop_rdata_o,
+  output reg_cap_t      ztop_rcap_o,
  
   input  logic          unmasked_intr_i,
 
@@ -128,15 +129,18 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   end
 
   if (CHERIoTEn & CheriStkZ) begin : g_stkz
+    logic unmasked_intr;
+    assign unmasked_intr = StkZIntrOK & unmasked_intr_i;
+
     cheri_stkz cheri_stkz_i (
-      .clk_i                    (clk_i             ),
-      .rst_ni                   (rst_ni            ),
-      .scr_ztop_wr_i     (scr_ztop_wr_i),  
-      .scr_ztop_wdata_i  (scr_ztop_wdata_i),
-      .scr_ztop_wcap_i   (scr_ztop_wcap_i),
-      .scr_ztop_rdata_o  (scr_ztop_rdata_o),
-      .scr_ztop_rcap_o   (scr_ztop_rcap_o),
-      .unmasked_intr_i          (unmasked_intr_i    ),
+      .clk_i                  (clk_i             ),
+      .rst_ni                 (rst_ni            ),
+      .ztop_wr_i              (ztop_wr_i),  
+      .ztop_wdata_i           (ztop_wdata_i),
+      .ztop_wfcap_i           (ztop_wfcap_i),
+      .ztop_rdata_o           (ztop_rdata_o),
+      .ztop_rcap_o            (ztop_rcap_o),
+      .unmasked_intr_i        (unmasked_intr    ),
       .stkz_active_o          (stkz_active_o        ),
       .stkz_abort_o           (stkz_abort_o         ),
       .stkz_ptr_o             (stkz_ptr_o           ),
@@ -149,8 +153,7 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
       .stkz_lsu_we_o          (blk0_lsu_we            ),
       .stkz_lsu_is_cap_o      (blk0_lsu_is_cap        ),
       .stkz_lsu_addr_o        (blk0_lsu_addr          ),
-      .stkz_lsu_wdata_o       (blk0_lsu_wdata         ),
-      .snoop_lsu_req_done_i     (snoop_lsu_req_done_i )
+      .stkz_lsu_wdata_o       (blk0_lsu_wdata         )
       );
 
   end else begin
@@ -160,8 +163,8 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
     assign stkz_base_o   = 32'h0;
     assign stkz_err      = 1'b0;
 
-    assign scr_ztop_rcap_o  = NULL_REG_CAP;
-    assign scr_ztop_rdata_o = 32'h0;
+    assign ztop_rcap_o  = NULL_REG_CAP;
+    assign ztop_rdata_o = 32'h0000_aa55;
 
     assign blk0_lsu_req    = 1'b0;
     assign blk0_lsu_is_cap = 1'b0;

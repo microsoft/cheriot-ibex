@@ -118,7 +118,7 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
   // misc signals
   output logic                        pc_mismatch_alert_o,
   output logic                        if_busy_o,                // IF stage is busy fetching instr
-  input  full_cap_t                   pcc_fullcap_i
+  input  pcc_cap_t                    pcc_cap_i
 );
 
   logic              instr_valid_id_d, instr_valid_id_q;
@@ -358,15 +358,16 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
   logic        hdrm_ge4, hdrm_ge2, hdrm_ok;
 
   assign instr_len  = (fetch_valid & ~fetch_err & instr_is_compressed) ? 2 : 4;
-  assign instr_hdrm = pcc_fullcap_i.top33 - if_instr_addr;
+  assign instr_hdrm = pcc_cap_i.top33 - if_instr_addr;
   assign hdrm_ge4   = (instr_hdrm >= 4);
   assign hdrm_ge2   = (instr_hdrm >= 2);
   assign hdrm_ok    = instr_is_compressed ? hdrm_ge2 : hdrm_ge4;
 
   // only issue cheri_acc_vio on valid fetches
   assign cheri_acc_vio = CHERIoTEn & cheri_pmode_i & ~debug_mode_i & fetch_valid & ~fetch_err &
-                        ((if_instr_addr < pcc_fullcap_i.base32) || instr_hdrm[32] || ~hdrm_ok  ||
-                         ~pcc_fullcap_i.perms[PERM_EX] || ~pcc_fullcap_i.valid);
+                        ((if_instr_addr < pcc_cap_i.base32) || instr_hdrm[32] || ~hdrm_ok  ||
+                         ~pcc_cap_i.perms[PERM_EX] || ~pcc_cap_i.valid || 
+                         (pcc_cap_i.otype!=0));
 
   // compressed instruction decoding, or more precisely compressed instruction
   // expander
