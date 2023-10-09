@@ -5,11 +5,15 @@
 ### List of design files
 
 Core RTL files:
+-  $rtl/ibex_pkg.sv
+-  $rtl/cheri_pkg.sv
 -  $rtl/cheri_decoder.sv
 -  $rtl/cheri_ex.sv
--  $rtl/cheri_pkg.sv
 -  $rtl/cheri_regfile.sv
 -  $rtl/cheri_trvk_stage.sv
+-  $rtl/cheri_tbre.sv
+-  $rtl/cheri_stkz.sv
+-  $rtl/cheri_tbre_wrapper.sv
 -  $rtl/ibex_alu.sv
 -  $rtl/ibex_branch_predict.sv
 -  $rtl/ibex_compressed_decoder.sv
@@ -27,7 +31,6 @@ Core RTL files:
 -  $rtl/ibex_load_store_unit.sv
 -  $rtl/ibex_multdiv_fast.sv
 -  $rtl/ibex_multdiv_slow.sv
--  $rtl/ibex_pkg.sv
 -  $rtl/ibex_pmp.sv
 -  $rtl/ibex_prefetch_buffer.sv
 -  $rtl/ibex_tracer.sv
