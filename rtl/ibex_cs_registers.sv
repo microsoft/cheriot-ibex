@@ -157,6 +157,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   localparam int unsigned RV32BEnabled = (RV32B == RV32BNone) ? 0 : 1;
   localparam int unsigned RV32MEnabled = (RV32M == RV32MNone) ? 0 : 1;
   localparam int unsigned PMPAddrWidth = (PMPGranularity > 0) ? 33 - PMPGranularity : 32;
+  localparam int unsigned CHERIoTEn32b = {31'h0, CHERIoTEn};
 
   // misa
   localparam logic [31:0] MISA_VALUE =
@@ -171,7 +172,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     | (0                 << 13)  // N - User level interrupts supported
     | (0                 << 18)  // S - Supervisor mode implemented
     | (1                 << 20)  // U - User mode implemented
-    | (CHERIoTEn         << 23)  // X - Non-standard extensions present
+    | (CHERIoTEn32b      << 23)  // X - Non-standard extensions present
     | (32'(CSR_MISA_MXL) << 30); // M-XLEN
 
   typedef struct packed {
@@ -1940,6 +1941,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     assign cheri_csr_rcap_o  = NULL_REG_CAP;
 
     assign pcc_cap_o         = NULL_PCC_CAP;
+    assign pcc_cap_q         = NULL_PCC_CAP;
 
     assign mtvec_en_cheri      = 1'b0;
     assign mepc_en_cheri       = 1'b0;

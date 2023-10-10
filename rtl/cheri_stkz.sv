@@ -48,7 +48,7 @@ module cheri_stkz import cheri_pkg::*; (
   logic         cmd_new, cmd_avail, cmd_go, cmd_pending;
   logic         cmd_cap_good;
   logic         cmd_n2z;
-  logic         cmd_is_null_d, cmd_is_null_q;
+  logic         cmd_is_null, cmd_is_null_d, cmd_is_null_q;
   reg_cap_t     cmd_wcap, cmd_wcap_q, cmd_wcap_untagged; 
   logic [31:0]  cmd_wdata, cmd_wdata_q, cmd_wbase32, cmd_wbase32_q;
 

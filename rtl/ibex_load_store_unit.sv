@@ -610,6 +610,7 @@ module ibex_load_store_unit import cheri_pkg::*; #(
 
   // we assume ctrl will be held till req_done asserted 
   // (once req captured in IDLE, it can be deasserted)
+  logic lsu_req_done;
 
   assign lsu_req_done        = (lsu_go | (ls_fsm_cs != IDLE)) & (ls_fsm_ns == IDLE);
 

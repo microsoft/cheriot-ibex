@@ -12,13 +12,13 @@ package cheri_pkg;
   parameter int unsigned EXP_W     = 5;
   parameter int unsigned OTYPE_W   = 3;
   parameter int unsigned CPERMS_W  = 6;
-  parameter int unsigned PERMS_W   = 14;
+  parameter int unsigned PERMS_W   = 13;
 
   parameter int unsigned REGCAP_W  = 38;
 
-  parameter int unsigned RESETEXP  = 24;
+  parameter bit    [4:0] RESETEXP  = 24;
   parameter int unsigned UPPER_W   = 24;
-  parameter int unsigned RESETCEXP = 15;
+  parameter bit    [3:0] RESETCEXP = 15;
 
   // bit index of PERMS field
   // U1 U0 SE US EX SR MC LD SL LM SD LG GL
@@ -35,7 +35,7 @@ package cheri_pkg;
   parameter int unsigned PERM_SE = 10;     // seal
   parameter int unsigned PERM_U0 = 11;     //
   parameter int unsigned PERM_U1 = 12;     //
-  parameter int unsigned PERM_U2 = 13;     // temp workaround
+//  parameter int unsigned PERM_U2 = 13;     // temp workaround
 
   parameter logic [2:0] OTYPE_SENTRY_IE  = 3'd3;
   parameter logic [2:0] OTYPE_SENTRY_ID  = 3'd2;
@@ -99,10 +99,10 @@ package cheri_pkg;
 
   parameter pcc_cap_t PCC_RESET_CAP   = '{1'b1, RESETEXP, 33'h10000_0000, 0, OTYPE_UNSEALED, 13'h1eb, CPERMS_TX, 1'b0};   // Tx (execution root)
 
-  parameter reg_cap_t  MTVEC_RESET_CAP     = '{1'b1, 1'b0, 1'b0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TX, 1'b0};   // Tx (execution root)
-  parameter reg_cap_t  MTDC_RESET_CAP      = '{1'b1, 1'b0, 1'b0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TM, 1'b0};   // Tm
-  parameter reg_cap_t MEPC_RESET_CAP       = '{1'b1, 1'b0, 1'b0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TX, 1'b0};   // Tx
-  parameter reg_cap_t  MSCRATCHC_RESET_CAP = '{1'b1, 1'b0, 1'b0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TS, 1'b0};   // Ts
+  parameter reg_cap_t  MTVEC_RESET_CAP     = '{1'b1, 0, 0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TX, 1'b0};   // Tx (execution root)
+  parameter reg_cap_t  MTDC_RESET_CAP      = '{1'b1, 0, 0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TM, 1'b0};   // Tm
+  parameter reg_cap_t MEPC_RESET_CAP       = '{1'b1, 0, 0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TX, 1'b0};   // Tx
+  parameter reg_cap_t  MSCRATCHC_RESET_CAP = '{1'b1, 0, 0, RESETEXP, 9'h100, 0, OTYPE_UNSEALED, CPERMS_TS, 1'b0};   // Ts
 
 
   parameter logic [PERMS_W-1: 0] PERM_MC_IMSK = (1<<PERM_LD) | (1<<PERM_MC) | (1<<PERM_SD);
@@ -243,14 +243,14 @@ package cheri_pkg;
     if (cor[1])
       cor_val = {33{cor[1]}};         // negative sign extension
     else
-      cor_val = (~cor[1]) & cor[0];
+      cor_val = {32'h0, (~cor[1]) & cor[0]};
 
     cor_val = (cor_val << exp) << TOP_W;
     mask    = (33'h1_ffff_ffff << exp) << TOP_W;
 
-    t1 = (addr & mask) + cor_val;     // apply correction and truncate
+    t1 = ({1'b0, addr} & mask) + cor_val;     // apply correction and truncate
 //$display("gb33: corval=%09x, mask=%09x, t1=%09x", cor_val, mask, t1);
-    t2 = top;                         // extend to 32 bit
+    t2 = {24'h0, top};                         // extend to 32 bit
     t1 = t1 | (t2 << exp);
 
     return t1;
@@ -266,14 +266,14 @@ package cheri_pkg;
     if (cor[1])
       cor24 = {24{cor[1]}};         // negative sign extension
     else
-      cor24 = (~cor[1]) & cor[0];
+      cor24 = {23'h0, (~cor[1]) & cor[0]};
 
     cor24  = (cor24 << exp);
     mask24 = {24{1'b1}} << exp;
 
-    t24a = (addr[31:9] & mask24) + cor24;     // apply correction and truncate
+    t24a = ({1'b0, addr[31:9]} & mask24) + cor24;     // apply correction and truncate
 //$display("gb33: corval=%09x, mask=%09x, t1=%09x", cor_val, mask, t1);
-    t33a = top;
+    t33a = {24'h0, top};
     result = {t24a, 9'h0} | (t33a << exp);
 
     return result;
@@ -316,7 +316,7 @@ package cheri_pkg;
 
     tmp33   = {1'b0, newptr} - {1'b0, in_cap.base32};  // extend to make sure we can see carry from MSB
     tmp24   = tmp33[32:TOP_W] & mask24;
-    top_lt  =  (newptr < {in_cap.top33[32:1], 1'b0});
+    top_lt  =  ({1'b0, newptr} < {in_cap.top33[32:1], 1'b0});
 
     if ((tmp24 != 0) || (chktop & ~top_lt) || (chkbase & tmp33[32]))
       out_cap.valid = 1'b0;
@@ -417,7 +417,7 @@ package cheri_pkg;
       out_cap.top   = top1;
       out_cap.base  = base1;
       out_cap.maska = mask1;
-      out_cap.rlen  = len1 << exp1;
+      out_cap.rlen  = {22'h0, len1} << exp1;
       topoff        = topoff1;
       baseoff       = baseoff1;
       tophi         = tophi1;
@@ -426,7 +426,7 @@ package cheri_pkg;
       out_cap.top   = top2;
       out_cap.base  = base2;
       out_cap.maska = mask2;
-      out_cap.rlen  = len2 << exp2;
+      out_cap.rlen  = {22'h0, len2} << exp2;
       topoff        = topoff2;
       baseoff       = baseoff2;
       tophi         = tophi2;

@@ -980,7 +980,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     assign rf_trsv_en_o           = 1'b0;
     assign rf_trsv_addr_o         = 5'h0;
                                   
-    assign cheri_branch_reqc      = 1'b0;
+    assign cheri_branch_req       = 1'b0;
     assign cheri_branch_req_spec  = 1'b0;
     assign branch_target_ex       = branch_target_ex_rv32;
     assign pcc_cap_w              = NULL_PCC_CAP;

@@ -158,18 +158,16 @@ module cheri_regfile import cheri_pkg::*; #(
 //   -- to resolve the contention we need to prioritize trsv over trvk when updating the flopped reg_rdy_vec
     
     for (genvar i=0; i<32; i++) begin
-      if ((i == 0) || (i >= NCAPS)) begin
-        assign reg_rdy_vec[i] = 1'b1;
-      end else begin
-        always_ff @(posedge clk_i or negedge rst_ni) begin
-          if (!rst_ni)
-            reg_rdy_vec[i] <= 1'b1;
-          else if (trsv_dec[i] & trsv_en_i)   // prioritize trsv to address the corner case in the QQQ_09112023
-            reg_rdy_vec[i] <= 1'b0;
-          else if (trvk_dec[i] & trvk_en_i)
-            reg_rdy_vec[i] <= 1'b1;
-        end  // always_ff
-      end    // if 
+      always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni)
+          reg_rdy_vec[i] <= 1'b1;
+        else if ((i == 0) || (i >= NCAPS)) 
+          reg_rdy_vec[i] <= 1'b1;
+        else if (trsv_dec[i] & trsv_en_i)   // prioritize trsv to address the corner case in the QQQ_09112023
+          reg_rdy_vec[i] <= 1'b0;
+        else if (trvk_dec[i] & trvk_en_i)
+          reg_rdy_vec[i] <= 1'b1;
+      end  // always_ff
     end      // for
 
     // build the shadow copy of reg_rdy_vec for fault protection

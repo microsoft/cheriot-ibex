@@ -215,6 +215,7 @@ module cheri_ex import cheri_pkg::*; #(
   logic   [4:0]  cheri_wb_err_cause, cheri_ex_err_cause, cheri_lsu_err_cause, rv32_lsu_err_cause;
   logic   [31:0] cpu_lsu_addr;
   logic   [32:0] cpu_lsu_wdata;
+  logic          cpu_lsu_we;
   logic          cpu_lsu_cheri_err, cpu_lsu_is_cap;
 
   // data forwarding for CHERI instructions
@@ -905,8 +906,7 @@ module cheri_ex import cheri_pkg::*; #(
       perm_vio = (~rf_fullcap_a.valid) ||
                  (is_cap_sealed(rf_fullcap_a) && (~is_cap_sentry(rf_fullcap_a))) ||
                  (is_cap_sentry(rf_fullcap_a) && (cheri_imm12_i != 0)) ||
-                 (addr_result[0]) || 
-                 (~rf_fullcap_a.perms[PERM_EX]) || rf_fullcap_a.base32[0];
+                 (addr_result[0]);
     else if (cheri_operator_i[CJAL] & cheri_pmode_i)
       perm_vio = (addr_result[0]); 
     else if (cheri_operator_i[CCSR_RW])
@@ -1244,12 +1244,11 @@ end
           cpu_stkz_err <= 1'b1;
       end
     end
-    assign  cpu_stkz_stall_q = stkz_stall_q;
 
   end else begin
-    assign cpu_stkz_stall  = 1'b0;
+    assign cpu_stkz_stall0 = 1'b0;
+    assign cpu_stkz_stall1 = 1'b0;
     assign cpu_stkz_err    = 1'b0;
-    assign cpu_stkz_stall_q = 1'b0;
   end
 
   //

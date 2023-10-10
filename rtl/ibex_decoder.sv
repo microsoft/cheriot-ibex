@@ -307,7 +307,7 @@ module ibex_decoder import cheri_pkg::*; #(
       ///////////
 
       OPCODE_JAL: begin   // Jump and Link
-        if (CHERIoTEn & cheri_pmode_i) begin
+        if (CHERIoTEn & cheri_pmode_i & ~illegal_c_insn_i) begin
           // cheri_ex takes over JAL now as a single-cycle jump
           cheri_jal_en      = 1'b1;
           illegal_insn      = ~instr_is_legal_cheri;
@@ -326,7 +326,7 @@ module ibex_decoder import cheri_pkg::*; #(
       end
 
       OPCODE_JALR: begin  // Jump and Link Register
-        if (CHERIoTEn & cheri_pmode_i) begin
+        if (CHERIoTEn & cheri_pmode_i & ~illegal_c_insn_i) begin
           // cheri_ex takes over JALR now as a single-cycle jump
           cheri_jalr_en     = (instr[14:12] == 3'b0);
           rf_ren_a_o        = 1'b1;
@@ -394,8 +394,8 @@ module ibex_decoder import cheri_pkg::*; #(
               data_type_o  = 2'b00; // sw
             end
             2'b11: begin
-              cheri_cstore_en  = CHERIoTEn; // csc
-              cheri_data_req_o = CHERIoTEn;
+              cheri_cstore_en  = CHERIoTEn & ~illegal_c_insn_i; // csc
+              cheri_data_req_o = CHERIoTEn & ~illegal_c_insn_i;
               data_type_o      = 2'b00;
               illegal_insn     = ~CHERIoTEn;
             end
@@ -456,7 +456,7 @@ module ibex_decoder import cheri_pkg::*; #(
       end
 
       OPCODE_AUIPC: begin
-        if (CHERIoTEn & cheri_pmode_i) begin
+        if (CHERIoTEn & cheri_pmode_i & ~illegal_c_insn_i) begin
           cheri_auipcc_en  = 1'b1;
           illegal_insn     = ~instr_is_legal_cheri;
         end else begin
@@ -757,7 +757,7 @@ module ibex_decoder import cheri_pkg::*; #(
       end
 
       OPCODE_CHERI: begin
-        if (CHERIoTEn) begin
+        if (CHERIoTEn & ~illegal_c_insn_i) begin
           cheri_opcode_en  = 1'b1;
           rf_ren_a_o       = cheri_rf_ren_a;
           rf_ren_b_o       = cheri_rf_ren_b;
@@ -771,7 +771,7 @@ module ibex_decoder import cheri_pkg::*; #(
       end
 
       OPCODE_AUICGP: begin
-        if (CHERIoTEn) begin
+        if (CHERIoTEn & ~illegal_c_insn_i) begin
           cheri_auicgp_en  = 1'b1;
           rf_ren_a_o       = 1'b1;
           rf_ren_b_o       = 1'b0;
