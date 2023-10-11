@@ -82,7 +82,7 @@ module top_artya7 (
 
      .fetch_enable_i        ('b1),
      .alert_minor_o         (),
-     .alert_major_o         (),
+     // .alert_major_o         (),
      .core_sleep_o          ()
   );
 
