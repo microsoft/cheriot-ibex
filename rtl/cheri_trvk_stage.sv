@@ -101,7 +101,9 @@ module cheri_trvk_stage #(
       bitpos_q        <= 0;
       trvk_status     <= 1'b0;
       range_ok_q      <= 0;
-      trsv_addr_q     <= {'0, '0, '0};
+      trsv_addr_q[0]  <= 5'b0;
+      trsv_addr_q[1]  <= 5'b0;
+      trsv_addr_q[2]  <= 5'b0;
     end else begin
       // control signal per stage
       cpu_op_valid_q  <= {cpu_op_valid_q[1:0], cpu_op_valid};
