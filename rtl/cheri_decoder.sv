@@ -51,7 +51,7 @@ module cheri_decoder import cheri_pkg::*; # (
   assign rd_op         = instr_rdata_i[11:7];
 
   always_comb begin
-    cheri_operator_o = 32'h0;
+    cheri_operator_o = OPDW'('h0);
 
     cheri_operator_o[CCSR_RW]         = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h01);
     cheri_operator_o[CSET_BOUNDS]     = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h08);
