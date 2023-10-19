@@ -386,8 +386,8 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   always_comb begin
     unique case (data_type_q)
       2'b00:       data_rdata_ext = rdata_w_ext;
-      2'b01:       data_rdata_ext = rdata_h_ext;
-      2'b10,2'b11: data_rdata_ext = rdata_b_ext;
+      2'b01:       data_rdata_ext = {1'b0, rdata_h_ext};
+      2'b10,2'b11: data_rdata_ext = {1'b0, rdata_b_ext};
       default:     data_rdata_ext = rdata_w_ext;
     endcase // case (data_type_q)
   end
