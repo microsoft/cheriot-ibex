@@ -103,8 +103,20 @@ module ibex_fetch_fifo #(
                                         (valid_q[0] & in_valid_i);
 
   // If there is an error, rdata is unknown
+`ifdef DII_SIM
+  logic [31:0] instr_rdata_dii;
+  logic [31:0] instr_pc;
+  logic        instr_ack;
+
+  assign unaligned_is_compressed = (instr_rdata_dii[1:0] != 2'b11) & ~err;
+  assign aligned_is_compressed   = (instr_rdata_dii[1:0] != 2'b11) & ~err;
+
+  assign instr_ack = out_ready_i & out_valid_o;
+  assign instr_pc  = out_addr_o;
+`else
   assign unaligned_is_compressed = (rdata[17:16] != 2'b11) & ~err;
   assign aligned_is_compressed   = (rdata[ 1: 0] != 2'b11) & ~err;
+`endif
 
   ////////////////////////////////////////
   // Instruction aligner (if unaligned) //
@@ -113,7 +125,12 @@ module ibex_fetch_fifo #(
   always_comb begin
     if (out_addr_o[1]) begin
       // unaligned case
+
+`ifdef DII_SIM
+     out_rdata_o      = instr_rdata_dii;
+`else
       out_rdata_o     = rdata_unaligned;
+`endif
       out_err_o       = err_unaligned;
       out_err_plus2_o = err_plus2;
 
@@ -124,7 +141,11 @@ module ibex_fetch_fifo #(
       end
     end else begin
       // aligned case
+`ifdef DII_SIM
+     out_rdata_o      = instr_rdata_dii;
+`else
       out_rdata_o     = rdata;
+`endif
       out_err_o       = err;
       out_err_plus2_o = 1'b0;
       out_valid_o     = valid;
