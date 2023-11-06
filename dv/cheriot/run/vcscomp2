@@ -1,0 +1,7 @@
+export rtlRoot=../../../rtl
+export primRoot=../../../vendor/lowrisc_ip/ip/prim/rtl
+export dvutilsRoot=../../../vendor/lowrisc_ip/dv/sv/dv_utils
+export verifRoot=..
+
+#vnc run  -Ir -wl -r  vcs  RAM/64000 x86_64 redhat7 -- vcs -full64 -sverilog +systemverilogext+sv -timescale=1ns/1ps -debug_acc+all -f ibexc.vcs.f
+vcs -full64 -sverilog +systemverilogext+sv -timescale=1ns/1ps -debug_acc+all -f ibexc.vcs.f

@@ -1,0 +1,1 @@
+make -j -C obj_dir -f Vtb_cheriot_top.mk Vtb_cheriot_top

@@ -1,0 +1,7 @@
+#!/bin/bash
+export rtlRoot=../../../rtl
+export primRoot=../../../vendor/lowrisc_ip/ip/prim/rtl
+export dvutilsRoot=../../../vendor/lowrisc_ip/dv/sv/dv_utils
+export verifRoot=..
+
+verilator -cc --top-module  tb_cheriot_top -exe $verifRoot/tb/cheriot_main.cc --trace +define+DII_SIM -f ./all.f 

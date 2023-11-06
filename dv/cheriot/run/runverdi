@@ -1,0 +1,1 @@
+ verdi -sv +incdir+../../rtl +define+RVFI +define+DII_SIM -f ./ibexc.vcs.f -ssf ./tb_cheriot_top.fsdb 

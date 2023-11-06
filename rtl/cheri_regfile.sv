@@ -157,11 +157,16 @@ module cheri_regfile import cheri_pkg::*; #(
 //   -- here lsu_req/req_done happens at the same time as the bypassed TRVK uninstall the instruction.
 //   -- to resolve the contention we need to prioritize trsv over trvk when updating the flopped reg_rdy_vec
     
-    for (genvar i=0; i<32; i++) begin
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni)
+        reg_rdy_vec[0] <= 1'b1;
+    end
+
+    for (genvar i=1; i<32; i++) begin
       always_ff @(posedge clk_i or negedge rst_ni) begin
         if (!rst_ni)
           reg_rdy_vec[i] <= 1'b1;
-        else if ((i == 0) || (i >= NCAPS)) 
+        else if (i >= NCAPS) 
           reg_rdy_vec[i] <= 1'b1;
         else if (trsv_dec[i] & trsv_en_i)   // prioritize trsv to address the corner case in the QQQ_09112023
           reg_rdy_vec[i] <= 1'b0;
