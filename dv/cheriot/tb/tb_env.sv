@@ -103,7 +103,7 @@ module tb_env;
     cont_flag = 1;
     while (cont_flag) begin
       @(posedge clk);
-      if (u_tb_top.data_req & u_tb_top.data_gnt & (u_tb_top.data_addr == 32'h80040000)) begin
+      if (u_tb_top.data_req & u_tb_top.data_gnt & (u_tb_top.data_addr == 32'h80040200)) begin
         if (u_tb_top.data_wdata[7])
           cont_flag = 0;
         else

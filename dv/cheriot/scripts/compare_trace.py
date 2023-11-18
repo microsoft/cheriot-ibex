@@ -140,6 +140,7 @@ class trace_obj:
         self.cycle = 0
         self.pc = 0
         self.instr = 0     # encoded instruction 
+        self.excp = 0
         self.reg_wr = 0           
         self.reg_waddr = 0           
         self.reg_wdata = 0           
@@ -153,22 +154,24 @@ class trace_obj:
     def __eq__(self, other):
         if isinstance(other, trace_obj):  # Check if the other object is of the same type
             result = ((self.valid == 1) and (other.valid == 1) and 
-                      (self.pc              == other.pc) and 
-                      (self.instr           == other.instr) and 
-                      (self.reg_wr          == other.reg_wr) and 
-                      (self.reg_waddr       == other.reg_waddr) and
-                      (self.reg_wdata       == other.reg_wdata) and        
-                      (self.reg_wcap        == other.reg_wcap) and        
-                      (self.mem_wr          == other.mem_wr) and 
-                      (self.mem_rd          == other.mem_rd) and 
-                      (self.mem_addr        == other.mem_addr) and 
-                      (self.mem_size        == other.mem_size) and 
-                      (self.mem_data        == other.mem_data))
+                      (self.pc     == other.pc) and 
+                      (self.instr  == other.instr) and 
+                      (self.excp   == other.excp) and 
+                      ((self.excp == 1) or 
+                       ((self.reg_wr     == other.reg_wr) and 
+                        (self.reg_waddr  == other.reg_waddr) and
+                        (self.reg_wdata  == other.reg_wdata) and        
+                        (self.reg_wcap   == other.reg_wcap) and        
+                        (self.mem_wr     == other.mem_wr) and 
+                        (self.mem_rd     == other.mem_rd) and 
+                        (self.mem_addr   == other.mem_addr) and 
+                        (self.mem_size   == other.mem_size) and 
+                        (self.mem_data   == other.mem_data))))
             return result
         return False
 
     def __str__(self):          # for printing
-        pstr = f"trace_obj: {self.valid}, {self.cycle}, 0x{self.pc:08x}, 0x{self.instr:08x}, " 
+        pstr = f"trace_obj: {self.valid}, {self.excp}, {self.cycle}, 0x{self.pc:08x}, 0x{self.instr:08x}, " 
         pstr += f"{self.reg_wr}, {self.reg_waddr}, 0x{self.reg_wdata:X}, "
         pstr += f"{self.reg_wcap[0]}, 0x{self.reg_wcap[1]:x}, 0x{self.reg_wcap[2]:x}, "
         pstr += f"0x{self.reg_wcap[3]:x}, 0x{self.reg_wcap[4]:x}, 0x{self.reg_wcap[5]:x}, "
@@ -221,6 +224,7 @@ class ibex_trace_file(trace_file):
             nxt_obj.cycle = int(matches1[0][1])
             nxt_obj.pc    = int(matches1[0][2], 16)
             nxt_obj.instr = int(matches1[0][3], 16)
+            nxt_obj.excp  = 1 if re.search(r'-->', matches1[0][4]) else 0
             
             mnemonic = matches1[0][4]
             
@@ -244,7 +248,7 @@ class ibex_trace_file(trace_file):
             pattern4 = r'PA:0x([0-9A-Fa-f]+)\s+(load|store):0x([0-9A-Fa-f]+)\+0x([0-9A-Fa-f]+)'
             matches4 = re.findall(pattern4, self.lines[self.line_ptr])
             # mem non-cap
-            pattern5 = r'PA:0x([0-9A-Fa-f]+)\s+(load|store):0x([0-9A-Fa-f]+)(\s+|$)'
+            pattern5 = r'PA:0x([0-9A-Fa-f]+)\s+(load|store):0x([0-9A-Fa-f\?]+)(\s+|$)'
             matches5 = re.findall(pattern5, self.lines[self.line_ptr])
              
             if len(matches4) != 0:
@@ -258,7 +262,8 @@ class ibex_trace_file(trace_file):
 
             if len(matches5) != 0:
                 nxt_obj.mem_addr = int(matches5[0][0], 16)
-                nxt_obj.mem_data = int(matches5[0][2], 16)
+                mem_data = re.sub(r'\?', '', matches5[0][2])      # for byte/halfword writes
+                nxt_obj.mem_data = int(mem_data, 16)
 
                 if (matches5[0][1]=='load'): 
                     nxt_obj.mem_rd = 1
@@ -316,8 +321,10 @@ class sail_trace_file(trace_file) :
                     
             pattern2_0 = r'x(\d+)\s*<-\s*0x([0-9A-Fa-f]+)\s*'  # reg wr
             pattern2_1 = r'\(v:(\d)\s+0x([0-9A-Fa-f]+)-0x([0-9A-Fa-f]+)\s+l:\S+\s+o:0x([0-9A-Fa-f]+)\s+p:(.*?)\)'
+            pattern2_2 = r'trapping'
             matches2_0 = re.findall(pattern2_0, full_instr)
             matches2_1 = re.findall(pattern2_1, full_instr)
+            matches2_2 = re.findall(pattern2_2, full_instr)
             #print(full_instr)
             #print(matches2_0[0])
             #print(matches2_1[0])
@@ -331,6 +338,9 @@ class sail_trace_file(trace_file) :
                 nxt_obj.reg_wcap  = (int(matches2_1[0][0]), perms , int(matches2_1[0][3], 16), 0,
                                      int(matches2_1[0][2], 16), int(matches2_1[0][1], 16))
             
+            if len(matches2_2) != 0 :
+                nxt_obj.excp = 1
+
             # ?: makes non-grouping
             pattern3 = r'(?:mem|htif)\[.*?0x([0-9A-Fa-f]+)\]\s*(<-|->)\s*0x([0-9A-Fa-f]+)'
             matches3 = re.findall(pattern3, full_instr)

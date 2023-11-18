@@ -47,7 +47,7 @@ void cstart(void* gRoot, CapReloc* caprelocs, unsigned int nCaprelocs) {
   romBase = from_root(0x00004000U);
   ramBase = from_root(0x80000000U);
 
-  uartReg = from_root(0x80040000U);
+  uartReg = from_root(0x80040200U);
 
   mymain(0, 0);
   stop_sim();

@@ -1,8 +1,7 @@
 .section .text
 .globl _start
 .globl mtvec
-.globl tohost
-.globl fromhost
+
 #.extern cheri_fault_handler
 
 .macro LA_ABS reg, symbol
@@ -12,15 +11,17 @@
 
 _start: 
         cspecialr c3, mtdc  # read MTDC address 'd29 (the SL root should be in MTCC which is 28, but how the roots work will change, so probably not worth fixing)
-        li x11, 0x8001ff00       # setup sp
+        li x11, 0x8003ff00       # setup sp
         csetaddr csp, c3, x11
 
-        cspecialr ct0, mtcc
+        
+        # cspecialr ct0, mtcc    
 1:      auipcc  ct1, %cheri_compartment_pccrel_hi(mtvec)
         cincoffset ct1, ct1, %cheri_compartment_pccrel_lo(1b)
 
-        csetaddr ct0, ct0, t1
-        cspecialw mtcc, ct0       
+        #csetaddr ct0, ct0, t1
+        #cspecialw mtcc, ct0       
+        cspecialw mtcc, ct1       
 
         li t0,  0x88                        # set mstatus.mie=1, mstatus.mpie=1
         csrs mstatus, t0 
