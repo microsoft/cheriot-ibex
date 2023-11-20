@@ -1,1 +1,6 @@
- verdi -sv +incdir+../../rtl +define+RVFI +define+DII_SIM -f ./ibexc.vcs.f -ssf ./tb_cheriot_top.fsdb 
+export rtlRoot=../../../rtl
+export primRoot=../../../vendor/lowrisc_ip/ip/prim/rtl
+export dvutilsRoot=../../../vendor/lowrisc_ip/dv/sv/dv_utils
+export verifRoot=..
+#verdi -sv +incdir+../../rtl +define+RVFI +define+DII_SIM -f ./ibexc.vcs.f -ssf ./tb_cheriot_top.fsdb 
+verdi -sv +incdir+../../rtl +define+RVFI -f ./ibexc.vcs.f -ssf ./tb_cheriot_top.fsdb 

@@ -4,25 +4,36 @@
 // memory model with random gnt/rvalid waits 
 //
 module mem_model #(
-  parameter DATA_GNT_WMAX = 3,
-  parameter DATA_RESP_WMAX = 2,  
-  parameter MEM_AW = 16,  
-  parameter MEM_DW = 32  
+  parameter bit          ERR_INJECT = 1'b0,
+  parameter int unsigned GNT_WMAX   = 2,
+  parameter int unsigned RESP_WMAX  = 1,  
+  parameter int unsigned MEM_AW     = 16,  
+  parameter int unsigned MEM_DW     = 32  
 )( 
-  input  logic        clk,
-  input  logic        rst_n,
-
-  input  logic        data_req,
-  input  logic        data_we,
-  input  logic [3:0]  data_be,
-  input  logic [31:0] data_addr,
+  input  logic              clk,
+  input  logic              rst_n,
+                            
+  input  logic              data_req,
+  input  logic              data_we,
+  input  logic [3:0]        data_be,
+  input  logic [31:0]       data_addr,
   input  logic [MEM_DW-1:0] data_wdata,
 
-  output logic        data_gnt,
-  output logic        data_rvalid,
+  output logic              data_gnt,
+  output logic              data_rvalid,
   output logic [MEM_DW-1:0] data_rdata,
-  output logic        data_err
+  output logic              data_err
 );
+  
+  function automatic logic[3:0] gen_wait(int unsigned wmax);
+    logic [3:0]  nwait;
+    logic [31:0] randnum;
+
+    randnum = $urandom();
+    if (!randnum[31]) nwait = 0;       // 0: 50%
+    else nwait = randnum[30:0] & (GNT_WMAX+1);   // 0 to wmax: 0.5/(wmax+1)
+    return nwait;
+  endfunction
   //
   // simple unified memory system model
   reg   [MEM_DW-1:0] mem[0:2**MEM_AW-1];
@@ -34,126 +45,139 @@ module mem_model #(
   logic [MEM_DW-1:0] mem_dout;
   logic [MEM_AW-1:0] mem_addr;
 
-  logic              gnt_idle, nxt_gnt_idle;
-  logic              resp_idle, nxt_resp_idle;
+  logic              gnt_idle, resp_idle;
+  logic        [3:0] gnt_cntr, resp_cntr;
   logic        [3:0] gnt_waits, resp_waits;
-  logic        [3:0] gnt_wait_cnt, resp_wait_cnt;
-  logic        [3:0] rand1, rand2;
 
-  logic              pnd_gnt_data_q;
-  logic              pnd_gnt_data;
+  logic        [3:0] cmd_rd_ptr_ext, cmd_wr_ptr_ext, fifo_depth;
+  logic        [2:0] cmd_rd_ptr, cmd_wr_ptr;
+  logic              cmd_fifo_full, cmd_fifo_empty, cmd_avail;
+  logic              cmd_fifo_wr, cmd_fifo_rd;
+  logic              gnt_no_wait, gnt_wait_done;
+  logic              resp_no_wait, resp_wait_done;
+  logic              resp_valid;
 
-  logic              data_gnt_q;
+  typedef struct packed {
+    logic              we;
+    logic              err;
+    logic        [3:0] be;
+    logic [MEM_AW-1:0] addr;
+    logic [MEM_DW-1:0] wdata;
+  } mem_cmd_t;
 
-  assign data_err = 1'b0;       // QQQ for now
+  mem_cmd_t mem_cmd_fifo[0:7];
+  mem_cmd_t cur_wr_cmd, cur_rd_cmd;
 
-  // 
-  // Arbitration and grant stage
+  assign cmd_rd_ptr     = cmd_rd_ptr_ext[2:0];
+  assign cmd_wr_ptr     = cmd_wr_ptr_ext[2:0];
+  assign fifo_depth     = (cmd_wr_ptr_ext - cmd_rd_ptr_ext); 
+  assign cmd_fifo_full  = (fifo_depth >= 8);
+  assign cmd_fifo_empty = (cmd_wr_ptr_ext == cmd_rd_ptr_ext);
+  assign cmd_avail      = cmd_fifo_wr || !cmd_fifo_empty;
+
+  assign cur_wr_cmd.we    = data_we;
+  assign cur_wr_cmd.err   = 1'b0;
+  assign cur_wr_cmd.be    = data_be;
+  assign cur_wr_cmd.addr  = data_addr[MEM_AW+1:2];   // 32-bit addr
+  assign cur_wr_cmd.wdata = data_wdata; 
+
+  assign cur_rd_cmd    = mem_cmd_fifo[cmd_rd_ptr];
+
+  assign gnt_no_wait   = data_req && gnt_idle && (gnt_waits == 0) && !cmd_fifo_full;
+  assign gnt_wait_done = data_req && !gnt_idle && (gnt_cntr == 1) && !cmd_fifo_full;
+  assign cmd_fifo_wr   = gnt_no_wait | gnt_wait_done;
+
+  assign resp_no_wait   = cmd_avail && resp_idle && (resp_waits == 0);
+  assign resp_wait_done = cmd_avail && !resp_idle &&  (resp_cntr == 1);
+
   //
-
-  // IDLE is the state 
-  //    -- look at incoming requests and make arbitration decisions
-  //    -- decides to wait or not
-  assign pnd_gnt_data  = gnt_idle & data_req;  
-
-  // grant to bus master - note this also serves as requests to the next stage
-  assign data_gnt    = (gnt_idle & nxt_gnt_idle & pnd_gnt_data) |
-                       ((~gnt_idle) & nxt_gnt_idle & pnd_gnt_data_q); 
- 
-  assign gnt_waits  = rand1;
-  assign resp_waits = rand2;
-
-  always_comb begin
-    if (gnt_idle && data_req && ((~resp_idle) || (gnt_waits != 0)))
-      nxt_gnt_idle = 1'b0;
-    else if ((!gnt_idle) && resp_idle && (gnt_wait_cnt == 0)) 
-      nxt_gnt_idle = 1'b1;
-    else
-      nxt_gnt_idle = gnt_idle;
-  end
-
-  always @(posedge clk, negedge rst_n) begin
+  //  @negedge clk
+  //     Grant stage to issue grants and enqueue granted-requests 
+  //     dequeue requests to generate memory read/writes
+  //
+  
+  always @(negedge clk, negedge rst_n) begin
     if (~rst_n) begin
+      data_gnt       <= 1'b0;
       gnt_idle       <= 1'b1;
-      gnt_wait_cnt    <= 4'h0;
-      pnd_gnt_data_q  <= 1'b0;
+      gnt_waits      <= 0;
+      gnt_cntr       <= 0;
+      cmd_wr_ptr_ext <= 0;
+      resp_valid     <= 1'b0;
+      resp_idle      <= 1'b1;
+      resp_waits     <= 0;
+      resp_cntr      <= 0;
+      cmd_fifo_rd    <= 1'b0;
     end else begin
-      gnt_idle <= nxt_gnt_idle;
-      
-      if (pnd_gnt_data && (!nxt_gnt_idle) && (gnt_waits != 0))
-        gnt_wait_cnt <= gnt_waits - 1;
-      else if (gnt_wait_cnt != 0)
-        gnt_wait_cnt <= gnt_wait_cnt - 1;
-
-      if (gnt_idle & (~nxt_gnt_idle)) begin
-        pnd_gnt_data_q  <= pnd_gnt_data;
+      if (gnt_no_wait) begin         // zerio-wait case
+         gnt_cntr  <= 0;
+      end else if (data_req && gnt_idle) begin // starting to wait
+         gnt_cntr  <= gnt_waits;
+         gnt_idle  <= 1'b0;
+      end else if (data_req && !gnt_idle && (gnt_cntr > 1)) begin    // continure waiting 
+         gnt_cntr  <= gnt_cntr - 1;
+      end else if (gnt_wait_done) begin        // waiting ends, grant
+         gnt_cntr  <= 0;
+         gnt_idle  <= 1'b1;
       end
-     
+
+      data_gnt <= (gnt_no_wait || gnt_wait_done);
+ 
+      if (cmd_fifo_wr) begin
+         mem_cmd_fifo[cmd_wr_ptr] <= cur_wr_cmd;
+         cmd_wr_ptr_ext           <= cmd_wr_ptr_ext + 1;
+         gnt_waits <= gen_wait (GNT_WMAX);
+      end
+ 
+      if (resp_no_wait) begin
+         resp_cntr  <= 0;
+      end else if (cmd_avail && resp_idle) begin
+         resp_cntr  <= resp_waits;
+         resp_idle  <= 1'b0;
+      end else if (cmd_avail && !resp_idle && (resp_cntr > 1)) begin
+         resp_cntr  <= resp_cntr - 1;
+      end else if (resp_wait_done) begin
+         resp_cntr  <= 0;
+         resp_idle  <= 1'b1;
+      end
+
+      resp_valid  <= resp_no_wait | resp_wait_done;
+      cmd_fifo_rd <= resp_no_wait | resp_wait_done;
     end
   end
   
   // 
-  //  Response stage
+  //  @posedge clk
+  //    Response stage generate output signals
   //
 
   assign data_rdata   = mem_dout & {33{data_rvalid}}; 
 
-  always_comb begin
-    if (resp_idle && data_gnt && (resp_waits != 0))
-      nxt_resp_idle = 1'b0;
-    else if ((!resp_idle) && (resp_wait_cnt == 0)) 
-      nxt_resp_idle = 1'b1;
-    else
-      nxt_resp_idle = resp_idle;
-  end
-
   always @(posedge clk, negedge rst_n) begin
     if (~rst_n) begin
-      resp_idle       <= 1'b1;
-      resp_wait_cnt   <= 4'h0;
-      data_gnt_q      <= 1'b0;
-      data_rvalid     <= 1'b0;
+      data_rvalid <= 1'b0;
+      data_err    <= 1'b0;
+      cmd_rd_ptr_ext <= 0;
     end else begin
-      resp_idle <= nxt_resp_idle;
+      data_rvalid <= resp_valid;
+      data_err    <= resp_valid & cur_rd_cmd.err;
 
-      if (resp_idle && (!nxt_resp_idle))
-        resp_wait_cnt <= resp_waits - 1;
-      else if (resp_wait_cnt != 0)
-        resp_wait_cnt <= resp_wait_cnt - 1;
-
-      if (resp_idle) begin
-        data_gnt_q  <= data_gnt;
-      end 
-
-      if (resp_idle & nxt_resp_idle & data_gnt)
-        data_rvalid  <= 1'b1;
-      else if ((~resp_idle) & nxt_resp_idle & data_gnt_q) 
-        data_rvalid  <= 1'b1;
-      else
-        data_rvalid  <= 1'b0;
-
+      if (cmd_fifo_rd) begin
+         resp_waits      <= gen_wait(RESP_WMAX);
+         cmd_rd_ptr_ext  <= cmd_rd_ptr_ext + 1;
+      end
+      
     end
   end
 
-  // generate enough randoms per clock cycle 
-  always @(posedge clk, negedge rst_n) begin
-    if (~rst_n) begin
-      rand1 <= 0;
-      rand2 <= 0;
-    end else begin
-      rand1 <= $urandom() % DATA_GNT_WMAX;
-      rand2 <= $urandom() % DATA_RESP_WMAX;    
-    end
-  end
-
-
-  // memory pin muxing
-  // note we don't register this - by protocol the requester hold the value till granted
-  assign mem_cs   = data_gnt;
-  assign mem_we   = data_gnt & data_we;
-  assign mem_be   = data_gnt ? data_be : 4'hf;
-  assign mem_din  = data_wdata;
-  assign mem_addr = data_addr[MEM_AW+1:2];  
+  //
+  // memory signals (sampled @posedge clk)
+  //
+  assign mem_cs   = resp_valid & ~cur_rd_cmd.err;
+  assign mem_we   = cur_rd_cmd.we;
+  assign mem_be   = cur_rd_cmd.be;
+  assign mem_din  = cur_rd_cmd.wdata;
+  assign mem_addr = cur_rd_cmd.addr;  
 
   always @(posedge clk) begin
     if (mem_cs && mem_we) begin
@@ -182,6 +206,5 @@ module mem_model #(
     else if (mem_cs)
       mem_dout <= mem[mem_addr];  
   end
-
 
 endmodule

@@ -172,10 +172,10 @@ class trace_obj:
 
     def __str__(self):          # for printing
         pstr = f"trace_obj: {self.valid}, {self.excp}, {self.cycle}, 0x{self.pc:08x}, 0x{self.instr:08x}, " 
-        pstr += f"{self.reg_wr}, {self.reg_waddr}, 0x{self.reg_wdata:X}, "
-        pstr += f"{self.reg_wcap[0]}, 0x{self.reg_wcap[1]:x}, 0x{self.reg_wcap[2]:x}, "
-        pstr += f"0x{self.reg_wcap[3]:x}, 0x{self.reg_wcap[4]:x}, 0x{self.reg_wcap[5]:x}, "
-        pstr += f"{self.mem_wr}, {self.mem_rd}, 0x{self.mem_addr:x}, 0x{self.mem_data:x}, {self.mem_size}"
+        pstr += f"[{self.reg_wr}, {self.reg_waddr}, 0x{self.reg_wdata:X}, "
+        pstr += f"({self.reg_wcap[0]}, 0x{self.reg_wcap[1]:x}, 0x{self.reg_wcap[2]:x}, "
+        pstr += f"0x{self.reg_wcap[3]:x}, 0x{self.reg_wcap[4]:x}, 0x{self.reg_wcap[5]:x})], "
+        pstr += f"[{self.mem_wr}, {self.mem_rd}, 0x{self.mem_addr:x}, 0x{self.mem_data:x}, {self.mem_size}]"
         return pstr
 #
 # trace file object (generic)

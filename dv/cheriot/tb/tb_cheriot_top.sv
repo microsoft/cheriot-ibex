@@ -235,10 +235,10 @@ module tb_cheriot_top (
   //
 
   mem_model #(
-    .MEM_AW         (MEM_AW),
-    .MEM_DW         (32),
-    .DATA_GNT_WMAX  (2),
-    .DATA_RESP_WMAX (2)
+    .MEM_AW    (MEM_AW),
+    .MEM_DW    (32),
+    .GNT_WMAX  (2),
+    .RESP_WMAX (2)
   ) u_instr_mem (
     .clk             (clk_i         ), 
     .rst_n           (rstn_i        ),
@@ -255,9 +255,9 @@ module tb_cheriot_top (
 
   mem_model #(
     .MEM_AW (MEM_AW),
-    .MEM_DW         (33),
-    .DATA_GNT_WMAX  (3),
-    .DATA_RESP_WMAX (3)
+    .MEM_DW    (33),
+    .GNT_WMAX  (2),
+    .RESP_WMAX (2)
   ) u_data_mem (
     .clk             (clk_i        ), 
     .rst_n           (rstn_i       ),
