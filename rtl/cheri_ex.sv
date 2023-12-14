@@ -173,10 +173,12 @@ module cheri_ex import cheri_pkg::*; #(
   logic          is_intl, is_lbc;
 
   logic          addr_bound_vio;
-  logic          perm_fault, perm_vio, store_local_vio;
+  logic          perm_vio;
   logic          rv32_lsu_err;
   logic          addr_bound_vio_rv32;
   logic          perm_vio_rv32;
+
+  logic [W_PVIO-1:0]  perm_vio_vec, perm_vio_vec_rv32;
 
   logic  [31:0]  cs1_addr_plusimm;
   logic  [31:0]  cs1_imm;
@@ -212,11 +214,12 @@ module cheri_ex import cheri_pkg::*; #(
   logic  [10:0]  cheri_ex_err_info_q, cheri_ex_err_info_d;
   logic          set_bounds_done;
 
-  logic   [4:0]  cheri_wb_err_cause, cheri_ex_err_cause, cheri_lsu_err_cause, rv32_lsu_err_cause;
+  logic   [4:0]  cheri_err_cause, rv32_err_cause;
   logic   [31:0] cpu_lsu_addr;
   logic   [32:0] cpu_lsu_wdata;
   logic          cpu_lsu_we;
   logic          cpu_lsu_cheri_err, cpu_lsu_is_cap;
+
 
   // data forwarding for CHERI instructions
   //  - note address 0 is a read-only location per RISC-V
@@ -505,7 +508,7 @@ module cheri_ex import cheri_pkg::*; #(
           cheri_ex_valid_raw   = 1'b1;
           cheri_ex_err_raw     = 1'b0;       // acc err passed to LSU and processed later in WB
           csc_wcap             = rf_rcap_b;
-          csc_wcap.valid       = rf_rcap_b.valid & ~store_local_vio;
+          csc_wcap.valid       = rf_rcap_b.valid & ~perm_vio_vec[PVIO_SLC];
         end
       cheri_operator_i[CCSR_RW]:           // cd <-- scr; scr <-- cs1 if cs1 != C0
         begin
@@ -565,8 +568,7 @@ module cheri_ex import cheri_pkg::*; #(
           // -- use the speculative version for instruction fetch
           // -- the ID exception (cheri_ex_err) flushes the pipeline and re-set PC so
           //    the speculatively fetched instruction will be flushed
-          instr_fault           = (cheri_operator_i[CJALR] & ~pcc_cap_o.valid) | 
-                                  addr_bound_vio | perm_vio;
+          instr_fault           = addr_bound_vio | perm_vio;
 
           cheri_rf_we_raw      = ~instr_fault;    // err -> wb exception
           branch_req_raw       = ~instr_fault & cheri_operator_i[CJALR];    // update PCC in CSR
@@ -799,10 +801,14 @@ module cheri_ex import cheri_pkg::*; #(
     addr_bound_vio_rv32 =  (top_vio | base_vio) & ~addr_incr_req_i ;
 
     // main permission logic
-    perm_vio_rv32 =  (~rf_fullcap_a.valid || is_cap_sealed(rf_fullcap_a) ||
-                     ((~rv32_lsu_we_i) && (~rf_fullcap_a.perms[PERM_LD])) ||
-                     (rv32_lsu_we_i && (~rf_fullcap_a.perms[PERM_SD])));
+    perm_vio_vec_rv32 = 0;
 
+    perm_vio_vec_rv32[PVIO_TAG]  = ~rf_fullcap_a.valid;
+    perm_vio_vec_rv32[PVIO_SEAL] = is_cap_sealed(rf_fullcap_a);
+    perm_vio_vec_rv32[PVIO_LD]   = ((~rv32_lsu_we_i) && (~rf_fullcap_a.perms[PERM_LD]));
+    perm_vio_vec_rv32[PVIO_SD]   = (rv32_lsu_we_i && (~rf_fullcap_a.perms[PERM_SD]));
+    
+    perm_vio_rv32 =  |perm_vio_vec_rv32;
   end
 
   assign rv32_lsu_err = cheri_pmode_i & ~debug_mode_i & (addr_bound_vio_rv32 | perm_vio_rv32);
@@ -811,9 +817,6 @@ module cheri_ex import cheri_pkg::*; #(
   //   -- we choose to centralize the address bound checking here
   //      so that we can mux the inputs and save some area
 
-  // store_local error only causes tag clearing unless escalated to fault for debugging
-  assign store_local_vio = ~rf_fullcap_a.perms[PERM_SL] && rf_fullcap_b.valid &&
-                           ~rf_fullcap_b.perms[PERM_GL];
 
   always_comb begin : check_cheri
     logic [31:0] top_offset;
@@ -821,6 +824,7 @@ module cheri_ex import cheri_pkg::*; #(
     logic [31:0] base_bound;
     logic [32:0] top_chkaddr, base_chkaddr;
     logic        top_vio, base_vio, top_equal;
+    logic        is_ok_type;
 
     // CSEAL/CUNSEAL, CIS_SUBSET, CLC/CSC checks are done here
     // CJAL/CJALR use separate set_addr checking for timing
@@ -876,49 +880,59 @@ module cheri_ex import cheri_pkg::*; #(
     else
       addr_bound_vio = 1'b0;
 
-    // main permission logic
-    if (debug_mode_i)
-      perm_vio = 1'b0;
-    else if (is_load_cap)
-      perm_vio  = (~rf_fullcap_a.valid) || is_cap_sealed(rf_fullcap_a) ||
-                  ~(rf_fullcap_a.perms[PERM_LD]) ||
-                  (cs1_addr_plusimm[2:0] != 0);
-    else if (is_store_cap)
-      perm_vio  = (~rf_fullcap_a.valid) || is_cap_sealed(rf_fullcap_a) ||
-                  ~rf_fullcap_a.perms[PERM_SD] ||
-                  (~rf_fullcap_a.perms[PERM_MC] && rf_fullcap_b.valid) ||
-                  (cs1_addr_plusimm[2:0] != 0) ||
-                  (csr_dbg_tclr_fault_i & store_local_vio);
-    else if (cheri_operator_i[CSEAL])
-      // cs2.addr check : ex: 0-7, non-ex: 9-15
-      perm_vio = (~rf_fullcap_a.valid) || is_cap_sealed(rf_fullcap_a) ||
-                 (~rf_fullcap_b.valid) || is_cap_sealed(rf_fullcap_b) ||
-                 (rf_fullcap_a.perms[PERM_EX]  && 
-                  ((rf_rdata_b[31:3]!=0) || (rf_rdata_b[2:0]==0) || (rf_rdata_b[2:0]==3'h4) || (rf_rdata_b[2:0]==3'h5))) ||
-                 (~rf_fullcap_a.perms[PERM_EX] && ((|rf_rdata_b[31:4]) || (rf_rdata_b[3:0] <= 8))) ||
-                 (~rf_fullcap_b.perms[PERM_SE]);
-    else if (cheri_operator_i[CUNSEAL])
-      perm_vio = (~rf_fullcap_a.valid) || (~is_cap_sealed(rf_fullcap_a)) ||
-                 (~rf_fullcap_b.valid) || is_cap_sealed(rf_fullcap_b)    ||
-                 (rf_rdata_b != decode_otype(rf_fullcap_a.otype, rf_fullcap_a.perms[PERM_EX])) ||
-                 (~rf_fullcap_b.perms[PERM_US]);
-    else if (cheri_operator_i[CJALR] & cheri_pmode_i)
-      perm_vio = (~rf_fullcap_a.valid) ||
-                 (is_cap_sealed(rf_fullcap_a) && (~is_cap_sentry(rf_fullcap_a))) ||
-                 (is_cap_sentry(rf_fullcap_a) && (cheri_imm12_i != 0)) ||
-                 (addr_result[0]);
-    else if (cheri_operator_i[CJAL] & cheri_pmode_i)
-      perm_vio = (addr_result[0]); 
-    else if (cheri_operator_i[CCSR_RW])
-      perm_vio = ~pcc_cap_i.perms[PERM_SR] || (csr_addr_o < 27);
-    else
-      perm_vio  = 1'b0;
 
+    // main permission logic
+    perm_vio_vec = 0;
+    is_ok_type   = 1'b0;
+
+    if (is_load_cap) begin
+      perm_vio_vec[PVIO_TAG]   = ~rf_fullcap_a.valid;
+      perm_vio_vec[PVIO_SEAL]  = is_cap_sealed(rf_fullcap_a);
+      perm_vio_vec[PVIO_LD]    = ~(rf_fullcap_a.perms[PERM_LD]);
+      perm_vio_vec[PVIO_ALIGN] = (cs1_addr_plusimm[2:0] != 0);
+    end else if (is_store_cap) begin
+      perm_vio_vec[PVIO_TAG]   = (~rf_fullcap_a.valid); 
+      perm_vio_vec[PVIO_SEAL]  = is_cap_sealed(rf_fullcap_a);
+      perm_vio_vec[PVIO_SD]    = ~rf_fullcap_a.perms[PERM_SD];
+      perm_vio_vec[PVIO_SC]    = (~rf_fullcap_a.perms[PERM_MC] && rf_fullcap_b.valid);
+      perm_vio_vec[PVIO_ALIGN] = (cs1_addr_plusimm[2:0] != 0); 
+      perm_vio_vec[PVIO_SLC]   = ~rf_fullcap_a.perms[PERM_SL] && rf_fullcap_b.valid && ~rf_fullcap_b.perms[PERM_GL];
+    end else if (cheri_operator_i[CSEAL]) begin
+      is_ok_type = rf_fullcap_a.perms[PERM_EX] ? 
+                   ((rf_rdata_b[31:3]!=0)||(rf_rdata_b[2:0]==0)||(rf_rdata_b[2:0]==3'h4)||(rf_rdata_b[2:0]==3'h5)) : 
+                   (~rf_fullcap_a.perms[PERM_EX] && ((|rf_rdata_b[31:4]) || (rf_rdata_b[3:0] <= 8)));
+      // cs2.addr check : ex: 0-7, non-ex: 9-15
+      perm_vio_vec[PVIO_TAG]   = ~rf_fullcap_a.valid || ~rf_fullcap_b.valid;
+      perm_vio_vec[PVIO_SEAL]  = is_cap_sealed(rf_fullcap_a) || is_cap_sealed(rf_fullcap_b) || 
+                                  (~rf_fullcap_b.perms[PERM_SE]) || is_ok_type;
+    end else if (cheri_operator_i[CUNSEAL]) begin
+      perm_vio_vec[PVIO_TAG]   = ~rf_fullcap_a.valid || ~rf_fullcap_b.valid; 
+      perm_vio_vec[PVIO_SEAL]  = (~is_cap_sealed(rf_fullcap_a)) || is_cap_sealed(rf_fullcap_b) ||
+                                   (rf_rdata_b != decode_otype(rf_fullcap_a.otype, rf_fullcap_a.perms[PERM_EX])) ||
+                                   (~rf_fullcap_b.perms[PERM_US]);
+    end else if (cheri_operator_i[CJALR]) begin
+      perm_vio_vec[PVIO_TAG]   = (~rf_fullcap_a.valid);
+      perm_vio_vec[PVIO_SEAL]  = (is_cap_sealed(rf_fullcap_a) && (~is_cap_sentry(rf_fullcap_a))); 
+      perm_vio_vec[PVIO_EX]    = ~rf_fullcap_a.perms[PERM_EX]; 
+      perm_vio_vec[PVIO_ALIGN] = (is_cap_sentry(rf_fullcap_a) && (cheri_imm12_i != 0)) || (addr_result[0]);
+    end else if (cheri_operator_i[CJAL]) begin
+      perm_vio_vec[PVIO_ALIGN] = addr_result[0]; 
+    end else if (cheri_operator_i[CCSR_RW]) begin
+      perm_vio_vec[PVIO_ASR]   =  ~pcc_cap_i.perms[PERM_SR] || (csr_addr_o < 27);
+    end else begin
+      perm_vio_vec = 0;
+    end
+
+    perm_vio = | perm_vio_vec;
   end
 
   // qualified by lsu_req later
-  assign cheri_lsu_err = addr_bound_vio | perm_vio;
+  // store_local error only causes tag clearing unless escalated to fault for debugging
+  assign cheri_lsu_err = cheri_pmode_i & ~debug_mode_i & 
+                         (addr_bound_vio | (|perm_vio_vec[7:0]) | (csr_dbg_tclr_fault_i & perm_vio_vec[PVIO_SLC]));
 
+  //
+  // fault case mtval generation
   // report to csr as mtval
 
   assign cheri_ex_err_info_o = cheri_ex_err_info_q;
@@ -927,63 +941,15 @@ module cheri_ex import cheri_pkg::*; #(
   assign cheri_wb_err_d      = cheri_wb_err_raw & cheri_exec_id_i & ~debug_mode_i;
 
   always_comb begin : err_cause_comb 
-    if (cheri_operator_i[CCSR_RW] && perm_vio)
-      cheri_ex_err_cause = 5'h18;
-    else
-      cheri_ex_err_cause = 5'h0;
-
-    if (addr_bound_vio_rv32)
-      rv32_lsu_err_cause = 5'h01;
-    else if (~rf_fullcap_a.valid)
-      rv32_lsu_err_cause = 5'h02;
-    else if (is_cap_sealed(rf_fullcap_a))
-      rv32_lsu_err_cause = 5'h03;
-    else if ((~rv32_lsu_we_i) & (~rf_fullcap_a.perms[PERM_LD]))
-      rv32_lsu_err_cause = 5'h12;
-    else if (rv32_lsu_we_i & (~rf_fullcap_a.perms[PERM_SD]))
-      rv32_lsu_err_cause = 5'h13;
-    else
-      rv32_lsu_err_cause = 5'h0;
-
-    if (addr_bound_vio)
-      cheri_lsu_err_cause = 5'h01;
-    else if (~rf_fullcap_a.valid)
-      cheri_lsu_err_cause = 5'h02;
-    else if (is_cap_sealed(rf_fullcap_a))
-      cheri_lsu_err_cause = 5'h03;
-    else if (is_load_cap & ~rf_fullcap_a.perms[PERM_LD])
-      cheri_lsu_err_cause = 5'h12;
-    else if (is_store_cap & ~rf_fullcap_a.perms[PERM_SD])
-      cheri_lsu_err_cause = 5'h13;
-    else if (is_store_cap & ~rf_fullcap_a.perms[PERM_MC] && rf_fullcap_b.valid) 
-      cheri_lsu_err_cause = 5'h15;
-    else if (is_store_cap & csr_dbg_tclr_fault_i & store_local_vio) 
-      cheri_lsu_err_cause = 5'h16;
-    else
-      cheri_lsu_err_cause = 5'h0;
-
-    if ((cheri_operator_i[CJAL] | cheri_operator_i[CJALR])  && ~pcc_cap_o.valid) 
-      cheri_wb_err_cause = 5'h01;
-    else if (cheri_operator_i[CJALR] && ~rf_fullcap_a.valid)
-      cheri_wb_err_cause = 5'h02;
-    else if (cheri_operator_i[CJALR] && is_cap_sealed(rf_fullcap_a) && ~is_cap_sentry(rf_fullcap_a)) 
-      cheri_wb_err_cause = 5'h03;    // seal error 1
-    else if (cheri_operator_i[CJALR] && is_cap_sentry(rf_fullcap_a) && (cheri_imm12_i != 0))
-      cheri_wb_err_cause = 5'h03;    // seal error 2
-    else if (cheri_operator_i[CJALR] && (~rf_fullcap_a.perms[PERM_EX] || rf_fullcap_a.base32[0]))
-      cheri_wb_err_cause = 5'h11;
-    else 
-      cheri_wb_err_cause = {3'b111, addr_bound_vio, perm_vio};   // dbug escalated errors, non-standard encoding
-
-  end
-
-  always_comb begin 
+    cheri_err_cause  = vio_cause_enc(addr_bound_vio, perm_vio_vec);
+    rv32_err_cause  = vio_cause_enc(addr_bound_vio_rv32, perm_vio_vec_rv32);
+    
     if (cheri_operator_i[CCSR_RW] & cheri_ex_err_raw & cheri_exec_id_i)
       // cspecialrw traps
-      cheri_ex_err_info_d = {1'b1, cheri_cs2_dec_i, cheri_ex_err_cause};
+      cheri_ex_err_info_d = {1'b1, cheri_cs2_dec_i, cheri_err_cause};
     else if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load_cap & cheri_lsu_err)  
       // 2-stage ppl load/store, error treated as EX error, cheri CLC check error
-      cheri_ex_err_info_d = {1'b0, rf_raddr_a_i, cheri_lsu_err_cause};
+      cheri_ex_err_info_d = {1'b0, rf_raddr_a_i, cheri_err_cause};
     else if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load_cap & clbc_err)  
       // 2-stage ppl load/store, error treated as EX error, memory error
       cheri_ex_err_info_d = {1'b0, rf_raddr_a_i, 5'h1f};    
@@ -992,11 +958,11 @@ module cheri_ex import cheri_pkg::*; #(
 
     // cheri_wb_err_raw is already qualified by instr
     if (cheri_wb_err_raw  & cheri_exec_id_i)
-      cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, cheri_wb_err_cause};
+      cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, cheri_err_cause};
     else if ((is_load_cap | is_store_cap) & cheri_lsu_err & cheri_exec_id_i)
-      cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, cheri_lsu_err_cause};
+      cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, cheri_err_cause};
     else if (rv32_lsu_req_i & rv32_lsu_err & cheri_exec_id_i)
-      cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, rv32_lsu_err_cause};
+      cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, rv32_err_cause};
     else 
       cheri_wb_err_info_d = cheri_wb_err_info_q;
   end 

@@ -833,13 +833,54 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     CHERI_CSR_RW
   } cheri_csr_op_e;
 
-  parameter logic[4:0] CHERI_SCR_MEPCC      = 5'd31;
-  parameter logic[4:0] CHERI_SCR_MSCRATCHC  = 5'd30;
-  parameter logic[4:0] CHERI_SCR_MTDC       = 5'd29;
-  parameter logic[4:0] CHERI_SCR_MTCC       = 5'd28;
-  parameter logic[4:0] CHERI_SCR_ZTOPC      = 5'd27;
-  parameter logic[4:0] CHERI_SCR_DSCRATCHC1 = 5'd26;
-  parameter logic[4:0] CHERI_SCR_DSCRATCHC0 = 5'd25;
-  parameter logic[4:0] CHERI_SCR_DEPCC      = 5'd24;
+  parameter logic [4:0] CHERI_SCR_MEPCC      = 5'd31;
+  parameter logic [4:0] CHERI_SCR_MSCRATCHC  = 5'd30;
+  parameter logic [4:0] CHERI_SCR_MTDC       = 5'd29;
+  parameter logic [4:0] CHERI_SCR_MTCC       = 5'd28;
+  parameter logic [4:0] CHERI_SCR_ZTOPC      = 5'd27;
+  parameter logic [4:0] CHERI_SCR_DSCRATCHC1 = 5'd26;
+  parameter logic [4:0] CHERI_SCR_DSCRATCHC0 = 5'd25;
+  parameter logic [4:0] CHERI_SCR_DEPCC      = 5'd24;
 
+  // permission violations
+  parameter int unsigned W_PVIO = 9;
+
+  parameter logic [3:0] PVIO_TAG   = 4'h0;
+  parameter logic [3:0] PVIO_SEAL  = 4'h1;
+  parameter logic [3:0] PVIO_EX    = 4'h2;
+  parameter logic [3:0] PVIO_LD    = 4'h3;
+  parameter logic [3:0] PVIO_SD    = 4'h4;
+  parameter logic [3:0] PVIO_SC    = 4'h5;
+  parameter logic [3:0] PVIO_ASR   = 4'h6;
+  parameter logic [3:0] PVIO_ALIGN = 4'h7;
+  parameter logic [3:0] PVIO_SLC   = 4'h8;
+  
+
+  function automatic logic [4:0] vio_cause_enc (logic bound_vio, logic[W_PVIO-1:0] perm_vio_vec);
+    logic [4:0] vio_cause;
+    
+    if (bound_vio)
+      vio_cause = 5'h1;
+    else if (perm_vio_vec[PVIO_TAG])
+      vio_cause = 5'h2;
+    else if (perm_vio_vec[PVIO_SEAL])
+      vio_cause = 5'h3;
+    else if (perm_vio_vec[PVIO_EX])
+      vio_cause = 5'h3;
+    else if (perm_vio_vec[PVIO_LD])
+      vio_cause = 5'h12;
+    else if (perm_vio_vec[PVIO_SD])
+      vio_cause = 5'h13;
+    else if (perm_vio_vec[PVIO_SC])
+      vio_cause = 5'h15;
+    else if (perm_vio_vec[PVIO_SLC])
+      vio_cause = 5'h16;
+    else if (perm_vio_vec[PVIO_ASR])
+      vio_cause = 5'h18;
+    else
+      vio_cause = 5'h0;
+
+    return vio_cause;
+  endfunction
+ 
 endpackage
