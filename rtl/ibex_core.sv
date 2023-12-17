@@ -1139,6 +1139,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .clk_i (clk_i),
     .rst_ni(rst_ni),
 
+    .cheri_pmode_i (cheri_pmode_i),
     // data interface
     .data_req_o    (data_req_out),
     .data_is_cap_o (data_is_cap_o),

@@ -183,8 +183,8 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
   // exception PC selection mux
   always_comb begin : exc_pc_mux
     unique case (exc_pc_mux_i)
-      EXC_PC_EXC:     exc_pc = csr_mtvec_i[0] ? { csr_mtvec_i[31:8], 8'h00 } : {csr_mtvec_i[31:2], 2'b00};
-      EXC_PC_IRQ:     exc_pc = csr_mtvec_i[0] ? { csr_mtvec_i[31:8], 1'b0, irq_id[4:0], 2'b00 } : {csr_mtvec_i[31:2], 2'b00};
+      EXC_PC_EXC:     exc_pc = (csr_mtvec_i[0] | ~cheri_pmode_i)? { csr_mtvec_i[31:8], 8'h00 } : {csr_mtvec_i[31:2], 2'b00};
+      EXC_PC_IRQ:     exc_pc = (csr_mtvec_i[0] | ~cheri_pmode_i) ? { csr_mtvec_i[31:8], 1'b0, irq_id[4:0], 2'b00 } : {csr_mtvec_i[31:2], 2'b00};
       EXC_PC_DBD:     exc_pc = DmHaltAddr;
       EXC_PC_DBG_EXC: exc_pc = DmExceptionAddr;
       default:        exc_pc = { csr_mtvec_i[31:8], 8'h00                    };

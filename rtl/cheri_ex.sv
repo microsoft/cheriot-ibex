@@ -1128,8 +1128,14 @@ end
 
   // rv32 core side signals
   // request phase: be nice and mux using the current EX instruction to select
-  // must qualify addr_incr otherwise it goes to ALU and mess up non-LSU instructions
-  assign rv32_addr_incr_req_o   = instr_is_rv32lsu_i  ?  addr_incr_req_i : 1'b0;
+
+  // addr_incr:
+  //  -- must qualify addr_incr otherwise it goes to ALU and mess up non-LSU instructions
+  //  -- however for LEC to gate this with cheri_pmode, otherwise illegal_insn will feed into addr logic
+  //     since illegal_insn goes into instr_is_rv32lsu
+  // assign rv32_addr_incr_req_o   = instr_is_rv32lsu_i  ?  addr_incr_req_i : 1'b0;   // original
+  assign rv32_addr_incr_req_o   = (~cheri_pmode_i | instr_is_rv32lsu_i)  ?  addr_incr_req_i : 1'b0;
+
   assign rv32_addr_last_o       = addr_last_i;
 
   // req_done, resp_valid, load/store_err will be directly from LSU

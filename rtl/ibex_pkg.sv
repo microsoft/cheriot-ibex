@@ -261,11 +261,9 @@ package ibex_pkg;
   } op_b_sel_e;
 
   // Immediate b selection
-  typedef enum logic [3:0] {
+  typedef enum logic [2:0] {
     IMM_B_I,
-    IMM_B_I_CHERI_EXT,
     IMM_B_S,
-    IMM_B_S_CHERI_EXT,
     IMM_B_B,
     IMM_B_U,
     IMM_B_J,

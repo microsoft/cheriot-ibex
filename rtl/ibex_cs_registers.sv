@@ -157,7 +157,6 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   localparam int unsigned RV32BEnabled = (RV32B == RV32BNone) ? 0 : 1;
   localparam int unsigned RV32MEnabled = (RV32M == RV32MNone) ? 0 : 1;
   localparam int unsigned PMPAddrWidth = (PMPGranularity > 0) ? 33 - PMPGranularity : 32;
-  localparam int unsigned CHERIoTEn32b = {31'h0, CHERIoTEn};
 
   // misa
   localparam logic [31:0] MISA_VALUE =
@@ -172,7 +171,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     | (0                 << 13)  // N - User level interrupts supported
     | (0                 << 18)  // S - Supervisor mode implemented
     | (1                 << 20)  // U - User mode implemented
-    | (CHERIoTEn32b      << 23)  // X - Non-standard extensions present
+    | (CHERIoTEn         << 23)  // X - Non-standard extensions present
     | (32'(CSR_MISA_MXL) << 30); // M-XLEN
 
   typedef struct packed {
@@ -330,6 +329,11 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
   assign unused_boot_addr = boot_addr_i[7:0];
 
+  logic [31:0] misa_value_masked;
+
+  assign misa_value_masked = MISA_VALUE & ~{8'h0, ~cheri_pmode_i, 23'h0};
+
+
   /////////////
   // CSR reg //
   /////////////
@@ -357,9 +361,9 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
     unique case (csr_addr_i)
       // mvendorid: encoding of manufacturer/provider
-      CSR_MVENDORID: csr_rdata_int = CHERIoTEn ? CSR_MVENDORID_CHERI_VALUE : CSR_MVENDORID_VALUE;
+      CSR_MVENDORID: csr_rdata_int = (CHERIoTEn&cheri_pmode_i) ? CSR_MVENDORID_CHERI_VALUE : CSR_MVENDORID_VALUE;
       // marchid: encoding of base microarchitecture
-      CSR_MARCHID: csr_rdata_int = CHERIoTEn ? CSR_MARCHID_CHERI_VALUE : CSR_MARCHID_VALUE;
+      CSR_MARCHID: csr_rdata_int = (CHERIoTEn&cheri_pmode_i) ? CSR_MARCHID_CHERI_VALUE : CSR_MARCHID_VALUE;
       // mimpid: encoding of processor implementation version
       CSR_MIMPID: csr_rdata_int = CSR_MIMPID_VALUE;
       // mhartid: unique hardware thread id
@@ -376,7 +380,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
       end
 
       // misa
-      CSR_MISA: csr_rdata_int = MISA_VALUE;
+      CSR_MISA: csr_rdata_int = misa_value_masked;
 
       // interrupt enable
       CSR_MIE: begin
@@ -553,11 +557,29 @@ module ibex_cs_registers import cheri_pkg::*;  #(
       end
 
       // MSHWM CSR (stack high watermark in cheriot)
-      CSR_MSHWM:  csr_rdata_int = mshwm_q;
+      CSR_MSHWM:  begin
+        if (cheri_pmode_i) begin
+          csr_rdata_int = cheri_pmode_i ? mshwm_q : 32'h0;
+        end else begin
+          illegal_csr = 1'b1;
+        end
+      end
 
-      CSR_MSHWMB: csr_rdata_int = mshwmb_q;
+      CSR_MSHWMB: begin
+        if (cheri_pmode_i) begin
+          csr_rdata_int = cheri_pmode_i ? mshwmb_q : 32'h0;
+        end else begin
+          illegal_csr = 1'b1;
+        end
+      end
 
-      CSR_CDBG_CTRL: csr_rdata_int = cdbg_ctrl_q;
+      CSR_CDBG_CTRL: begin
+        if (cheri_pmode_i) begin
+          csr_rdata_int = cheri_pmode_i ? cdbg_ctrl_q : 32'h0;
+        end else begin
+          illegal_csr = 1'b1;
+        end
+      end
 
       default: begin
         illegal_csr = 1'b1;
@@ -583,8 +605,8 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     mtvec_en     = csr_mtvec_init_i;
     // mtvec.MODE set to vectored
     // mtvec.BASE must be 256-byte aligned
-    mtvec_d      = csr_mtvec_init_i ? {boot_addr_i[31:8], 6'b0, 2'b01} :
-                                      {csr_wdata_int[31:8], 6'b0, 2'b01};
+    mtvec_d      = csr_mtvec_init_i ? {boot_addr_i[31:8], 6'b0, 1'b0, ~(CHERIoTEn&cheri_pmode_i)} :
+                                      {csr_wdata_int[31:8], 6'b0, 1'b0, ~(CHERIoTEn&cheri_pmode_i)};
     dcsr_en      = 1'b0;
     dcsr_d       = dcsr_q;
     depc_d       = {csr_wdata_int[31:1], 1'b0};
@@ -713,9 +735,9 @@ module ibex_cs_registers import cheri_pkg::*;  #(
           cpuctrl_we = 1'b1;
         end
 
-        CSR_MSHWM:      mshwm_en  = CHERIoTEn;
-        CSR_MSHWMB:     mshwmb_en = CHERIoTEn;
-        CSR_CDBG_CTRL:  cdbg_ctrl_en = CHERIoTEn;
+        CSR_MSHWM:      mshwm_en  = CHERIoTEn & cheri_pmode_i;
+        CSR_MSHWMB:     mshwmb_en = CHERIoTEn & cheri_pmode_i;
+        CSR_CDBG_CTRL:  cdbg_ctrl_en = CHERIoTEn & cheri_pmode_i;
 
         default:;
       endcase
@@ -986,6 +1008,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
   assign mtvec_en_combi = mtvec_en | mtvec_en_cheri;
 
+  // use only 2'b00 (direct mode) for CHERIoT
   assign mtvec_d_combi = ({32{mtvec_en}} & mtvec_d) | ({32{mtvec_en_cheri}} & 
                           {cheri_csr_wdata_i[31:2],2'b00});
 
@@ -993,7 +1016,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   ibex_csr #(
     .Width     (32),
     .ShadowCopy(ShadowCSR),
-    .ResetValue({31'h0, ~CHERIoTEn})   // use only 2'b00 (direct mode) for CHERIoT
+    .ResetValue({32'd1})   // retain this to make lec vs ibex pass
   ) u_mtvec_csr (
     .clk_i     (clk_i),
     .rst_ni    (rst_ni),

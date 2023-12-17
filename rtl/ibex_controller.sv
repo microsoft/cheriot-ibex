@@ -21,6 +21,7 @@ module ibex_controller #(
  ) (
   input  logic                  clk_i,
   input  logic                  rst_ni,
+  input  logic                  cheri_pmode_i,
 
   output logic                  ctrl_busy_o,             // core is busy processing instrs
 
@@ -226,29 +227,30 @@ module ibex_controller #(
                          // MRET must be in M-Mode. TW means trap WFI to M-Mode.
                          (mret_insn | (csr_mstatus_tw_i & wfi_insn));
 
-  assign illegal_mret_cheri = CHERIoTEn & ~csr_pcc_perm_sr_i & mret_insn;
+  assign illegal_mret_cheri = CHERIoTEn & cheri_pmode_i & ~csr_pcc_perm_sr_i & mret_insn;
 
   // This is recorded in the illegal_insn_q flop to help timing.  Specifically
   // it is needed to break the path from ibex_cs_registers/illegal_csr_insn_o
   // to pc_set_o.  Clear when controller is in FLUSH so it won't remain set
   // once illegal instruction is handled.
   // All terms in this expression are qualified by instr_valid_i
-  assign illegal_insn_d = (illegal_insn_i | illegal_dret | illegal_umode | illegal_mret_cheri) & (ctrl_fsm_cs != FLUSH);
-  assign cheri_ex_err_d = cheri_ex_err & (ctrl_fsm_cs != FLUSH);
+  assign illegal_insn_d = (illegal_insn_i | illegal_dret | illegal_umode | (cheri_pmode_i & illegal_mret_cheri)) & 
+                          (ctrl_fsm_cs != FLUSH);
+  assign cheri_ex_err_d = cheri_pmode_i & cheri_ex_err & (ctrl_fsm_cs != FLUSH);
 
   // exception requests
   // requests are flopped in exc_req_q.  This is cleared when controller is in
   // the FLUSH state so the cycle following exc_req_q won't remain set for an
   // exception request that has just been handled.
   // All terms in this expression are qualified by instr_valid_i
-  assign exc_req_d = (ecall_insn | ebrk_insn | illegal_insn_d | instr_fetch_err | cheri_ex_err) &
+  assign exc_req_d = (ecall_insn | ebrk_insn | illegal_insn_d | instr_fetch_err | (cheri_pmode_i & cheri_ex_err)) &
                      (ctrl_fsm_cs != FLUSH);
   assign exc_req_nc = (ecall_insn | ebrk_insn | illegal_insn_d | instr_fetch_err) &
                       (ctrl_fsm_cs != FLUSH);
 
   // LSU exception requests
   assign exc_req_lsu = store_err_i | load_err_i;
-  assign exc_req_wb  = exc_req_lsu | cheri_wb_err_i;
+  assign exc_req_wb  = exc_req_lsu | (cheri_pmode_i & cheri_wb_err_i);
 
   assign id_exception_o = exc_req_d;
   assign id_exception_nc_o = exc_req_nc;
@@ -289,7 +291,7 @@ module ibex_controller #(
         store_err_prio = 1'b1;
       end else if (load_err_q) begin
         load_err_prio  = 1'b1;
-      end else if (cheri_wb_err_q) begin
+      end else if (cheri_pmode_i & cheri_wb_err_q) begin
         cheri_wb_err_prio  = 1'b1;
       end else if (instr_fetch_err) begin
         instr_fetch_err_prio = 1'b1;
@@ -299,13 +301,13 @@ module ibex_controller #(
         ecall_insn_prio = 1'b1;
       end else if (ebrk_insn) begin
         ebrk_insn_prio = 1'b1;
-      end else if (cheri_ex_err_q) begin
+      end else if (cheri_pmode_i & cheri_ex_err_q) begin
         cheri_ex_err_prio = 1'b1;
       end
     end
 
     // Instruction in writeback is generating an exception so instruction in ID must not execute
-    assign wb_exception_o = load_err_q | store_err_q | load_err_i | store_err_i | cheri_wb_err_i;
+    assign wb_exception_o = load_err_q | store_err_q | load_err_i | store_err_i | (cheri_pmode_i & cheri_wb_err_i);
   end else begin : g_no_wb_exceptions
     always_comb begin
       instr_fetch_err_prio = 0;
@@ -548,7 +550,7 @@ module ibex_controller #(
           end
         end
 
-        if (branch_set_i || jump_set_i || cheri_branch_req_i) begin
+        if (branch_set_i || jump_set_i || (cheri_pmode_i & cheri_branch_req_i)) begin
           // Only set the PC if the branch predictor hasn't already done the branch for us
           pc_set_o       = BranchPredictor ? ~instr_bp_taken_i : 1'b1;
 
@@ -692,7 +694,7 @@ module ibex_controller #(
 
         // exceptions: set exception PC, save PC and exception cause
         // exc_req_lsu is high for one clock cycle only (in DECODE)
-        if (exc_req_q || store_err_q || load_err_q || cheri_wb_err_q) begin
+        if (exc_req_q || store_err_q || load_err_q || (cheri_pmode_i & cheri_wb_err_q)) begin
           pc_set_o         = 1'b1;
           pc_mux_o         = PC_EXC;
           exc_pc_mux_o     = debug_mode_q ? EXC_PC_DBG_EXC : EXC_PC_EXC;
@@ -701,8 +703,8 @@ module ibex_controller #(
             // With the writeback stage present whether an instruction accessing memory will cause
             // an exception is only known when it is in writeback. So when taking such an exception
             // epc must come from writeback.
-            csr_save_id_o  = ~(store_err_q | load_err_q | cheri_wb_err_q);
-            csr_save_wb_o  = store_err_q | load_err_q | cheri_wb_err_q;
+            csr_save_id_o  = ~(store_err_q | load_err_q | (cheri_pmode_i & cheri_wb_err_q));
+            csr_save_wb_o  = store_err_q | load_err_q | (cheri_pmode_i & cheri_wb_err_q);
           end else begin : g_no_writeback_mepc_save
             csr_save_id_o  = 1'b0;
           end
@@ -757,7 +759,7 @@ module ibex_controller #(
               end
             end
             store_err_prio: begin
-              if (lsu_err_is_cheri_q) begin
+              if (cheri_pmode_i & lsu_err_is_cheri_q) begin
                 exc_cause_o = EXC_CAUSE_CHERI_FAULT; 
                 csr_mtval_o = cheri_wb_err_info_i;
               end else begin
@@ -766,7 +768,7 @@ module ibex_controller #(
               end
             end
             load_err_prio: begin
-              if (lsu_err_is_cheri_q) begin
+              if (cheri_pmode_i & lsu_err_is_cheri_q) begin
                 exc_cause_o = EXC_CAUSE_CHERI_FAULT;
                 csr_mtval_o = cheri_wb_err_info_i;
               end else begin
@@ -775,12 +777,16 @@ module ibex_controller #(
               end
             end
             cheri_ex_err_prio: begin
-              exc_cause_o = EXC_CAUSE_CHERI_FAULT;
-              csr_mtval_o = cheri_ex_err_info_i;        
+              if (cheri_pmode_i) begin
+                exc_cause_o = EXC_CAUSE_CHERI_FAULT;
+                csr_mtval_o = cheri_ex_err_info_i;        
+              end
             end
             cheri_wb_err_prio: begin
-              exc_cause_o = EXC_CAUSE_CHERI_FAULT;
-              csr_mtval_o = cheri_wb_err_info_i;
+              if (cheri_pmode_i) begin
+                exc_cause_o = EXC_CAUSE_CHERI_FAULT;
+                csr_mtval_o = cheri_wb_err_info_i;
+              end
             end
 
             default: ;
@@ -882,7 +888,7 @@ module ibex_controller #(
       exc_req_q               <= exc_req_d;
       illegal_insn_q          <= illegal_insn_d;
       cheri_ex_err_q          <= cheri_ex_err_d;
-      cheri_wb_err_q          <= cheri_wb_err_i;
+      cheri_wb_err_q          <= cheri_pmode_i & cheri_wb_err_i;
     end
   end
 

@@ -69,9 +69,14 @@ module ibex_compressed_decoder # (
           end
 
           3'b011: begin
-            // CHERI: c.clc -> clc rd', imm(rs1'); reuse c.ld
-            instr_o = {4'b0, instr_i[6:5], instr_i[12:10],
-                       3'b000, 2'b01, instr_i[9:7], 3'b011, 2'b01, instr_i[4:2], {OPCODE_LOAD}};
+            if (CHERIoTEn & cheri_pmode_i) begin
+              // CHERI: c.clc -> clc rd', imm(rs1'); reuse c.ld
+              instr_o = {4'b0, instr_i[6:5], instr_i[12:10],
+                         3'b000, 2'b01, instr_i[9:7], 3'b011, 2'b01, instr_i[4:2], {OPCODE_LOAD}};
+             end else begin
+              instr_o = instr_i;
+              illegal_instr_o = 1'b1;
+            end
           end
 
           3'b110: begin
@@ -88,9 +93,15 @@ module ibex_compressed_decoder # (
           end
 
           3'b111: begin
-            // CHERI: c.csc -> csc rs2', imm(rs1'); reuse c.sd
-            instr_o = {4'b0, instr_i[6:5], instr_i[12], 2'b01, instr_i[4:2],
-                       2'b01, instr_i[9:7], 3'b011, instr_i[11:10], 3'b000, {OPCODE_STORE}};
+            if (CHERIoTEn & cheri_pmode_i) begin
+              // CHERI: c.csc -> csc rs2', imm(rs1'); reuse c.sd
+              instr_o = {4'b0, instr_i[6:5], instr_i[12], 2'b01, instr_i[4:2],
+                         2'b01, instr_i[9:7], 3'b011, instr_i[11:10], 3'b000, {OPCODE_STORE}};
+            end else begin
+              instr_o = instr_i;
+              illegal_instr_o = 1'b1;
+            end
+
           end
 
           default: begin
@@ -247,10 +258,15 @@ module ibex_compressed_decoder # (
           end
 
           3'b011: begin
-            // c.clcsp -> clc cd, imm(c2),  reused c.ldsp
-            instr_o = {3'b0, instr_i[4:2], instr_i[12], instr_i[6:5], 3'b000, 5'h02,
-                       3'b011, instr_i[11:7], OPCODE_LOAD};
-            if (instr_i[11:7] == 5'b0)  illegal_instr_o = 1'b1;
+            if (CHERIoTEn & cheri_pmode_i) begin
+              // c.clcsp -> clc cd, imm(c2),  reused c.ldsp
+              instr_o = {3'b0, instr_i[4:2], instr_i[12], instr_i[6:5], 3'b000, 5'h02,
+                         3'b011, instr_i[11:7], OPCODE_LOAD};
+              if (instr_i[11:7] == 5'b0)  illegal_instr_o = 1'b1;
+            end else begin
+              instr_o = instr_i;
+              illegal_instr_o = 1'b1;
+            end 
           end
 
           3'b100: begin
@@ -288,9 +304,14 @@ module ibex_compressed_decoder # (
           end
 
           3'b111: begin
-            // c.cscsp -> csc cs2, imm(c2),  reuse c.sdsp
-            instr_o = {3'b0, instr_i[9:7], instr_i[12], instr_i[6:2], 5'h02, 3'b011,
-                       instr_i[11:10], 3'b000, {OPCODE_STORE}};
+            if (CHERIoTEn & cheri_pmode_i) begin
+              // c.cscsp -> csc cs2, imm(c2),  reuse c.sdsp
+              instr_o = {3'b0, instr_i[9:7], instr_i[12], instr_i[6:2], 5'h02, 3'b011,
+                         instr_i[11:10], 3'b000, {OPCODE_STORE}};
+            end else begin 
+              instr_o = instr_i;
+              illegal_instr_o = 1'b1;
+            end
           end
 
 

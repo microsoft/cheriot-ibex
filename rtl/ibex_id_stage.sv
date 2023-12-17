@@ -257,9 +257,7 @@ module ibex_id_stage import cheri_pkg::*; #(
 
   // Immediate decoding and sign extension
   logic [31:0] imm_i_type;
-  logic [31:0] imm_i_type_cheri_ext;
   logic [31:0] imm_s_type;
-  logic [31:0] imm_s_type_cheri_ext;
   logic [31:0] imm_b_type;
   logic [31:0] imm_u_type;
   logic [31:0] imm_j_type;
@@ -327,7 +325,7 @@ module ibex_id_stage import cheri_pkg::*; #(
   logic        cheri_rf_we, cheri_rf_we_dec;
   logic        stall_cheri_trvk;
 
-  assign       cheri_rf_we = CHERIoTEn & instr_valid_i & ~instr_fetch_err_i & ~illegal_insn_o & cheri_rf_we_dec;
+  assign       cheri_rf_we = CHERIoTEn & cheri_pmode_i & instr_valid_i & ~instr_fetch_err_i & ~illegal_insn_o & cheri_rf_we_dec;
 
   /////////////
   // LSU Mux //
@@ -381,9 +379,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     always_comb begin : immediate_b_mux
       unique case (imm_b_mux_sel)
         IMM_B_I:         imm_b = imm_i_type;
-        IMM_B_I_CHERI_EXT: imm_b = imm_i_type_cheri_ext;
         IMM_B_S:         imm_b = imm_s_type;
-        IMM_B_S_CHERI_EXT: imm_b = imm_s_type_cheri_ext;
         IMM_B_U:         imm_b = imm_u_type;
         IMM_B_INCR_PC:   imm_b = instr_is_compressed_i ? 32'h2 : 32'h4;
         IMM_B_INCR_ADDR: imm_b = 32'h4;
@@ -392,9 +388,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     end
     `ASSERT(IbexImmBMuxSelValid, instr_valid_i |-> imm_b_mux_sel inside {
         IMM_B_I,
-        IMM_B_I_CHERI_EXT,
         IMM_B_S,
-        IMM_B_S_CHERI_EXT,
         IMM_B_U,
         IMM_B_INCR_PC,
         IMM_B_INCR_ADDR})
@@ -411,9 +405,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     always_comb begin : immediate_b_mux
       unique case (imm_b_mux_sel)
         IMM_B_I:         imm_b = imm_i_type;
-        IMM_B_I_CHERI_EXT: imm_b = imm_i_type_cheri_ext;
         IMM_B_S:         imm_b = imm_s_type;
-        IMM_B_S_CHERI_EXT: imm_b = imm_s_type_cheri_ext;
         IMM_B_B:         imm_b = imm_b_type;
         IMM_B_U:         imm_b = imm_u_type;
         IMM_B_J:         imm_b = imm_j_type;
@@ -424,9 +416,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     end
     `ASSERT(IbexImmBMuxSelValid, instr_valid_i |-> imm_b_mux_sel inside {
         IMM_B_I,
-        IMM_B_I_CHERI_EXT,
         IMM_B_S,
-        IMM_B_S_CHERI_EXT,
         IMM_B_B,
         IMM_B_U,
         IMM_B_J,
@@ -511,9 +501,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     .bt_b_mux_sel_o (bt_b_mux_sel),
 
     .imm_i_type_o   (imm_i_type),
-    .imm_i_type_cheri_ext_o   (imm_i_type_cheri_ext),
     .imm_s_type_o   (imm_s_type),
-    .imm_s_type_cheri_ext_o   (imm_s_type_cheri_ext),
     .imm_b_type_o   (imm_b_type),
     .imm_u_type_o   (imm_u_type),
     .imm_j_type_o   (imm_j_type),
@@ -620,7 +608,7 @@ module ibex_id_stage import cheri_pkg::*; #(
   ) controller_i (
     .clk_i (clk_i),
     .rst_ni(rst_ni),
-
+    .cheri_pmode_i (cheri_pmode_i),
     .ctrl_busy_o(ctrl_busy_o),
 
     // decoder related signals
@@ -734,7 +722,9 @@ module ibex_id_stage import cheri_pkg::*; #(
   // access is illegal. A combinational loop would be created if csr_op_en_o was used along (as
   // asserting it for an illegal csr access would result in a flush that would need to deassert it).
   // assign csr_op_en_o             = csr_access_o & instr_executing & instr_id_done_o;
-  assign csr_op_en_o             = csr_access_o & instr_executing & instr_first_cycle;
+  assign csr_op_en_o             = csr_access_o & instr_executing & 
+                                   ((CHERIoTEn & cheri_pmode_i) ? instr_first_cycle : instr_id_done_o);
+// QQQQQQQ KLIU - this needs to be looked into!!!!
 
   assign alu_operator_ex_o           = alu_operator;
   assign alu_operand_a_ex_o          = alu_operand_a;
@@ -886,10 +876,12 @@ module ibex_id_stage import cheri_pkg::*; #(
               end
             end
             cheri_lsu_req_dec: begin
-              if (!WritebackStage) begin
-                id_fsm_d    = MULTI_CYCLE;
-              end else if(~lsu_req_done_i) begin  // covers the lsu_cheri_err case (1cycle)
-                id_fsm_d  = MULTI_CYCLE;
+              if (cheri_pmode_i) begin
+                if (!WritebackStage) begin
+                  id_fsm_d    = MULTI_CYCLE;
+                end else if(~lsu_req_done_i) begin  // covers the lsu_cheri_err case (1cycle)
+                  id_fsm_d  = MULTI_CYCLE;
+                end
               end
             end
             multdiv_en_dec: begin
@@ -930,9 +922,11 @@ module ibex_id_stage import cheri_pkg::*; #(
               rf_we_raw     = 1'b0;
             end
             cheri_multicycle_dec: begin
-              id_fsm_d      = MULTI_CYCLE;
-              rf_we_raw     = 1'b0;
-              stall_cheri   = 1'b1;
+              if (cheri_pmode_i) begin
+                id_fsm_d      = MULTI_CYCLE;
+                rf_we_raw     = 1'b0;
+                stall_cheri   = 1'b1;
+              end
             end
             default: begin
               id_fsm_d      = FIRST_CYCLE;
@@ -1058,7 +1052,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     // note we can't use_instr_kill here since it includes id_exception (cherr_ex_err), which causes a
     // comb loop.
 
-    assign cheri_exec_id_o = instr_valid_i              &
+    assign cheri_exec_id_o = cheri_pmode_i & instr_valid_i &
                             ~instr_fetch_err_i         &
                             instr_is_cheri_id_o        &
                             controller_run             &
@@ -1111,7 +1105,7 @@ module ibex_id_stage import cheri_pkg::*; #(
 
     assign stall_ld_hz = outstanding_load_wb_i & (rf_rd_a_hz | rf_rd_b_hz);
 
-    assign stall_cheri_trvk = (CHERIoTEn & CheriPPLBC) ? 
+    assign stall_cheri_trvk = (CHERIoTEn & cheri_pmode_i & CheriPPLBC) ? 
                                ((rf_ren_a && ~rf_reg_rdy_i[rf_raddr_a_o]) |
                                 (rf_ren_b && ~rf_reg_rdy_i[rf_raddr_b_o]) |
                                 (cheri_rf_we && ~ rf_reg_rdy_i[rf_waddr_id_o])) :
