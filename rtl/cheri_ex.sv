@@ -961,7 +961,7 @@ module cheri_ex import cheri_pkg::*; #(
       cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, cheri_err_cause};
     else if ((is_load_cap | is_store_cap) & cheri_lsu_err & cheri_exec_id_i)
       cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, cheri_err_cause};
-    else if (rv32_lsu_req_i & rv32_lsu_err & cheri_exec_id_i)
+    else if (rv32_lsu_req_i & rv32_lsu_err)
       cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, rv32_err_cause};
     else 
       cheri_wb_err_info_d = cheri_wb_err_info_q;
