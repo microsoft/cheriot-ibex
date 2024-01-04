@@ -1,5 +1,5 @@
 +define+RVFI
-+incdir+$rtlRoot+$primRoot+$dvutilsRoot
++incdir+$rtlRoot+$primRoot+$dvutilsRoot+$verifRoot/tb
 $primRoot/prim_ram_1p_pkg.sv
 $primRoot/prim_cipher_pkg.sv
 $primRoot/prim_lfsr.sv
@@ -40,5 +40,9 @@ $rtlRoot/ibexc_top.sv
 $rtlRoot/ibex_tracer.sv
 $rtlRoot/ibexc_top_tracing.sv
 $verifRoot/tb/mem_model.sv
+$verifRoot/tb/dii_if.sv
 $verifRoot/tb/tb_cheriot_top.sv
+$verifRoot/tb/module_dv_ext.sv
+$verifRoot/tb/core_ibex_fcov_if.sv
+$verifRoot/tb/core_ibex_fcov_bind.sv
 $verifRoot/tb/tb_env.sv

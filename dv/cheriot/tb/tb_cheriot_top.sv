@@ -1,5 +1,7 @@
+// Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
+
 //`define BOOT_ADDR 32'h8000_0000
 `define BOOT_ADDR 32'h8000_0000
 
@@ -10,9 +12,9 @@ import prim_ram_1p_pkg::*;
 module tb_cheriot_top (
   input  logic         clk_i,
   input  logic         rstn_i,
-  input  logic [31:0]  instr_rdata_dii_i,
-  output logic [31:0]  instr_pc_o,
-  output logic         instr_ack_o
+  input  logic [31:0]  dii_insn_i,
+  output logic [31:0]  dii_pc_o,
+  output logic         dii_ack_o
   );
 
   localparam MEM_AW = 14;
@@ -42,11 +44,6 @@ module tb_cheriot_top (
   logic        cheri_pmode;
   logic        cheri_tsafe_en;
 
-  // Memory map
-  //   0x2000_0000 - 0x2000_ffff: instr_mem
-  //   0x2001_0000 - 0x2001_ffff: data_mem
-  //   0x2004_0000 - 0x2004_0fff: tsmap (shadow memory)
-  //   0x2100_0600 - interrupt injection
 `ifndef VERILATOR
   `ifdef CHERI0
     defparam dut.u_ibex_top.CHERIoTEn = 1'b0;
@@ -116,12 +113,6 @@ module tb_cheriot_top (
     assign cheri_tsafe_en = 1;
   `endif
 
-  `ifdef MEM_RNDW
-    assign mem_rndw = 1'b1;             // only a display flag
-  `else
-    assign mem_rndw = 1'b0;
-  `endif
- 
   `ifdef MULT_1CYCLE  
     defparam dut.u_ibex_top.u_ibex_core.RV32M = RV32MSingleCycle;
   `endif
@@ -133,7 +124,7 @@ module tb_cheriot_top (
   `ifdef RV32B
     defparam dut.u_ibex_top.RV32B = 3;
   `endif
- `endif // verilator
+ `endif // ifndef verilator
 
   ibex_top_tracing #(
                      .HeapBase        (32'h8000_0000),
@@ -194,7 +185,7 @@ module tb_cheriot_top (
     .data_is_cap_o        ()
   );
 
-  assign irq_external = 1'b0;
+  assign irq_external = 1'b0;       // QQQ add interrupts later
 
   assign data_rdata_intg  = 7'h0;
   assign instr_rdata_intg = 7'h0;
@@ -219,14 +210,20 @@ module tb_cheriot_top (
 `endif
 
   // push instructions to ID stage
+  dii_if u_dii_if(
+    .clk_i        (clk_i),
+    .rstn_i       (rstn_i),
+    .dii_insn_0_i (dii_insn_i),
+    .dii_insn_1_i (32'h0),
+    .dii_pc_o     (dii_pc_o),
+    .dii_ack_0_o  (dii_ack_o),
+    .dii_ack_1_o  ()
+  );
+
+
 `ifdef DII_SIM 
-  assign dut.u_ibex_top.u_ibex_core.if_stage_i.gen_prefetch_buffer.prefetch_buffer_i.fifo_i.instr_rdata_dii = instr_rdata_dii_i;
-  assign instr_ack_o = dut.u_ibex_top.u_ibex_core.if_stage_i.gen_prefetch_buffer.prefetch_buffer_i.fifo_i.instr_ack;
-  assign instr_pc_o = dut.u_ibex_top.u_ibex_core.if_stage_i.gen_prefetch_buffer.prefetch_buffer_i.fifo_i.instr_pc;
   assign instr_rdata = 32'h0;
-
 `else
-
   assign instr_rdata = instr_rdata_mem;
 `endif  
 

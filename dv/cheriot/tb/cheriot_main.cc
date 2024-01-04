@@ -1,3 +1,7 @@
+// Copyright Microsoft Corporation
+// Licensed under the Apache License, Version 2.0, see LICENSE for details.
+// SPDX-License-Identifier: Apache-2.0
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <fcntl.h>
@@ -41,7 +45,7 @@ int main(int argc, char** argv, char** env) {
 
     dut->clk_i = 0;
     dut->rstn_i = 1;
-    dut->instr_rdata_dii_i = 0x1;
+    dut->dii_insn_i = 0x1;
 
     first_cycle = 1;
     exit_flag   = 0;
@@ -59,11 +63,11 @@ int main(int argc, char** argv, char** env) {
         m_trace->dump(sim_time);
 #endif
         if ((sim_time > 12) && (!dut->clk_i)) {      // falling edge logic
-            if (first_cycle || dut->instr_ack_o) {
-                dut->instr_rdata_dii_i = nxt_instr;
+            if (first_cycle || dut->dii_ack_o) {
+                dut->dii_insn_i = nxt_instr;
                 first_cycle = 0;
                 // printf("@%d: nxt_instr = %08x\n", sim_time, nxt_instr);
-                if (dut->instr_ack_o) {
+                if (dut->dii_ack_o) {
                     if (std::getline(file, line)) {
                         std::istringstream iss(line);
                         iss >> std::hex >> nxt_instr;

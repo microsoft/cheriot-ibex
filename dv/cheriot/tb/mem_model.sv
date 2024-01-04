@@ -1,3 +1,4 @@
+// Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
@@ -198,8 +199,7 @@ module mem_model #(
       // is this sufficent for cheri - QQQ? 
       //  - the original cheri ask is to qualify memory accesses based on the tag bit, which requires RMW
       if (MEM_DW == 33) begin
-        if (&mem_be)  mem[mem_addr][MEM_DW-1]  <= mem_din[MEM_DW-1];
-        else           mem[mem_addr][MEM_DW-1]  <= 1'b0;
+        if (|mem_be)  mem[mem_addr][MEM_DW-1]  <= mem_din[MEM_DW-1];
       end
         
     end

@@ -277,6 +277,12 @@ class ibex_trace_file(trace_file):
                 elif re.search(r'(lw|sw)', mnemonic) : 
                     nxt_obj.mem_size = 4
 
+                # for byte/halfword reads to match sail model
+                if (nxt_obj.mem_size == 1) and nxt_obj.mem_rd :
+                  nxt_obj.mem_data &= 0xff
+                elif (nxt_obj.mem_size == 2) and nxt_obj.mem_rd :
+                  nxt_obj.mem_data &= 0xffff;
+
             self.line_ptr += 1         # get ready for next round
         return nxt_obj
 

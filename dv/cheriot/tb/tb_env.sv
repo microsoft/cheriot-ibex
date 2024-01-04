@@ -1,21 +1,23 @@
+// Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
+
 `timescale 1ns/1ps
 
 module tb_env;
 
   logic         clk;
   logic         rst_n;
-  logic [31:0]  instr_rdata_dii, nxt_instr;
-  logic [31:0]  instr_pc;
-  logic         instr_ack;
+  logic [31:0]  dii_insn, nxt_instr;
+  logic [31:0]  dii_pc;
+  logic         dii_ack;
 
   tb_cheriot_top u_tb_top (
-    .clk_i             (clk),
-    .rstn_i            (rst_n),
-    .instr_rdata_dii_i (instr_rdata_dii),
-    .instr_pc_o        (instr_pc),
-    .instr_ack_o       (instr_ack)
+    .clk_i      (clk),
+    .rstn_i     (rst_n),
+    .dii_insn_i (dii_insn),
+    .dii_pc_o   (dii_pc),
+    .dii_ack_o  (dii_ack)
   );
 
 
@@ -32,9 +34,9 @@ module tb_env;
 
   always @(negedge clk, negedge rst_n) begin
     if (~rst_n) begin
-      instr_rdata_dii <= 32'h1;
+      dii_insn <= 32'h1;
     end else begin
-      instr_rdata_dii <= nxt_instr;      // select between possible nxt_instr streams 
+      dii_insn <= nxt_instr;      // select between possible nxt_instr streams 
     end
   end
 
@@ -61,7 +63,7 @@ module tb_env;
 
     while (!eof) begin
       @(posedge clk);
-      if (instr_ack) begin
+      if (dii_ack) begin
         cnt++;
         nxt_instr = instr_stream[cnt];
         if (nxt_instr[0]  === 1'bx) begin
@@ -77,11 +79,19 @@ module tb_env;
   end
 
 `else           // execute from ELF image (in the instruction memory)
-  assign instr_rdata_dii = 32'h0;
+  assign dii_insn = 32'h0;
+
+  string test_name, vhx_path;
 
   initial begin
     bit cont_flag;
     int i;
+
+    i = $value$plusargs("TEST=%s", test_name);
+    if (i == 0)
+      $sformat(test_name, "hello_world");
+
+    $sformat(vhx_path, "./bin/%s.vhx", test_name);
 
     rst_n = 1'b1;
     #1;
@@ -89,8 +99,8 @@ module tb_env;
 
     // overlaying the same image in both instr_mem model and data_mem model
     // so that we can get RO data. this works in this setup since we only use static code images. 
-    $readmemh("./bin/instr_mem.vhx", u_tb_top.u_instr_mem.mem, 'h0);   // load main executable
-    $readmemh("./bin/instr_mem.vhx", u_tb_top.u_data_mem.mem, 'h0);   // load main executable
+    $readmemh(vhx_path, u_tb_top.u_instr_mem.mem, 'h0);   // load main executable
+    $readmemh(vhx_path, u_tb_top.u_data_mem.mem, 'h0);   // load main executable
 
     //for (i=0; i<64;i++)
     //  $display("%08x %08x %08x %08x", u_tb_top.u_instr_mem.mem[4*i], u_tb_top.u_instr_mem.mem[4*i+1],
