@@ -546,7 +546,7 @@ module cheri_ex import cheri_pkg::*; #(
           end
           cheri_rf_we_raw    = ~perm_vio;
           cheri_ex_valid_raw = 1'b1;
-          cheri_ex_err_raw   = perm_vio; 
+          cheri_wb_err_raw   = perm_vio; 
         end
       (cheri_operator_i[CJALR] | cheri_operator_i[CJAL]):
         begin                  // cd <-- pcc; pcc <-- cs1/pc+offset; pcc.address[0] <--'0'; pcc.sealed <--'0'
@@ -824,7 +824,7 @@ module cheri_ex import cheri_pkg::*; #(
     logic [31:0] base_bound;
     logic [32:0] top_chkaddr, base_chkaddr;
     logic        top_vio, base_vio, top_equal;
-    logic        is_ok_type;
+    logic        cs2_bad_type;
 
     // CSEAL/CUNSEAL, CIS_SUBSET, CLC/CSC checks are done here
     // CJAL/CJALR use separate set_addr checking for timing
@@ -883,8 +883,11 @@ module cheri_ex import cheri_pkg::*; #(
 
     // main permission logic
     perm_vio_vec = 0;
-    is_ok_type   = 1'b0;
+    cs2_bad_type = 1'b0;
 
+    // note cseal/unseal/cis_subject doesn't generate exceptions, 
+    // so for all exceptions, violations can always be attributed to cs1, thus no need to further split
+    // exceptions based on source operands.
     if (is_load_cap) begin
       perm_vio_vec[PVIO_TAG]   = ~rf_fullcap_a.valid;
       perm_vio_vec[PVIO_SEAL]  = is_cap_sealed(rf_fullcap_a);
@@ -898,13 +901,13 @@ module cheri_ex import cheri_pkg::*; #(
       perm_vio_vec[PVIO_ALIGN] = (cs1_addr_plusimm[2:0] != 0); 
       perm_vio_vec[PVIO_SLC]   = ~rf_fullcap_a.perms[PERM_SL] && rf_fullcap_b.valid && ~rf_fullcap_b.perms[PERM_GL];
     end else if (cheri_operator_i[CSEAL]) begin
-      is_ok_type = rf_fullcap_a.perms[PERM_EX] ? 
-                   ((rf_rdata_b[31:3]!=0)||(rf_rdata_b[2:0]==0)||(rf_rdata_b[2:0]==3'h4)||(rf_rdata_b[2:0]==3'h5)) : 
-                   (~rf_fullcap_a.perms[PERM_EX] && ((|rf_rdata_b[31:4]) || (rf_rdata_b[3:0] <= 8)));
+      cs2_bad_type = rf_fullcap_a.perms[PERM_EX] ? 
+                     ((rf_rdata_b[31:3]!=0)||(rf_rdata_b[2:0]==0)||(rf_rdata_b[2:0]==3'h4)||(rf_rdata_b[2:0]==3'h5)) : 
+                     ((|rf_rdata_b[31:4]) || (rf_rdata_b[3:0] <= 8));
       // cs2.addr check : ex: 0-7, non-ex: 9-15
       perm_vio_vec[PVIO_TAG]   = ~rf_fullcap_a.valid || ~rf_fullcap_b.valid;
       perm_vio_vec[PVIO_SEAL]  = is_cap_sealed(rf_fullcap_a) || is_cap_sealed(rf_fullcap_b) || 
-                                  (~rf_fullcap_b.perms[PERM_SE]) || is_ok_type;
+                                  (~rf_fullcap_b.perms[PERM_SE]) || cs2_bad_type;
     end else if (cheri_operator_i[CUNSEAL]) begin
       perm_vio_vec[PVIO_TAG]   = ~rf_fullcap_a.valid || ~rf_fullcap_b.valid; 
       perm_vio_vec[PVIO_SEAL]  = (~is_cap_sealed(rf_fullcap_a)) || is_cap_sealed(rf_fullcap_b) ||
@@ -944,10 +947,7 @@ module cheri_ex import cheri_pkg::*; #(
     cheri_err_cause  = vio_cause_enc(addr_bound_vio, perm_vio_vec);
     rv32_err_cause  = vio_cause_enc(addr_bound_vio_rv32, perm_vio_vec_rv32);
     
-    if (cheri_operator_i[CCSR_RW] & cheri_ex_err_raw & cheri_exec_id_i)
-      // cspecialrw traps
-      cheri_ex_err_info_d = {1'b1, cheri_cs2_dec_i, cheri_err_cause};
-    else if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load_cap & cheri_lsu_err)  
+    if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load_cap & cheri_lsu_err)  
       // 2-stage ppl load/store, error treated as EX error, cheri CLC check error
       cheri_ex_err_info_d = {1'b0, rf_raddr_a_i, cheri_err_cause};
     else if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load_cap & clbc_err)  
@@ -957,7 +957,10 @@ module cheri_ex import cheri_pkg::*; #(
       cheri_ex_err_info_d = cheri_ex_err_info_q;
 
     // cheri_wb_err_raw is already qualified by instr
-    if (cheri_wb_err_raw  & cheri_exec_id_i)
+    if (cheri_operator_i[CCSR_RW] & cheri_wb_err_raw & cheri_exec_id_i)
+      // cspecialrw traps
+      cheri_wb_err_info_d = {1'b1, cheri_cs2_dec_i, cheri_err_cause};
+    else if (cheri_wb_err_raw  & cheri_exec_id_i)
       cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, cheri_err_cause};
     else if ((is_load_cap | is_store_cap) & cheri_lsu_err & cheri_exec_id_i)
       cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, cheri_err_cause};

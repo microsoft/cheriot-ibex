@@ -127,10 +127,10 @@ module ibex_controller #(
   import ibex_pkg::*;
 
   // FSM state encoding
-  typedef enum logic [3:0] {
-    RESET, BOOT_SET, WAIT_SLEEP, SLEEP, FIRST_FETCH, DECODE, FLUSH,
-    IRQ_TAKEN, DBG_TAKEN_IF, DBG_TAKEN_ID
-  } ctrl_fsm_e;
+  //typedef enum logic [3:0] {
+  //  RESET, BOOT_SET, WAIT_SLEEP, SLEEP, FIRST_FETCH, DECODE, FLUSH,
+  //  IRQ_TAKEN, DBG_TAKEN_IF, DBG_TAKEN_ID
+  //} ctrl_fsm_e;
 
   ctrl_fsm_e ctrl_fsm_cs, ctrl_fsm_ns;
 

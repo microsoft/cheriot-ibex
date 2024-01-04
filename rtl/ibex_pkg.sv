@@ -277,6 +277,7 @@ package ibex_pkg;
     RF_WD_CSR
   } rf_wd_sel_e;
 
+
   //////////////
   // IF stage //
   //////////////
@@ -630,4 +631,44 @@ package ibex_pkg;
   // `ibex_core` may need adjusting.
   parameter fetch_enable_t FetchEnableOn  = 4'b1001;
   parameter fetch_enable_t FetchEnableOff = 4'b0110;
+
+  typedef logic [3:0] ibex_mubi_t;
+
+  // Note that if adjusting these parameters it is assumed the bottom bit is set for On and unset
+  // for Off. This allows the use of IbexMuBiOn/IbexMuBiOff to work for both secure and non-secure
+  // Ibex. If this assumption is broken the RTL that uses ibex_mubi_t types such as the fetch_enable
+  // and core_busy signals within `ibex_core` may need adjusting.
+  parameter ibex_mubi_t IbexMuBiOn  = 4'b0101;
+  parameter ibex_mubi_t IbexMuBiOff = 4'b1010;
+
+  //////////////
+  // ID stage //
+  //////////////
+
+  typedef enum logic [3:0] {
+    RESET,
+    BOOT_SET,
+    WAIT_SLEEP,
+    SLEEP,
+    FIRST_FETCH,
+    DECODE,
+    FLUSH,
+    IRQ_TAKEN,
+    DBG_TAKEN_IF,
+    DBG_TAKEN_ID
+  } ctrl_fsm_e;
+
+  //////////////
+  // LSU      //
+  //////////////
+
+  typedef enum logic [3:0]  {
+    IDLE, WAIT_GNT_MIS, WAIT_RVALID_MIS, WAIT_GNT,
+    WAIT_RVALID_MIS_GNTS_DONE,
+    CTX_WAIT_GNT1, CTX_WAIT_GNT2, CTX_WAIT_RESP
+  } ls_fsm_e;
+
+  typedef enum logic [2:0] {CRX_IDLE, CRX_WAIT_RESP1, CRX_WAIT_RESP2} cap_rx_fsm_t;
+
+
 endpackage

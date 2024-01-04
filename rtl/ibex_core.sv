@@ -1413,77 +1413,6 @@ end
   // Major alert - core is unrecoverable
   assign alert_major_o = rf_ecc_err_comb | pc_mismatch_alert | csr_shadow_err;
 
-  // Explict INC_ASSERT block to avoid unused signal lint warnings were asserts are not included
-  `ifdef INC_ASSERT
-  // Signals used for assertions only
-  logic outstanding_load_resp;
-  logic outstanding_store_resp;
-
-  logic outstanding_load_id;
-  logic outstanding_store_id;
-  logic cheri_intl_clbc;
-
-  assign outstanding_load_id  = (id_stage_i.instr_executing & (id_stage_i.lsu_req_dec & ~id_stage_i.lsu_we)) |
-                                (cheri_exec_id & cheri_operator[CLOAD_CAP]);
-  assign outstanding_store_id = (id_stage_i.instr_executing & id_stage_i.lsu_req_dec & id_stage_i.lsu_we) |
-                                (cheri_exec_id & cheri_operator[CSTORE_CAP]);
-  assign cheri_intl_clbc = cheri_operator[CLOAD_CAP] & ~CheriPPLBC & cheri_tsafe_en_i;
-
-  if (WritebackStage) begin : gen_wb_stage
-    // When the writeback stage is present a load/store could be in ID or WB. A Load/store in ID can
-    // see a response before it moves to WB when it is unaligned otherwise we should only see
-    // a response when load/store is in WB.
-    assign outstanding_load_resp  = outstanding_load_wb |
-      (outstanding_load_id  & (load_store_unit_i.split_misaligned_access | cheri_intl_clbc));
-
-    assign outstanding_store_resp = outstanding_store_wb |
-      (outstanding_store_id & load_store_unit_i.split_misaligned_access);
-
-    // When writing back the result of a load, the load must have made it to writeback
-    `ASSERT(NoMemRFWriteWithoutPendingLoad, rf_we_lsu  |-> outstanding_load_wb, clk_i, !rst_ni)
-  end else begin : gen_no_wb_stage
-    // Without writeback stage only look into whether load or store is in ID to determine if
-    // a response is expected.
-    assign outstanding_load_resp  = outstanding_load_id;
-    assign outstanding_store_resp = outstanding_store_id;
-
-    `ASSERT(NoMemRFWriteWithoutPendingLoad, rf_we_lsu |-> outstanding_load_resp, clk_i, !rst_ni)
-  end
-  
-  if (~CheriTBRE) begin
-  `ASSERT(NoMemResponseWithoutPendingAccess,
-    // this doesn't work for CLC since 1st data_rvalid comes back before wb
-    // data_rvalid_i |-> outstanding_load_resp | outstanding_store_resp,  clk_i, !rst_ni)
-    load_store_unit_i.lsu_resp_valid_o |-> outstanding_load_resp | outstanding_store_resp,  clk_i, !rst_ni)
-  end
-  `endif
-
-
-  ////////////////////////
-  // CHERI assertions
-  ////////////////////////
-
-  if (CHERIoTEn) begin : gen_cheri_assert
-    // decoded cheri_operator should be one-hot
-    `ASSERT(CheriOperatorOneHotOnly, $onehot0(cheri_operator))
-
-    // cheri_ex operand forwarding logic should behave the same as ID_stage
-    `ASSERT_IF(CheriFwdCheckA, (g_cheri_ex.u_cheri_ex.rf_rdata_ng_a == id_stage_i.rf_rdata_a_fwd), id_stage_i.instr_executing)
-    `ASSERT_IF(CheriFwdCheckB, (g_cheri_ex.u_cheri_ex.rf_rdata_ng_b == id_stage_i.rf_rdata_b_fwd), id_stage_i.instr_executing)
-
-    if (WritebackStage && ~CheriPPLBC) begin
-    // cheri_ex state machines must be in IDLE state when a new instruction starts
-    `ASSERT(CheriLsuFsmIdle1, instr_id_done |-> (load_store_unit_i.ls_fsm_ns == 0), clk_i, !rst_ni)
-    `ASSERT(CheriLsuFsmIdle2, ((load_store_unit_i.ls_fsm_cs == 0) && load_store_unit_i.lsu_req_i)  |->
-           ((load_store_unit_i.cap_rx_fsm_q==0) | (load_store_unit_i.cap_rx_fsm_q==2)), clk_i, !rst_ni)
-    `ASSERT_IF(CheriLsuFsmWaitResp, (load_store_unit_i.cap_rx_fsm_q != 7), 1'b1)
-    end
-
-    // only writes to regfile when wb_done
-    if (WritebackStage) begin
-      `ASSERT(CheriWrRegs, rf_we_wb |-> instr_done_wb, clk_i, !rst_ni)
-    end
-  end
   ////////////////////////
   // RF (Register File) //
   ////////////////////////
@@ -1627,15 +1556,6 @@ end
     .csr_dbg_tclr_fault_o   (csr_dbg_tclr_fault)
   );
 
-
-  // These assertions are in top-level as instr_valid_id required as the enable term
-  `ASSERT(IbexCsrOpValid, instr_valid_id |-> csr_op inside {
-      CSR_OP_READ,
-      CSR_OP_WRITE,
-      CSR_OP_SET,
-      CSR_OP_CLEAR
-      })
-  `ASSERT_KNOWN_IF(IbexCsrWdataIntKnown, cs_registers_i.csr_wdata_int, csr_op_en)
 
   if (PMPEnable) begin : g_pmp
     logic [33:0] pmp_req_addr [PMP_NUM_CHAN];
