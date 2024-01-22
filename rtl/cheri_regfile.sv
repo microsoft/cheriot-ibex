@@ -37,7 +37,7 @@ module cheri_regfile import cheri_pkg::*; #(
   input  logic          [4:0]   trvk_addr_i,
   input  logic                  trvk_en_i,
   input  logic                  trvk_clrtag_i,
-  input  logic          [6:0]   trvk_par_i,     // make sure this is included in lockstep compare QQQ     
+  input  logic          [6:0]   trvk_par_i,     // make sure this is included in lockstep compare      
   input  logic          [4:0]   trsv_addr_i,
   input  logic                  trsv_en_i,
   input  logic          [6:0]   trsv_par_i,     
@@ -180,7 +180,7 @@ module cheri_regfile import cheri_pkg::*; #(
       logic  [4:0] trvk_addr_q;
       logic        trvk_en_q;
       logic        trvk_clrtag_q;
-      logic  [6:0] trvk_par_q;     // make sure this is included in lockstep compare QQQ
+      logic  [6:0] trvk_par_q;
       logic  [4:0] trsv_addr_q;
       logic        trsv_en_q;
       logic  [6:0] trsv_par_q;

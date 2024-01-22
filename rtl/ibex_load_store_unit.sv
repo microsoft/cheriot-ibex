@@ -581,7 +581,7 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
 
       CTX_WAIT_RESP: begin        // only needed if mem allows 2 active req 
         if (cheri_pmode_i) begin
-          addr_incr_req_o = 1'b0;
+          addr_incr_req_o = 1'b1; // stay 1 to reduce unnecessary addr toggling
           data_req_o      = 1'b0;
           if (data_rvalid_i) ls_fsm_ns = IDLE;
         end else begin

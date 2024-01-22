@@ -9,8 +9,7 @@ module cheri_ex import cheri_pkg::*; #(
   parameter int unsigned TSMapSize,
   parameter bit          CheriPPLBC  = 1'b1,
   parameter bit          CheriSBND2  = 1'b0,
-  parameter bit          CheriStkZ   = 1'b1,
-  parameter bit          StkZ1Cycle  = 1'b1
+  parameter bit          CheriStkZ   = 1'b1
 )(
    // Clock and Reset
   input  logic          clk_i,
@@ -69,9 +68,9 @@ module cheri_ex import cheri_pkg::*; #(
 
   output logic          cheri_ex_valid_o,
   output logic          cheri_ex_err_o,
-  output logic [10:0]   cheri_ex_err_info_o,
+  output logic [11:0]   cheri_ex_err_info_o,
   output logic          cheri_wb_err_o,
-  output logic [10:0]   cheri_wb_err_info_o,
+  output logic [11:0]   cheri_wb_err_info_o,
 
   // lsu interface
   output logic          lsu_req_o,
@@ -209,9 +208,9 @@ module cheri_ex import cheri_pkg::*; #(
   logic          lc_cglg, lc_csdlm, lc_ctag;
   logic  [31:0]  pc_id_nxt;
 
-  full_cap_t     setaddr1_outcap, setaddr2_outcap, setbounds_outcap;
-  logic  [10:0]  cheri_wb_err_info_q, cheri_wb_err_info_d;
-  logic  [10:0]  cheri_ex_err_info_q, cheri_ex_err_info_d;
+  full_cap_t     setaddr1_outcap, setbounds_outcap;
+  logic  [11:0]  cheri_wb_err_info_q, cheri_wb_err_info_d;
+  logic  [11:0]  cheri_ex_err_info_q, cheri_ex_err_info_d;
   logic          set_bounds_done;
 
   logic   [4:0]  cheri_err_cause, rv32_err_cause;
@@ -826,9 +825,6 @@ module cheri_ex import cheri_pkg::*; #(
     logic        top_vio, base_vio, top_equal;
     logic        cs2_bad_type;
 
-    // CSEAL/CUNSEAL, CIS_SUBSET, CLC/CSC checks are done here
-    // CJAL/CJALR use separate set_addr checking for timing
-
     // generate the address used to check top bound violation
     if (cheri_operator_i[CSEAL] | cheri_operator_i[CUNSEAL])
       base_chkaddr = rf_rdata_b;           // cs2.address
@@ -871,7 +867,9 @@ module cheri_ex import cheri_pkg::*; #(
 
     if (debug_mode_i)
       addr_bound_vio = 1'b0;
-    else if (is_cap | cheri_operator_i[CIS_SUBSET]) 
+    else if (is_cap) 
+      addr_bound_vio = top_vio | base_vio | top_equal;
+    else if (cheri_operator_i[CIS_SUBSET]) 
       addr_bound_vio = top_vio | base_vio;
     else if (cheri_operator_i[CJAL] | cheri_operator_i[CJALR])
       addr_bound_vio = top_vio | base_vio | top_equal;
@@ -937,6 +935,7 @@ module cheri_ex import cheri_pkg::*; #(
   //
   // fault case mtval generation
   // report to csr as mtval
+  logic ls_addr_misaligned_only;
 
   assign cheri_ex_err_info_o = cheri_ex_err_info_q;
   assign cheri_wb_err_info_o = cheri_wb_err_info_q;
@@ -945,27 +944,29 @@ module cheri_ex import cheri_pkg::*; #(
 
   always_comb begin : err_cause_comb 
     cheri_err_cause  = vio_cause_enc(addr_bound_vio, perm_vio_vec);
-    rv32_err_cause  = vio_cause_enc(addr_bound_vio_rv32, perm_vio_vec_rv32);
+    rv32_err_cause   = vio_cause_enc(addr_bound_vio_rv32, perm_vio_vec_rv32);
+
+    ls_addr_misaligned_only = perm_vio_vec[PVIO_ALIGN] && (cheri_err_cause == 0);
     
     if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load_cap & cheri_lsu_err)  
       // 2-stage ppl load/store, error treated as EX error, cheri CLC check error
-      cheri_ex_err_info_d = {1'b0, rf_raddr_a_i, cheri_err_cause};
+      cheri_ex_err_info_d = {2'b00, rf_raddr_a_i, cheri_err_cause};
     else if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load_cap & clbc_err)  
       // 2-stage ppl load/store, error treated as EX error, memory error
-      cheri_ex_err_info_d = {1'b0, rf_raddr_a_i, 5'h1f};    
+      cheri_ex_err_info_d = {2'b00, rf_raddr_a_i, 5'h1f};    
     else 
       cheri_ex_err_info_d = cheri_ex_err_info_q;
 
     // cheri_wb_err_raw is already qualified by instr
     if (cheri_operator_i[CCSR_RW] & cheri_wb_err_raw & cheri_exec_id_i)
       // cspecialrw traps
-      cheri_wb_err_info_d = {1'b1, cheri_cs2_dec_i, cheri_err_cause};
+      cheri_wb_err_info_d = {1'b0, 1'b1, cheri_cs2_dec_i, cheri_err_cause};
     else if (cheri_wb_err_raw  & cheri_exec_id_i)
-      cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, cheri_err_cause};
+      cheri_wb_err_info_d = {1'b0, 1'b0, rf_raddr_a_i, cheri_err_cause};
     else if ((is_load_cap | is_store_cap) & cheri_lsu_err & cheri_exec_id_i)
-      cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, cheri_err_cause};
+      cheri_wb_err_info_d = {ls_addr_misaligned_only, 1'b0, rf_raddr_a_i, cheri_err_cause};
     else if (rv32_lsu_req_i & rv32_lsu_err)
-      cheri_wb_err_info_d = {1'b0, rf_raddr_a_i, rv32_err_cause};
+      cheri_wb_err_info_d = {1'b0, 1'b0, rf_raddr_a_i, rv32_err_cause};
     else 
       cheri_wb_err_info_d = cheri_wb_err_info_q;
   end 
@@ -977,7 +978,7 @@ module cheri_ex import cheri_pkg::*; #(
       cheri_ex_err_info_q <= 'h0;
     end else begin
       // Simple flop here works since if cheri_wb_err, lsu request won't be generated 
-      //   so wb stage only takes 1 cycle. QQQ
+      //   so wb stage only takes 1 cycle. 
       cheri_wb_err_q      <= cheri_wb_err_d; 
       cheri_wb_err_info_q <= cheri_wb_err_info_d;
       cheri_ex_err_info_q <= cheri_ex_err_info_d;
@@ -1092,13 +1093,7 @@ module cheri_ex import cheri_pkg::*; #(
 logic cpu_stkz_stall0, cpu_stkz_stall1;
 logic cpu_stkz_err;
 
-if (CheriStkZ & ~StkZ1Cycle) begin
-  // load/store takes 2 cycles when stkz_active
-  // always stall both lsu_req and cpu_lsu_dec duing first_cycle
-  assign lsu_req_o         = ~cpu_stkz_stall0 & (instr_is_cheri_i ? cheri_lsu_req : rv32_lsu_req_i);
-  assign cpu_lsu_dec_o     = ~cpu_stkz_stall1 & ((instr_is_cheri_i && is_cap) | instr_is_rv32lsu_i);  
-
-end else if (CheriStkZ & StkZ1Cycle) begin
+if (CheriStkZ) begin
   // load/store takes 1 cycle when stkz_active
   assign lsu_req_o         = ~cpu_stkz_stall0 & (instr_is_cheri_i ? cheri_lsu_req : rv32_lsu_req_i);
   assign cpu_lsu_dec_o     = ~cpu_stkz_stall1 & ((instr_is_cheri_i && is_cap) | instr_is_rv32lsu_i);  
@@ -1164,35 +1159,7 @@ end
   // Stack fast clearing support
   //
 
-  if (CheriStkZ & ~StkZ1Cycle) begin
-    logic lsu_addr_in_range, stkz_stall_q;
-
-    // can't directly use csr_mshwm_i (high watermark) as the stack base here
-    // since mshwm itself will be updated by lsu write request
-    assign lsu_addr_in_range = (cpu_lsu_addr[31:4] >= stkz_base_i[31:4]) && 
-                               (cpu_lsu_addr[31:2] < stkz_ptr_i[31:2]);
-
-    assign cpu_stkz_stall0 = (stkz_active_i & instr_first_cycle_i) | stkz_stall_q; 
-    assign cpu_stkz_stall1 = cpu_stkz_stall0;
-
-    // load/store takes 2 cycles when stkz_active. 
-    //   -- we are doing this such that cpu_lsu_dec doesn't have to wait for address range
-    //      check results combinatorially
-    //   -- Note stkz_active_i is asserted synchronously by writing to the new stkz_ptr CSR. 
-    //      As such it is not possible for active to go from '0' to '1' in the middle of an 
-    //      load/store instruction when we want to keep lsu_req high while waiting for lsu_req_done
-    //      QQQ may need an assertion for this. 
-    always_ff @(posedge clk_i or negedge rst_ni) begin
-      if (!rst_ni) begin
-        stkz_stall_q <= 1'b0;
-        cpu_stkz_err <= 1'b0;
-      end else begin
-        stkz_stall_q <= stkz_active_i & lsu_addr_in_range;
-        cpu_stkz_err <= lsu_req_done_i & stkz_abort_i & lsu_addr_in_range;    // QQQ see the 1cyle case
-      end
-    end
-
-  end else if (CheriStkZ & StkZ1Cycle) begin
+  if (CheriStkZ) begin
     logic lsu_addr_in_range, stkz_stall_q;
 
     assign lsu_addr_in_range = (cpu_lsu_addr[31:4] >= stkz_base_i[31:4]) && 
@@ -1204,6 +1171,9 @@ end
     // - however in the first cycle we speculatively still assert cpu_lsu_dec_o to let LSU choose 
     //   the address from cpu core (and hold back stkz/tbre_req). In the next cycle we can deassert
     //   cpu_lsu_dec_o to let stkz/tbre_req go through
+    //   -- Note stkz_active_i is asserted synchronously by writing to the new stkz_ptr CSR. 
+    //      As such it is not possible for active to go from '0' to '1' in the middle of an 
+    //      load/store instruction when we want to keep lsu_req high while waiting for lsu_req_done
     assign cpu_stkz_stall0 = (instr_first_cycle_i & stkz_active_i & lsu_addr_in_range) | stkz_stall_q; 
     assign cpu_stkz_stall1 = ~instr_first_cycle_i & stkz_stall_q;
 

@@ -861,7 +861,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
   // only write CSRs during one clock cycle
 
-  // enforcing the CHERI CSR access policy. QQQ
+  // enforcing the CHERI CSR access policy. 
   //  -- is reading zero back ok? or do we need to generate illegal access exception??
   //  -- also note IBEX didn't implement user-mode TIME/counters.
   //     for now we are allowing reading the M-mode counters (assuming only use single priv level)

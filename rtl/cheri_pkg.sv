@@ -859,14 +859,12 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
   function automatic logic [4:0] vio_cause_enc (logic bound_vio, logic[W_PVIO-1:0] perm_vio_vec);
     logic [4:0] vio_cause;
     
-    if (bound_vio)
-      vio_cause = 5'h1;
-    else if (perm_vio_vec[PVIO_TAG])
+    if (perm_vio_vec[PVIO_TAG])
       vio_cause = 5'h2;
     else if (perm_vio_vec[PVIO_SEAL])
       vio_cause = 5'h3;
     else if (perm_vio_vec[PVIO_EX])
-      vio_cause = 5'h3;
+      vio_cause = 5'h11;
     else if (perm_vio_vec[PVIO_LD])
       vio_cause = 5'h12;
     else if (perm_vio_vec[PVIO_SD])
@@ -877,6 +875,8 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
       vio_cause = 5'h16;
     else if (perm_vio_vec[PVIO_ASR])
       vio_cause = 5'h18;
+    else if (bound_vio)
+      vio_cause = 5'h1;
     else
       vio_cause = 5'h0;
 

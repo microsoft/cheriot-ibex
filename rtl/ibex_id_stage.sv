@@ -209,9 +209,9 @@ module ibex_id_stage import cheri_pkg::*; #(
 
   input  logic                      cheri_ex_valid_i,
   input  logic                      cheri_ex_err_i,
-  input  logic [10:0]               cheri_ex_err_info_i,
+  input  logic [11:0]               cheri_ex_err_info_i,
   input  logic                      cheri_wb_err_i,
-  input  logic [10:0]               cheri_wb_err_info_i,
+  input  logic [11:0]               cheri_wb_err_info_i,
   input  logic                      cheri_branch_req_i,   // from cheri EX
   input  logic [31:0]               cheri_branch_target_i
 );

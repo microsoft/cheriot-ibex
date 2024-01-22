@@ -119,8 +119,8 @@ module ibex_controller #(
   input  logic                  cheri_ex_valid_i,        // from cheri EX
   input  logic                  cheri_ex_err_i,
   input  logic                  cheri_wb_err_i,
-  input  logic  [10:0]          cheri_ex_err_info_i,
-  input  logic  [10:0]          cheri_wb_err_info_i,
+  input  logic  [11:0]          cheri_ex_err_info_i,
+  input  logic  [11:0]          cheri_wb_err_info_i,
   input  logic                  cheri_branch_req_i,
   input  logic [31:0]           cheri_branch_target_i
 );
@@ -760,8 +760,13 @@ module ibex_controller #(
             end
             store_err_prio: begin
               if (cheri_pmode_i & lsu_err_is_cheri_q) begin
-                exc_cause_o = EXC_CAUSE_CHERI_FAULT; 
-                csr_mtval_o = cheri_wb_err_info_i;
+                if (cheri_wb_err_info_i[11]) begin
+                  exc_cause_o = EXC_CAUSE_STORE_ADDR_MISALIGN;
+                  csr_mtval_o = lsu_addr_last_i;
+                end else begin
+                  exc_cause_o = EXC_CAUSE_CHERI_FAULT; 
+                  csr_mtval_o = cheri_wb_err_info_i[10:0];
+                end
               end else begin
                 exc_cause_o = EXC_CAUSE_STORE_ACCESS_FAULT;
                 csr_mtval_o = lsu_addr_last_i;
@@ -769,8 +774,13 @@ module ibex_controller #(
             end
             load_err_prio: begin
               if (cheri_pmode_i & lsu_err_is_cheri_q) begin
-                exc_cause_o = EXC_CAUSE_CHERI_FAULT;
-                csr_mtval_o = cheri_wb_err_info_i;
+                if (cheri_wb_err_info_i[11]) begin
+                  exc_cause_o = EXC_CAUSE_LOAD_ADDR_MISALIGN;
+                  csr_mtval_o = lsu_addr_last_i;
+                end else begin
+                  exc_cause_o = EXC_CAUSE_CHERI_FAULT;
+                  csr_mtval_o = cheri_wb_err_info_i[10:0];
+                end
               end else begin
                 exc_cause_o = EXC_CAUSE_LOAD_ACCESS_FAULT;
                 csr_mtval_o = lsu_addr_last_i;
@@ -779,13 +789,13 @@ module ibex_controller #(
             cheri_ex_err_prio: begin
               if (cheri_pmode_i) begin
                 exc_cause_o = EXC_CAUSE_CHERI_FAULT;
-                csr_mtval_o = cheri_ex_err_info_i;        
+                csr_mtval_o = cheri_ex_err_info_i[10:0];        
               end
             end
             cheri_wb_err_prio: begin
               if (cheri_pmode_i) begin
                 exc_cause_o = EXC_CAUSE_CHERI_FAULT;
-                csr_mtval_o = cheri_wb_err_info_i;
+                csr_mtval_o = cheri_wb_err_info_i[10:0];
               end
             end
 

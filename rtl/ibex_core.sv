@@ -424,9 +424,9 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   reg_cap_t      cheri_result_cap;
   logic          cheri_ex_valid;
   logic          cheri_ex_err;
-  logic [10:0]   cheri_ex_err_info;
+  logic [11:0]   cheri_ex_err_info;
   logic          cheri_wb_err;
-  logic [10:0]   cheri_wb_err_info;
+  logic [11:0]   cheri_wb_err_info;
   logic [OPDW-1:0] cheri_operator;
 
   logic          rv32_lsu_req;
@@ -867,8 +867,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .TSMapSize            (TSMapSize),
       .CheriPPLBC           (CheriPPLBC),
       .CheriSBND2           (CheriSBND2),
-      .CheriStkZ            (CheriTBRE),
-      .StkZ1Cycle           (1'b1)
+      .CheriStkZ            (CheriTBRE)
     ) u_cheri_ex (
       .clk_i                (clk_i),
       .rst_ni               (rst_ni),
@@ -1274,9 +1273,6 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     logic [38:0] wdata_ecc_tmp;
 
     assign rf_wcap_vec  = reg2vec(rf_wcap_wb);
-
-    // need to protect the TRSV/TRVK interfaces ?? QQQ
-
 
     // ECC checkbit generation
     // -- for simplicity just linearly add the parity bits together.
