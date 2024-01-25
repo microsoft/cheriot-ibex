@@ -178,12 +178,11 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   //  reuse the obimux logic
   //
   logic [nMSTR-1:0] mstr_arbit, mstr_arbit_q, mstr_arbit_comb;
-  logic [nMSTR-1:0] mstr_req, mstr_gnt;
+  logic [nMSTR-1:0] mstr_req;
   logic             req_pending, req_pending_q;
   logic             slv_req, slv_gnt;
 
   assign slv_req = |mstr_req;
-  assign mstr_gnt = {nMSTR{slv_gnt}} & mstr_arbit_comb;
 
   // arbitration by strict priority assignment - mst_req[0] == highest priority
   for (genvar i = 0; i < nMSTR; i++) begin
@@ -192,18 +191,21 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
     assign mstr_arbit[i] = mstr_req[i] & ~(|(mstr_req & pri_mask));
   end
 
-  // make the next arbiration decision immediately when receiving grant so that
-  // the address/wdata/ctrl can be hold steady when presenting the next request 
-  // to the slave (otherwise may violate the obi protocol?)
+  // Handling delayed-gnt case. 
+  // make the next arbiration decision immediately if any master_req active
+  // If slv_gnt doesn't happen in the same cycle, register the  decision till 
+  // slv_gant so that the address/wdata/ctrl can be hold steady when presenting 
+  // the next request to the slave. 
   assign mstr_arbit_comb = req_pending_q ? mstr_arbit_q : mstr_arbit;
-  assign req_pending = |mstr_req & ~slv_gnt;
+  assign req_pending = |mstr_req & ~slv_gnt & ~req_pending_q;
 
   always @(posedge clk_i or negedge rst_ni) begin
     if(~rst_ni) begin
       req_pending_q  <= 1'b0;
       mstr_arbit_q   <= 0;
     end else begin
-      req_pending_q <= req_pending;
+      if (slv_gnt) req_pending_q <= 1'b0;
+      else if (req_pending) req_pending_q <= 1'b1;
       if (req_pending) mstr_arbit_q <= mstr_arbit;
     end
   end
