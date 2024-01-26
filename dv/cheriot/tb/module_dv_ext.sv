@@ -8,18 +8,22 @@
 // extend internal modules for SVA & FCOV signals
 //
 module bindfiles;
-  bind ibex_if_stage         ibex_if_stage_dv_ext    if_stage_dv_ext_i (.*);
-  bind ibex_controller       ibex_controller_dv_ext  controller_dv_ext_i (.*);
-  bind ibex_load_store_unit  ibex_lsu_dv_ext         lsu_dv_ext_i (.*);
-  bind cheri_ex              cheri_ex_dv_ext         cheri_ex_dv_ext_i (.*);
-  bind ibex_core             ibex_core_dv_ext        ibex_core_dv_ext_i (.*);
-  bind ibex_top              ibex_top_dv_ext         ibex_top_dv_ext_i (.*);
+  bind ibex_if_stage         ibex_if_stage_dv_ext      if_stage_dv_ext_i (.*);
+  bind ibex_controller       ibex_controller_dv_ext    controller_dv_ext_i (.*);
+  bind ibex_load_store_unit  ibex_lsu_dv_ext           lsu_dv_ext_i (.*);
+  bind cheri_ex              cheri_ex_dv_ext           cheri_ex_dv_ext_i (.*);
+  bind cheri_trvk_stage      cheri_trvk_stage_dv_ext   trvk_dv_ext_i (.*);
+  bind cheri_tbre            cheri_tbre_dv_ext         tbre_dv_ext_i (.*);
+  bind cheri_stkz            cheri_stkz_dv_ext         stkz_dv_ext_i (.*);
+  bind ibex_core             ibex_core_dv_ext          ibex_core_dv_ext_i (.*);
+  bind ibex_top              ibex_top_dv_ext           ibex_top_dv_ext_i (.*);
 endmodule
 
 
 ////////////////////////////////////////////////////////////////
 // ibex_if_stage
 ////////////////////////////////////////////////////////////////
+
 module ibex_if_stage_dv_ext (
   input  logic                  clk_i,
   input  logic                  rst_ni
@@ -35,6 +39,7 @@ endmodule
 ////////////////////////////////////////////////////////////////
 // ibex_controller
 ////////////////////////////////////////////////////////////////
+
 module ibex_controller_dv_ext import ibex_pkg::*; (
   input  logic                  clk_i,
   input  logic                  rst_ni,
@@ -160,10 +165,282 @@ endmodule
 // cheri_ex
 ////////////////////////////////////////////////////////////////
 
-module cheri_ex_dv_ext (
-  input  logic                  clk_i,
-  input  logic                  rst_ni
+module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
+  input  logic           clk_i,
+  input  logic           rst_ni,
+  input  logic           cheri_exec_id_i,
+  input  logic [35:0]    cheri_operator_i,
+  input  logic [31:0]    pc_id_i,
+  input  logic           instr_valid_i,
+  input  logic           csr_op_en_o,
+  input  logic           csr_access_o,
+  input  cheri_csr_op_e  csr_op_o,
+  input  logic           cheri_lsu_req,
+  input  logic           rv32_lsu_req_i,
+  input  logic [31:0]    rv32_lsu_addr_i,
+  input  logic [1:0]     rv32_lsu_type_i,
+  input  logic           cheri_lsu_err,
+  input  logic           rv32_lsu_err,
+  input  logic           lsu_req_o,   
+  input  logic           lsu_req_done_i,   
+  input  logic [31:0]    cpu_lsu_addr,
+  input  logic           cpu_lsu_we
   );
+
+  // assertion: STKZ active won't change in the middle of load/store (thus lsu_req will stay asserted till req_done)
+  logic       outstanding_lsu_req;
+
+  typedef enum logic [3:0] {ACC_NULL, CAP_RD, CAP_WR, BYTE_RD, BYTE_WR, 
+                            HW_RD_ALIGNED, HW_RD_UNALIGNED, HW_WR_ALIGNED, HW_WR_UNALIGNED, 
+                            WORD_RD_ALIGNED, WORD_RD_UNALIGNED, WORD_WR_ALIGNED, WORD_WR_UNALIGNED
+                            } lsu_acc_type_e;
+
+  lsu_acc_type_e fcov_cpu_lsu_acc;
+
+  always @(posedge clk_i, negedge rst_ni) begin
+    if (~rst_ni) begin
+      outstanding_lsu_req <= 1'b0;
+    end else begin
+      if (lsu_req_done_i)
+        outstanding_lsu_req <= 1'b0;
+      else if (lsu_req_o && ~lsu_req_done_i)
+        outstanding_lsu_req <= 1'b1;
+    end
+  end
+  `ASSERT(IbexLsuReqStable, (outstanding_lsu_req) |-> ($stable(pc_id_i) && $stable(instr_valid_i) && 
+                                                       $stable(cpu_lsu_we))) 
+  // Cheri and RV32 LSU req can't both be active per decoder
+  `ASSERT(IbexLsuReqSrc, !(cheri_lsu_req & rv32_lsu_req_i)) 
+
+  // Functional coverage signals 
+
+  `DV_FCOV_SIGNAL(logic, cpu_lsu_req, cheri_lsu_req | rv32_lsu_req_i);
+  `DV_FCOV_SIGNAL(logic, cpu_lsu_err, (cheri_lsu_err | rv32_lsu_err) && (cheri_lsu_req | rv32_lsu_req_i));
+
+  always_comb begin
+    fcov_cpu_lsu_acc = ACC_NULL;
+    if (cheri_lsu_req && ~cpu_lsu_we)
+      fcov_cpu_lsu_acc = CAP_RD;
+    else if (cheri_lsu_req)
+      fcov_cpu_lsu_acc = CAP_WR;
+    else if (rv32_lsu_req_i && ~cpu_lsu_we && (rv32_lsu_type_i == 2'b00) && (rv32_lsu_addr_i[1:0] == 2'b00))
+      fcov_cpu_lsu_acc = WORD_RD_ALIGNED;
+    else if (rv32_lsu_req_i && ~cpu_lsu_we && (rv32_lsu_type_i == 2'b00) && (rv32_lsu_addr_i[1:0] != 2'b00))
+      fcov_cpu_lsu_acc = WORD_RD_UNALIGNED;
+    else if (rv32_lsu_req_i && cpu_lsu_we && (rv32_lsu_type_i == 2'b00) && (rv32_lsu_addr_i[1:0] == 2'b00))
+      fcov_cpu_lsu_acc = WORD_WR_ALIGNED;
+    else if (rv32_lsu_req_i && cpu_lsu_we && (rv32_lsu_type_i == 2'b00) && (rv32_lsu_addr_i[1:0] != 2'b00))
+      fcov_cpu_lsu_acc = WORD_WR_UNALIGNED;
+    else if (rv32_lsu_req_i && ~cpu_lsu_we && (rv32_lsu_type_i == 2'b01) && (rv32_lsu_addr_i[0] == 1'b0))
+      fcov_cpu_lsu_acc = HW_RD_ALIGNED;
+    else if (rv32_lsu_req_i && ~cpu_lsu_we && (rv32_lsu_type_i == 2'b01) && (rv32_lsu_addr_i[0] != 1'b0))
+      fcov_cpu_lsu_acc = HW_RD_UNALIGNED;
+    else if (rv32_lsu_req_i && cpu_lsu_we && (rv32_lsu_type_i == 2'b01) && (rv32_lsu_addr_i[0] == 1'b0))
+      fcov_cpu_lsu_acc = HW_WR_ALIGNED;
+    else if (rv32_lsu_req_i && cpu_lsu_we && (rv32_lsu_type_i == 2'b01) && (rv32_lsu_addr_i[0] != 1'b0))
+      fcov_cpu_lsu_acc = HW_WR_UNALIGNED;
+    else if (rv32_lsu_req_i && ~cpu_lsu_we)
+      fcov_cpu_lsu_acc = BYTE_RD;
+    else if (rv32_lsu_req_i)
+      fcov_cpu_lsu_acc = BYTE_WR;
+      
+  end
+
+  logic [3:0]  fcov_ls_xfer_size;
+  logic [32:0] fcov_room_in_cs1_cap;
+  logic [1:0]  fcov_ls_cap_room_chk;
+
+  always_comb begin
+    if (cheri_lsu_req)
+      fcov_room_in_cs1_cap = u_cheri_ex.rf_fullcap_a.top33 - u_cheri_ex.cs1_addr_plusimm;
+    else if (rv32_lsu_req_i)
+      fcov_room_in_cs1_cap = u_cheri_ex.rf_fullcap_a.top33 - rv32_lsu_addr_i + 
+                             {u_cheri_ex.addr_incr_req_i, 2'b00};
+    else 
+      fcov_room_in_cs1_cap = 0;
+
+    if (cheri_lsu_req)
+      fcov_ls_xfer_size = 4'h8;
+    else if (rv32_lsu_req_i && (rv32_lsu_type_i == 2'b00))
+      fcov_ls_xfer_size = 4'h4;
+    else if (rv32_lsu_req_i && (rv32_lsu_type_i == 2'b01))
+      fcov_ls_xfer_size = 4'h2;
+    else if (rv32_lsu_req_i)
+      fcov_ls_xfer_size = 4'h1;
+    else
+      fcov_ls_xfer_size = 4'h0;
+
+    fcov_ls_cap_room_chk = (fcov_room_in_cs1_cap > fcov_ls_xfer_size) ? 0 : 
+                           (fcov_room_in_cs1_cap == fcov_ls_xfer_size)? 1 : 2;
+  end
+
+  `DV_FCOV_SIGNAL(logic, scr_read_only,
+      (csr_op_o == CHERI_CSR_RW) && csr_access_o & ~csr_op_en_o & cheri_operator_i[CCSR_RW] & cheri_exec_id_i)
+  `DV_FCOV_SIGNAL(logic, scr_write,
+      (csr_op_o == CHERI_CSR_RW) && csr_op_en_o & cheri_operator_i[CCSR_RW] & cheri_exec_id_i)
+ 
+endmodule
+
+////////////////////////////////////////////////////////////////
+// cheri_trvk_stage
+////////////////////////////////////////////////////////////////
+
+module cheri_trvk_stage_dv_ext (
+  input  logic                clk_i,
+  input  logic                rst_ni,
+ 
+  input  logic                rf_trsv_en_i,
+  input  logic [4:0]          rf_trsv_addr_i,
+  input  logic [4:0]          rf_trvk_addr_o,
+  input  logic                rf_trvk_en_o,
+  input  logic                rf_trvk_clrtag_o
+);
+
+  logic [4:0] tqueue[$];
+  logic       trvk_err;
+  int         outstanding_trsv_cnt;
+
+  // make sure all trsv reqs will be mapped to a trvk, in order.
+  initial begin 
+    int i;
+
+    tqueue = {};
+    trvk_err = 1'b0;
+    @(posedge rst_ni);
+
+    while (1) begin
+      @(posedge clk_i);
+      if (rf_trsv_en_i) begin
+        tqueue = {tqueue, rf_trsv_addr_i};
+        outstanding_trsv_cnt = tqueue.size();
+      end
+
+      if (rf_trvk_en_o) begin
+        trvk_err = ((tqueue.size() < 1) ||(tqueue[0] != rf_trvk_addr_o));
+        tqueue   = tqueue[1:$];
+        outstanding_trsv_cnt = tqueue.size();
+      end
+    end
+  end
+
+  `ASSERT(TrsvQueueChk, !trvk_err, clk_i, !rst_ni)
+
+
+endmodule
+
+////////////////////////////////////////////////////////////////
+// cheri_tbre
+////////////////////////////////////////////////////////////////
+
+module cheri_tbre_dv_ext (
+  input  logic        clk_i,
+  input  logic        rst_ni,
+  input  logic [2:0]  req_fifo_ext_wr_ptr,
+  input  logic [2:0]  cap_fifo_ext_wr_ptr,
+  input  logic [2:0]  shdw_fifo_ext_wr_ptr,
+  input  logic [2:0]  fifo_ext_rd_ptr,
+  input  logic        tbre_lsu_req_o,
+  input  logic        lsu_tbre_req_done_i,
+  input  logic [31:0] tbre_lsu_addr_o,
+  input  logic        snoop_lsu_req_i,
+  input  logic        snoop_lsu_req_done_i,
+  input  logic        snoop_lsu_we_i,
+  input  logic [31:0] snoop_lsu_addr_i
+  );
+
+  logic [2:0] req_fifo_depth, cap_fifo_depth, shdw_fifo_depth;
+
+
+  assign req_fifo_depth  = req_fifo_ext_wr_ptr - fifo_ext_rd_ptr;
+  assign cap_fifo_depth  = cap_fifo_ext_wr_ptr - fifo_ext_rd_ptr;
+  assign shdw_fifo_depth = shdw_fifo_ext_wr_ptr - fifo_ext_rd_ptr;
+
+  `ASSERT(TbreFIFOMaxDepth, ((req_fifo_depth<=4) && (cap_fifo_depth<=4) && (shdw_fifo_depth<=4)),
+          clk_i, !rst_ni)
+  `ASSERT(TbreFIFODepth, ((req_fifo_depth>=cap_fifo_depth) && (cap_fifo_depth>=shdw_fifo_depth)),
+          clk_i, !rst_ni)
+
+  `ASSERT(lsuReqDoneOneHot, $onehot0({snoop_lsu_req_done_i, lsu_tbre_req_done_i}))
+
+  `ASSERT(tbreLsuReqDone, lsu_tbre_req_done_i |-> tbre_lsu_req_o )
+  `ASSERT(snoopLsuReqDone, snoop_lsu_req_done_i |-> snoop_lsu_req_i )
+
+  // looking for collision case
+  logic fcov_tbre_fifo_hazard, fcov_tbre_fifo_head_hazard;
+
+  initial begin
+    int i;
+    logic [1:0] fifo_index;
+
+    @(posedge rst_ni);
+   
+    while (1) begin
+      @(posedge clk_i);
+      if (snoop_lsu_req_done_i)
+        // search through req_fifo for hazard/collision case
+        fcov_tbre_fifo_hazard      = 1'b0;
+        fcov_tbre_fifo_head_hazard = 1'b0;
+        
+        for (i = 0; i < req_fifo_depth; i++) begin
+          fifo_index = cheri_tbre_i.fifo_rd_ptr + i;
+          if (snoop_lsu_req_done_i & snoop_lsu_we_i & cheri_tbre_i.req_fifo_mem[fifo_index][21] &&
+              (snoop_lsu_addr_i[23:3] == cheri_tbre_i.req_fifo_mem[fifo_index][20:0]) &&
+              (snoop_lsu_addr_i[31:24] == cheri_tbre_i.tbre_ctrl.start_addr[31:24])) begin
+            fcov_tbre_fifo_hazard = 1'b1;
+            if (i == 0) fcov_tbre_fifo_head_hazard = 1'b1;
+          end
+        end
+
+    end
+  end
+
+  logic [31:0] fcov_tbre_done_addr, fcov_snoop_done_addr;
+  initial begin
+    fcov_tbre_done_addr  = 0;
+    fcov_snoop_done_addr = 0;
+    @(posedge rst_ni);
+   
+    while (1) begin
+      @(posedge clk_i);
+      if (lsu_tbre_req_done_i) fcov_tbre_done_addr = tbre_lsu_addr_o;
+      if (snoop_lsu_req_done_i) fcov_snoop_done_addr = snoop_lsu_addr_i;
+    end
+
+  end
+
+endmodule
+
+////////////////////////////////////////////////////////////////
+// cheri_stkz
+////////////////////////////////////////////////////////////////
+
+module cheri_stkz_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
+  input  logic           clk_i,
+  input  logic           rst_ni,
+  input  logic          ztop_wr_i,
+  input  logic [31:0]   ztop_wdata_i,
+  input  full_cap_t     ztop_wfcap_i,
+  input  logic          cmd_new,
+  input  logic          cmd_cap_good,
+  input  logic          lsu_stkz_req_done_i
+  );
+
+  logic [1:0] fcov_ztop_wr_type;
+  logic       fcov_bk2bk_cmd;
+
+  always_comb begin
+    if (ztop_wfcap_i.valid && (ztop_wfcap_i.base32 != ztop_wdata_i))
+      fcov_ztop_wr_type = 2'h0;           
+    else if  (ztop_wfcap_i.valid)
+      fcov_ztop_wr_type = 2'h1;
+    else if ((ztop_wfcap_i == NULL_FULL_CAP) && (ztop_wdata_i == 0))
+      fcov_ztop_wr_type = 2'h2;
+    else 
+      fcov_ztop_wr_type = 2'h3;
+  end
+
+  assign fcov_bk2bk_cmd = cmd_new & cmd_cap_good & (cheri_stkz_i.stkz_fsm_q == 2'b1) && 
+                          lsu_stkz_req_done_i;
 
 endmodule
 
@@ -332,7 +609,8 @@ module ibex_top_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   `ASSERT_KNOWN(IbexInstrGntX, instr_gnt_i)
   `ASSERT_KNOWN(IbexInstrRValidX, instr_rvalid_i)
   `ASSERT_KNOWN_IF(IbexInstrRPayloadX,
-    {instr_rdata_i, instr_rdata_intg_i, instr_err_i}, instr_rvalid_i)
+    {instr_err_i}, instr_rvalid_i)
+//    {instr_rdata_i, instr_rdata_intg_i, instr_err_i}, instr_rvalid_i)  // we dont intialize instr memory so x is allowed for speculative fetches.
 
   `ASSERT_KNOWN(IbexDataGntX, data_gnt_i)
   `ASSERT_KNOWN(IbexDataRValidX, data_rvalid_i)
@@ -348,7 +626,7 @@ module ibex_top_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
     else if (data_req_o && data_gnt_i) data_be_q <= data_be_o;
   end
   
-  `ASSERT_KNOWN_IF(IbexDataRPayloadX, {(data_strb & data_rdata_i), 
+  `ASSERT_KNOWN_IF(IbexDataRPayloadX, {(data_strb & {33{~data_err_i}} &  data_rdata_i), 
     ({7{~u_ibex_core.load_store_unit_i.data_we_q}} & data_rdata_intg_i), data_err_i}, data_rvalid_i)
 
   `ASSERT_KNOWN(IbexIrqX, {irq_software_i, irq_timer_i, irq_external_i, irq_fast_i, irq_nm_i})

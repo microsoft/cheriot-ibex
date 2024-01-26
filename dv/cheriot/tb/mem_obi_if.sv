@@ -4,47 +4,49 @@
 
 // memory model with random gnt/rvalid waits 
 //
-module mem_model #(
-  parameter bit          ERR_INJECT = 1'b0,
-  parameter int unsigned GNT_WMAX   = 2,
-  parameter int unsigned RESP_WMAX  = 1,  
-  parameter int unsigned MEM_AW     = 16,  
-  parameter int unsigned MEM_DW     = 32  
+module mem_obi_if #(
+  parameter int unsigned DW         = 32  
 )( 
-  input  logic              clk,
-  input  logic              rst_n,
-                            
-  input  logic              data_req,
-  input  logic              data_we,
-  input  logic [3:0]        data_be,
-  input  logic [31:0]       data_addr,
-  input  logic [MEM_DW-1:0] data_wdata,
+  input  logic          clk,
+  input  logic          rst_n,
 
-  output logic              data_gnt,
-  output logic              data_rvalid,
-  output logic [MEM_DW-1:0] data_rdata,
-  output logic              data_err
+  input  logic [3:0]    GNT_WMAX,
+  input  logic [3:0]    RESP_WMAX,
+                        
+  input  logic          data_req,
+  input  logic          data_we,
+  input  logic [3:0]    data_be,
+  input  logic          data_req_isr,
+  input  logic [31:0]   data_addr,
+  input  logic [DW-1:0] data_wdata,
+
+  output logic          data_gnt,
+  output logic          data_rvalid,
+  output logic [DW-1:0] data_rdata,
+  output logic          data_err,
+
+  output logic          mem_cs,
+  output logic          mem_we,
+  output logic [3:0]    mem_be,
+  output logic          mem_req_isr,
+  output logic [29:0]   mem_addr32,
+  output logic [DW-1:0] mem_wdata,
+  input  logic [DW-1:0] mem_rdata,
+  input  logic          mem_err
 );
   
   function automatic logic[3:0] gen_wait(int unsigned wmax);
     logic [3:0]  nwait;
     logic [31:0] randnum;
+    
+    if (wmax == 0) return 0;
 
     randnum = $urandom();
     if (!randnum[31]) nwait = 0;       // 0: 50%
-    else nwait = randnum[30:0] & (GNT_WMAX+1);   // 0 to wmax: 0.5/(wmax+1)
+    else nwait = randnum[15:0] % (wmax+1);   // 0 to wmax: 0.5/(wmax+1)
     return nwait;
   endfunction
-  //
-  // simple unified memory system model
-  reg   [MEM_DW-1:0] mem[0:2**MEM_AW-1];
 
-  logic              mem_cs;
-  logic              mem_we;
-  logic        [3:0] mem_be;
-  logic [MEM_DW-1:0] mem_din;
-  logic [MEM_DW-1:0] mem_dout;
-  logic [MEM_AW-1:0] mem_addr;
 
   logic              gnt_idle, resp_idle;
   logic        [3:0] gnt_cntr, resp_cntr;
@@ -59,11 +61,11 @@ module mem_model #(
   logic              resp_valid;
 
   typedef struct packed {
-    logic              we;
-    logic              err;
-    logic        [3:0] be;
-    logic [MEM_AW-1:0] addr;
-    logic [MEM_DW-1:0] wdata;
+    logic          we;
+    logic [3:0]    be;
+    logic          req_isr;
+    logic [29:0]   addr32;
+    logic [DW-1:0] wdata;
   } mem_cmd_t;
 
   mem_cmd_t mem_cmd_fifo[0:7];
@@ -76,11 +78,11 @@ module mem_model #(
   assign cmd_fifo_empty = (cmd_wr_ptr_ext == cmd_rd_ptr_ext);
   assign cmd_avail      = cmd_fifo_wr || !cmd_fifo_empty;
 
-  assign cur_wr_cmd.we    = data_we;
-  assign cur_wr_cmd.err   = 1'b0;
-  assign cur_wr_cmd.be    = data_be;
-  assign cur_wr_cmd.addr  = data_addr[MEM_AW+1:2];   // 32-bit addr
-  assign cur_wr_cmd.wdata = data_wdata; 
+  assign cur_wr_cmd.we      = data_we;
+  assign cur_wr_cmd.be      = data_be;
+  assign cur_wr_cmd.req_isr = data_req_isr;
+  assign cur_wr_cmd.addr32  = data_addr[31:2];   // 32-bit addr
+  assign cur_wr_cmd.wdata   = data_wdata; 
 
   assign cur_rd_cmd    = mem_cmd_fifo[cmd_rd_ptr];
 
@@ -127,7 +129,7 @@ module mem_model #(
       if (cmd_fifo_wr) begin
          mem_cmd_fifo[cmd_wr_ptr] <= cur_wr_cmd;
          cmd_wr_ptr_ext           <= cmd_wr_ptr_ext + 1;
-         gnt_waits <= gen_wait (GNT_WMAX);
+         gnt_waits   <= gen_wait (GNT_WMAX);
       end
  
       if (resp_no_wait) begin
@@ -152,7 +154,7 @@ module mem_model #(
   //    Response stage generate output signals
   //
 
-  assign data_rdata   = mem_dout & {33{data_rvalid}}; 
+  assign data_rdata   = mem_rdata & {33{data_rvalid}}; 
 
   always @(posedge clk, negedge rst_n) begin
     if (~rst_n) begin
@@ -161,7 +163,7 @@ module mem_model #(
       cmd_rd_ptr_ext <= 0;
     end else begin
       data_rvalid <= resp_valid;
-      data_err    <= resp_valid & cur_rd_cmd.err;
+      data_err    <= resp_valid & mem_err;
 
       if (cmd_fifo_rd) begin
          resp_waits      <= gen_wait(RESP_WMAX);
@@ -174,37 +176,11 @@ module mem_model #(
   //
   // memory signals (sampled @posedge clk)
   //
-  assign mem_cs   = resp_valid & ~cur_rd_cmd.err;
-  assign mem_we   = cur_rd_cmd.we;
-  assign mem_be   = cur_rd_cmd.be;
-  assign mem_din  = cur_rd_cmd.wdata;
-  assign mem_addr = cur_rd_cmd.addr;  
-
-  always @(posedge clk) begin
-    if (mem_cs && mem_we) begin
-      if(mem_be[0])
-        mem[mem_addr][7:0]  <= mem_din[7:0];
-      if(mem_be[1])
-        mem[mem_addr][15:8] <= mem_din[15:8];
-      if(mem_be[2])
-        mem[mem_addr][23:16] <= mem_din[23:16];
-      if(mem_be[3])
-        mem[mem_addr][31:24] <= mem_din[31:24];
-
-      // valid tag bit for caps - only allow to update for word accesses, where bit[32] is taken 
-      // care of by CPU, otherwise clear the valid bit.
-      //  - if the physical memory doesn't support BE for bit[32], then needs RMW or 
-      //    separate mem for tag bits..
-       // - only makes sure data accesses can't modify capabilities but could still read..
-      // is this sufficent for cheri - QQQ? 
-      //  - the original cheri ask is to qualify memory accesses based on the tag bit, which requires RMW
-      if (MEM_DW == 33) begin
-        if (|mem_be)  mem[mem_addr][MEM_DW-1]  <= mem_din[MEM_DW-1];
-      end
-        
-    end
-    else if (mem_cs)
-      mem_dout <= mem[mem_addr];  
-  end
+  assign mem_cs      = resp_valid;
+  assign mem_we      = cur_rd_cmd.we;
+  assign mem_be      = cur_rd_cmd.be;
+  assign mem_req_isr = cur_rd_cmd.req_isr;
+  assign mem_wdata   = cur_rd_cmd.wdata;
+  assign mem_addr32  = cur_rd_cmd.addr32;  
 
 endmodule

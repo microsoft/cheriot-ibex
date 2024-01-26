@@ -92,6 +92,7 @@ module tb_env;
       $sformat(test_name, "hello_world");
 
     $sformat(vhx_path, "./bin/%s.vhx", test_name);
+    $display("Loading test %s", test_name);
 
     rst_n = 1'b1;
     #1;
@@ -99,8 +100,8 @@ module tb_env;
 
     // overlaying the same image in both instr_mem model and data_mem model
     // so that we can get RO data. this works in this setup since we only use static code images. 
-    $readmemh(vhx_path, u_tb_top.u_instr_mem.mem, 'h0);   // load main executable
-    $readmemh(vhx_path, u_tb_top.u_data_mem.mem, 'h0);   // load main executable
+    $readmemh(vhx_path, u_tb_top.u_instr_mem.iram, 'h0);   // load main executable
+    $readmemh(vhx_path, u_tb_top.u_data_mem.dram, 'h0);   // load main executable
 
     //for (i=0; i<64;i++)
     //  $display("%08x %08x %08x %08x", u_tb_top.u_instr_mem.mem[4*i], u_tb_top.u_instr_mem.mem[4*i+1],
@@ -113,7 +114,7 @@ module tb_env;
     cont_flag = 1;
     while (cont_flag) begin
       @(posedge clk);
-      if (u_tb_top.data_req & u_tb_top.data_gnt & (u_tb_top.data_addr == 32'h80040200)) begin
+      if (u_tb_top.data_req & u_tb_top.data_gnt & (u_tb_top.data_addr == 32'h83800200)) begin
         if (u_tb_top.data_wdata[7])
           cont_flag = 0;
         else

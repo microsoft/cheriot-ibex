@@ -7,11 +7,12 @@ mkdir -p work
 cd work
 pwd
 
-export TESTNAME=hello_world
+#export TESTNAME=hello_world
+export TESTNAME=$1
 export CSRC=../csrc_cheri
-export SRC=../hello_world
+export SRC=../$TESTNAME
 export C_COMMON="$CSRC/cstart.c $CSRC/util.c"
-export C_FILES="$SRC/hello_world.c $SRC/cheri_atest.S $C_COMMON"
+export C_FILES="$SRC/test_main.c $SRC/cheri_atest.S $C_COMMON"
 export S_FILES="$CSRC/startup.S"
 export OBJ_FILES="startup.o"
 export C_INC="-I$SRC -I$CSRC"
@@ -19,7 +20,7 @@ export LD_FILE=../link_test.ld
 
 export ELF_OUTPUT=$TESTNAME.elf
 export BIN_OUTPUT=$TESTNAME.bin
-export HEX_OUTPUT=instr_mem.vhx
+export HEX_OUTPUT=$TESTNAME.vhx
  
 # run the compile 
 echo "Start compilation" 

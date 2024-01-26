@@ -2,7 +2,8 @@
 
 import sys
 import re
-from optparse import OptionParser
+import argparse
+#from optparse import OptionParser
 
 #
 # c-style printf
@@ -141,6 +142,7 @@ class trace_obj:
         self.pc = 0
         self.instr = 0     # encoded instruction 
         self.excp = 0
+        self.intr = 0
         self.reg_wr = 0           
         self.reg_waddr = 0           
         self.reg_wdata = 0           
@@ -150,25 +152,48 @@ class trace_obj:
         self.mem_addr = 0
         self.mem_size = 0   # 1/2/4/8 bytes: byte/halfword/word/cap
         self.mem_data = 0
+
+        self.reg_rd1 = 0    # only for ibex traces
+        self.reg_raddr1 = 0
+        self.reg_rdata1 = 0
+        self.reg_rcap1  = (0, 0, 0, 0, 0, 0)           
+        self.reg_rd2 = 0
+        self.reg_raddr2 = 0
+        self.reg_rdata2 = 0
+        self.reg_rcap2  = (0, 0, 0, 0, 0, 0)           
     
-    def __eq__(self, other):
+    def almost_eq (self, other):
         if isinstance(other, trace_obj):  # Check if the other object is of the same type
-            result = ((self.valid == 1) and (other.valid == 1) and 
-                      (self.pc     == other.pc) and 
-                      (self.instr  == other.instr) and 
-                      (self.excp   == other.excp) and 
-                      ((self.excp == 1) or 
-                       ((self.reg_wr     == other.reg_wr) and 
-                        (self.reg_waddr  == other.reg_waddr) and
-                        (self.reg_wdata  == other.reg_wdata) and        
-                        (self.reg_wcap   == other.reg_wcap) and        
-                        (self.mem_wr     == other.mem_wr) and 
-                        (self.mem_rd     == other.mem_rd) and 
-                        (self.mem_addr   == other.mem_addr) and 
-                        (self.mem_size   == other.mem_size) and 
-                        (self.mem_data   == other.mem_data))))
+            t1 = ((self.valid == 1) and (other.valid == 1) and (self.pc  == other.pc) and 
+                  (self.instr  == other.instr) and (self.excp   == other.excp))
+
+            # register write check, excluding the wcap tag value (for delayed clc revocation)
+            t2 = ((self.reg_wr == other.reg_wr) and 
+                  ((self.reg_wr == 0) or 
+                   ((self.reg_wr == 1) and (self.reg_waddr  == other.reg_waddr) and 
+                    (self.reg_wdata  == other.reg_wdata) and 
+                    (self.reg_wcap[1:5]  == other.reg_wcap[1:5]))))
+ 
+            t3 = ((self.mem_wr == other.mem_wr) and (self.mem_rd == other.mem_rd) and 
+                  (((self.mem_wr == 0) and (self.mem_rd == 0)) or
+                   ((self.mem_addr == other.mem_addr) and (self.mem_size == other.mem_size) and 
+                   (self.mem_data   == other.mem_data))))
+
+            result = t1 and ((self.excp == 1) or ((self.excp == 0) and t2 and t3))
+            #print(t1, t2, t3)
             return result
-        return False
+        else: 
+            return False
+
+    def __eq__(self, other):
+        if self.almost_eq (other) and (self.reg_wcap[0]  == other.reg_wcap[0]):  
+            return True
+        else:
+            return False
+
+    #def only_tag_diff (self. other)       
+    #    elseif self.reg_wcap[1:5] == other.reg_wcap
+    #    return result
 
     def __str__(self):          # for printing
         pstr = f"trace_obj: {self.valid}, {self.excp}, {self.cycle}, 0x{self.pc:08x}, 0x{self.instr:08x}, " 
@@ -225,6 +250,7 @@ class ibex_trace_file(trace_file):
             nxt_obj.pc    = int(matches1[0][2], 16)
             nxt_obj.instr = int(matches1[0][3], 16)
             nxt_obj.excp  = 1 if re.search(r'-->', matches1[0][4]) else 0
+            nxt_obj.intr  = 1 if re.search(r'==>', matches1[0][4]) else 0
             
             mnemonic = matches1[0][4]
             
@@ -250,7 +276,7 @@ class ibex_trace_file(trace_file):
             # mem non-cap
             pattern5 = r'PA:0x([0-9A-Fa-f]+)\s+(load|store):0x([0-9A-Fa-f\?]+)(\s+|$)'
             matches5 = re.findall(pattern5, self.lines[self.line_ptr])
-             
+
             if len(matches4) != 0:
                 nxt_obj.mem_addr = int(matches4[0][0], 16)
                 nxt_obj.mem_data = int(matches4[0][3]+(matches4[0][2])[1:],16)
@@ -282,6 +308,25 @@ class ibex_trace_file(trace_file):
                   nxt_obj.mem_data &= 0xff
                 elif (nxt_obj.mem_size == 2) and nxt_obj.mem_rd :
                   nxt_obj.mem_data &= 0xffff;
+
+            # cap reg rd (cs1 and cs2)
+            pattern6 = r'x(\d+):0x([0-9A-Fa-f]+)\+0x([0-9A-Fa-f]+)'  
+            matches6 = re.findall(pattern2, self.lines[self.line_ptr])
+
+            nxt_obj.reg_rd1 = 0
+            nxt_obj.reg_rd2 = 0
+
+            if len(matches6) >= 1:
+                nxt_obj.reg_rd1 = 1
+                nxt_obj.reg_raddr1 = int(matches6[0][0])
+                nxt_obj.reg_rdata1 = int(matches6[0][1], 16)
+                nxt_obj.reg_rcap1  = parse_ibex_cap(int(matches6[0][2], 16), nxt_obj.reg_rdata1)
+
+            if len(matches6) == 2:
+                nxt_obj.reg_rd2 = 1
+                nxt_obj.reg_raddr2 = int(matches6[1][0])
+                nxt_obj.reg_rdata2 = int(matches6[1][1], 16)
+                nxt_obj.reg_rcap2  = parse_ibex_cap(int(matches6[1][2], 16), nxt_obj.reg_rdata2)
 
             self.line_ptr += 1         # get ready for next round
         return nxt_obj
@@ -341,7 +386,8 @@ class sail_trace_file(trace_file) :
                 nxt_obj.reg_wdata = int(matches2_0[0][1], 16)
                 perms = parse_sail_perms(matches2_1[0][4])
                 # printf("perm_str = %s\n", matches2_1[0][4])
-                nxt_obj.reg_wcap  = (int(matches2_1[0][0]), perms , int(matches2_1[0][3], 16), 0,
+                # mask off bit 3 of obj_type (implicit by perms)
+                nxt_obj.reg_wcap  = (int(matches2_1[0][0]), perms , int(matches2_1[0][3], 16) &0x7, 0,
                                      int(matches2_1[0][2], 16), int(matches2_1[0][1], 16))
             
             if len(matches2_2) != 0 :
@@ -367,40 +413,112 @@ class sail_trace_file(trace_file) :
             
         return nxt_obj
 
+#
+# main program body
+#
 
 usage = "Usage: compare_trace.py ibex_trace_file sail_tracefile"
-parser = OptionParser(usage=usage)
-(options, args) = parser.parse_args()
+#parser = OptionParser(usage=usage)
+#(options, args) = parser.parse_args()
 
-if (len(args) < 2):
-  sys.exit(usage)
+# Create ArgumentParser object
+parser = argparse.ArgumentParser(description='Command line options')
 
-ibex_trace_name = args[0]
-sail_trace_name = args[1]
+# Add command line options
+parser.add_argument('-k', '--skip_isr', action='store_true', help='Skip ISR in ibex trace')
+parser.add_argument('files', nargs='*', help='List of files to process')
 
-trace1 = ibex_trace_file(ibex_trace_name)
-trace2 = sail_trace_file(sail_trace_name)
+# Parse the command line arguments
+args = parser.parse_args()
 
-trace1.load()
-trace2.load()
 
-cmp_cnt = 0; eq_cnt = 0; neq_cnt = 0
+if (len(args.files) == 2):
+    print(f'Files specified: {args.files}')
+    # Process each file in args.files as needed
+else:
+    print('No files specified')
+
+if args.skip_isr:
+    print('Skipping exception handler in ibex trace')
+
+ibex_trace_name = args.files[0]
+sail_trace_name = args.files[1]
+
+ibex_trace = ibex_trace_file(ibex_trace_name)
+sail_trace = sail_trace_file(sail_trace_name)
+
+ibex_trace.load()
+sail_trace.load()
+
+cmp_cnt = 0; eq_cnt = 0; neq_cnt = 0; revoke_err_cnt = 0; ibex_isr_cnt = 0;
+pending_revoke_regs = [0] * 32
+ibex_in_isr = 0
 
 while True:
-    obj1 = trace1.find_nxt()
-    obj2 = trace2.find_nxt()
-    if (obj1.valid == 0) or (obj2.valid == 0):
+    if args.skip_isr :          # skipping ISR if specified
+        while True:
+            ibex_obj = ibex_trace.find_nxt()
+            if (ibex_obj.excp == 0) and (ibex_obj.intr == 0) and (ibex_in_isr == 0):
+                break
+            if (ibex_obj.excp == 1) or  (ibex_obj.intr == 1): 
+                ibex_in_isr = 1
+                ibex_isr_cnt += 1
+            if (ibex_in_isr == 1) and (ibex_obj.instr == 0x30200073):  # mret
+                ibex_in_isr = 0
+    else :  
+        ibex_obj = ibex_trace.find_nxt()
+
+    sail_obj = sail_trace.find_nxt()
+    if (ibex_obj.valid == 0) or (sail_obj.valid == 0):
         break
-    if (obj1 == obj2):
+
+    # check and update revocation (tag) staus of registers
+    if ((pending_revoke_regs[ibex_obj.reg_raddr1] == 1) and (ibex_obj.reg_rd1 == 1) and
+        (ibex_obj.reg_rcap1[0] == 1)): 
+        revoke_err_cnt += 1; 
+    elif ((pending_revoke_regs[ibex_obj.reg_raddr1] == 1) and 
+          (ibex_obj.reg_rd1 == 1) and (ibex_obj.reg_rcap1[0] == 0)):
+        pending_revoke_regs[ibex_obj.reg_raddr1] = 0;
         eq_cnt += 1
+        printf("cheriot-ibex: cap revocation for reg c%d verified at %x\n", ibex_obj.reg_raddr1, ibex_obj.pc)
+
+    if ((pending_revoke_regs[ibex_obj.reg_raddr2] == 1) and (ibex_obj.reg_rd2 == 1) and
+        (ibex_obj.reg_rcap2[0] == 1)): 
+        revoke_err_cnt += 1; 
+    elif ((pending_revoke_regs[ibex_obj.reg_raddr1] == 1) and 
+          (ibex_obj.reg_rd2 == 1) and (ibex_obj.reg_rcap2[0] == 0)):
+        pending_revoke_regs[ibex_obj.reg_raddr2] = 0;
+        eq_cnt += 1
+        printf("cheriot-ibex: cap revocation for reg c%d verified at %x\n", ibex_obj.reg_raddr2, ibex_obj.pc)
+
+ 
+    # compare current trace object   
+    if (ibex_obj == sail_obj):
+        eq_cnt += 1
+    elif (ibex_obj.almost_eq(sail_obj) and (ibex_obj.reg_wcap[0] == 1) and 
+          (ibex_obj.mem_rd == 1)):           # clc/revocation case
+        pending_revoke_regs[ibex_obj.reg_waddr] = 1
+        printf("cheriot-ibex: cap revocation for reg c%d started at %x\n", ibex_obj.reg_waddr, ibex_obj.pc)
     else :
         neq_cnt += 1
-        print("ibex: ", obj1)
-        print("sail: ", obj2)
+        print("ibex: ", ibex_obj)
+        print("sail: ", sail_obj)
 
     cmp_cnt += 1
 
-    del obj1
-    del obj2
+    del ibex_obj
+    del sail_obj
 
-printf("%d trace objects compared, %d equal, %d not equal\n", cmp_cnt, eq_cnt, neq_cnt)
+
+printf("%d trace objects compared, %d equal, %d not equal, %d recocation errors, %d ISRs found in ibex trace\n", 
+        cmp_cnt, eq_cnt, neq_cnt, revoke_err_cnt, ibex_isr_cnt)
+
+revoke_pending = 0;
+for i in range(len(pending_revoke_regs)):
+    if (pending_revoke_regs[i] != 0):
+        revoke_pending = 1;
+
+if (revoke_pending != 0):
+    printf("Pending revocations found!\n"); 
+    print(pending_revoke_regs)
+        
