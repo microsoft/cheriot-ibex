@@ -33,6 +33,7 @@ module data_mem_model (
   output logic [127:0]      mmreg_corein,
   input  logic [63:0]       mmreg_coreout,
 
+  output logic [3:0]        err_enable_vec, 
   output logic [2:0]        intr_ack
 );
  
@@ -223,8 +224,10 @@ module data_mem_model (
   // MMREG (memory-mapped registers)
   //
   // 0x8380_0000: TBRE control
-  // 0x8380_0100: Intr_ack
+  // 0x8380_0080: scratch register 0,1
+  // 0x8380_0100: TB error_enable, Intr_ack
   // 0x8380_0200: UART
+  // 
   //
   logic [64:0] tbre_ctrl_vec;
   logic        tbre_stat, tbre_stat_q;
@@ -232,6 +235,8 @@ module data_mem_model (
   logic        tbre_done;
   logic [30:0] tbre_epoch;
   logic [7:0]  mmreg_addr32_q;
+  logic        tbre_err, stkz_active, stkz_err;
+  logic [31:0] scratch_reg0, scratch_reg1;
 
   // starting at 0x8380_0000 byte address 
   assign mmreg_addr32 = mem_addr32[7:0];
@@ -244,12 +249,20 @@ module data_mem_model (
   assign tbre_stat    = mmreg_coreout[0];
   assign tbre_done    = tbre_stat_q & ~tbre_stat;
 
+  assign tbre_err     = mmreg_coreout[1];
+  assign stkz_active  = mmreg_coreout[4];
+  assign stkz_err     = mmreg_coreout[5];
+
   always_comb begin
     case (mmreg_addr32_q[7:0])
       0: mmreg_rdata = tbre_ctrl_vec[31:0];  
       1: mmreg_rdata = tbre_ctrl_vec[63:32];  
       2: mmreg_rdata = {tbre_flag, 23'h0, tbre_ctrl_vec[64]};  
-      3: mmreg_rdata = {tbre_epoch, tbre_stat};  
+      3: mmreg_rdata = {tbre_epoch, tbre_stat};
+      4: mmreg_rdata = {31'h0, tbre_err};  
+      5: mmreg_rdata = {30'h0, stkz_err, stkz_active};
+      32: mmreg_rdata = scratch_reg0;  
+      33: mmreg_rdata = scratch_reg1;  
       default: mmreg_rdata = 32'hdead_beef; 
     endcase
   end
@@ -261,6 +274,9 @@ module data_mem_model (
       tbre_stat_q       <= 1'b0;
       mmreg_addr32_q    <= 0;
       intr_ack          <= 3'h0;
+      err_enable_vec    <= 4'h0;
+      scratch_reg0      <= 32'h0; 
+      scratch_reg1      <= 32'h0; 
     end
     else begin
       if (mmreg_cs && mem_we && (mmreg_addr32 == 0))
@@ -279,7 +295,15 @@ module data_mem_model (
 
       if (tbre_done) tbre_epoch <= tbre_epoch + 1;
 
+      if (mmreg_cs && mem_we && (mmreg_addr32 == 'h20))  // 0x8380_0080
+        scratch_reg0 <= mem_wdata[31:0];
+      if (mmreg_cs && mem_we && (mmreg_addr32 == 'h21))  // 0x8380_0084
+        scratch_reg1 <= mem_wdata[31:0];
+
       if (mmreg_cs && mem_we && (mmreg_addr32 == 'h40))  // 0x8380_0100
+        err_enable_vec <= mem_wdata[3:0];
+
+      if (mmreg_cs && mem_we && (mmreg_addr32 == 'h41))  // 0x8380_0104
         intr_ack <= mem_wdata[2:0];
       else
         intr_ack <= 3'h0;

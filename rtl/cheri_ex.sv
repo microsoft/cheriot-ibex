@@ -761,6 +761,9 @@ module cheri_ex import cheri_pkg::*; #(
   //   that goes from instr_executing -> rv32_lsu_req -> lsu_error -> cheri_ex_err -> instr_executing
   //   it's not a real runtime issue but it does confuses timing tools so let's split for now.
   //   Besides - note checking/lsu_cheri_err_o is one timing critical path
+  logic [31:0] rv32_ls_chkaddr;
+  assign rv32_ls_chkaddr = rv32_lsu_addr_i;
+
   always_comb begin : check_rv32
     logic [31:0] top_offset;
     logic [32:0] top_bound;
@@ -770,7 +773,7 @@ module cheri_ex import cheri_pkg::*; #(
     logic        top_size_ok;
 
     // generate the address used to check top bound violation
-    base_chkaddr = rv32_lsu_addr_i;
+    base_chkaddr = rv32_ls_chkaddr;
 
     if (rv32_lsu_type_i == 2'b00) begin
       top_offset  = 32'h4;
@@ -817,6 +820,9 @@ module cheri_ex import cheri_pkg::*; #(
   //      so that we can mux the inputs and save some area
 
 
+  logic [31:0] cheri_ls_chkaddr;
+  assign cheri_ls_chkaddr = cs1_addr_plusimm;
+
   always_comb begin : check_cheri
     logic [31:0] top_offset;
     logic [32:0] top_bound;
@@ -833,7 +839,7 @@ module cheri_ex import cheri_pkg::*; #(
     else if (cheri_operator_i[CIS_SUBSET])
       base_chkaddr = rf_fullcap_b.base32;  // cs2.base32
     else   // CLC/CSC
-      base_chkaddr = cs1_addr_plusimm;     // cs1.address + offset
+      base_chkaddr = cheri_ls_chkaddr;     // cs1.address + offset
 
     if (cheri_operator_i[CIS_SUBSET])
       top_chkaddr = rf_fullcap_b.top33;
@@ -890,13 +896,13 @@ module cheri_ex import cheri_pkg::*; #(
       perm_vio_vec[PVIO_TAG]   = ~rf_fullcap_a.valid;
       perm_vio_vec[PVIO_SEAL]  = is_cap_sealed(rf_fullcap_a);
       perm_vio_vec[PVIO_LD]    = ~(rf_fullcap_a.perms[PERM_LD]);
-      perm_vio_vec[PVIO_ALIGN] = (cs1_addr_plusimm[2:0] != 0);
+      perm_vio_vec[PVIO_ALIGN] = (cheri_ls_chkaddr[2:0] != 0);
     end else if (is_store_cap) begin
       perm_vio_vec[PVIO_TAG]   = (~rf_fullcap_a.valid); 
       perm_vio_vec[PVIO_SEAL]  = is_cap_sealed(rf_fullcap_a);
       perm_vio_vec[PVIO_SD]    = ~rf_fullcap_a.perms[PERM_SD];
       perm_vio_vec[PVIO_SC]    = (~rf_fullcap_a.perms[PERM_MC] && rf_fullcap_b.valid);
-      perm_vio_vec[PVIO_ALIGN] = (cs1_addr_plusimm[2:0] != 0); 
+      perm_vio_vec[PVIO_ALIGN] = (cheri_ls_chkaddr[2:0] != 0); 
       perm_vio_vec[PVIO_SLC]   = ~rf_fullcap_a.perms[PERM_SL] && rf_fullcap_b.valid && ~rf_fullcap_b.perms[PERM_GL];
     end else if (cheri_operator_i[CSEAL]) begin
       cs2_bad_type = rf_fullcap_a.perms[PERM_EX] ? 

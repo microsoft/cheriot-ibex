@@ -337,23 +337,31 @@ module cheri_regfile import cheri_pkg::*; #(
   
   assign alert_o   = pplbc_alert | reg_rdbk_err;
 
+  reg_cap_t rcap_a_rvkd, rcap_b_rvkd;
+
   if (TRVKBypass) begin
     // Bypass the registier update cycle and directly update the read ports
     always_comb begin
       reg_rdy_o = reg_rdy_vec | ({NREGS{trvk_en_i}} & {trvk_dec, 1'b0});
       
-      rcap_a_o = rcap_a;
+      rcap_a_rvkd = rcap_a;
       if (trvk_en_i && trvk_clrtag_i && (trvk_addr_i == raddr_a_i))
-        rcap_a_o.valid = 1'b0;
+        rcap_a_rvkd.valid = 1'b0;
+      rcap_a_o = rcap_a_rvkd;
 
-      rcap_b_o = rcap_b;
+      rcap_b_rvkd = rcap_b;
       if (trvk_en_i && trvk_clrtag_i && (trvk_addr_i == raddr_b_i))
-        rcap_b_o.valid = 1'b0;
+        rcap_b_rvkd.valid = 1'b0;
+      rcap_b_o = rcap_b_rvkd;
+    
     end
   end else begin
     assign reg_rdy_o = reg_rdy_vec;
-    assign rcap_a_o  = rcap_a;
-    assign rcap_b_o  = rcap_b;
+
+    assign rcap_a_rvkd = rcap_a;
+    assign rcap_a_o    = rcap_a_rvkd;
+    assign rcap_b_rvkd = rcap_b;
+    assign rcap_b_o  = rcap_b_rvkd;
   end
    
 

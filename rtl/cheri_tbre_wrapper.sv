@@ -81,7 +81,8 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
 
   logic          tbre_stat, tbre_err, stkz_err;
 
-  assign mmreg_coreout_o = {{(MMRegDoutW-2){1'b0}}, stkz_err, tbre_err, tbre_stat};
+  assign mmreg_coreout_o = {{(MMRegDoutW-8){1'b0}}, 2'b00, 2'b00, stkz_err, stkz_active_o,
+                                                    2'b00,  tbre_err, tbre_stat};
 
   if (CHERIoTEn & CheriTBRE) begin : g_tbre
     logic [65:0] tbre_ctrl_vec;

@@ -685,7 +685,8 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   // Outputs //
   /////////////
   logic all_resp;
-  assign data_or_pmp_err    = lsu_err_q | data_err_i | pmp_err_q | (cheri_pmode_i & (cheri_err_q | cap_lsw_err_q));
+  assign data_or_pmp_err    = lsu_err_q | data_err_i | pmp_err_q | (cheri_pmode_i & 
+                              (cheri_err_q | (resp_is_cap_q & cap_lsw_err_q)));
 
   assign all_resp           = data_rvalid_i | pmp_err_q | (cheri_pmode_i & cheri_err_q);
   assign lsu_resp_valid     = all_resp & (ls_fsm_cs == IDLE) ;

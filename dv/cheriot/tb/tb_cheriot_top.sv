@@ -242,11 +242,15 @@ module tb_cheriot_top (
   logic [3:0] instr_gnt_wmax, data_gnt_wmax;
   logic [3:0] instr_resp_wmax, data_resp_wmax;
   logic [3:0] intr_intvl;
+  logic [2:0] cap_err_rate;
+  logic       cap_err_enable;
+  logic [3:0] err_enable_vec;
 
   int unsigned cfg_instr_err_rate, cfg_data_err_rate;
   int unsigned cfg_instr_gnt_wmax, cfg_data_gnt_wmax;
   int unsigned cfg_instr_resp_wmax, cfg_data_resp_wmax;
   int unsigned cfg_intr_intvl;
+  int unsigned cfg_cap_err_rate;
 
   //
   // simulation init
@@ -262,6 +266,7 @@ module tb_cheriot_top (
     data_gnt_wmax   = 4'h2;
     data_resp_wmax  = 4'h2;
     intr_intvl      = 4'h0;
+    cap_err_rate    = 3'h0;
 
     i = $value$plusargs("INSTR_ERR_RATE=%d", cfg_instr_err_rate);
     if (i == 1) instr_err_rate = cfg_instr_err_rate[2:0];
@@ -280,27 +285,18 @@ module tb_cheriot_top (
     i = $value$plusargs("INTR_INTVL=%d", cfg_intr_intvl);
     if (i == 1) intr_intvl = cfg_intr_intvl[3:0];
 
-    instr_err_enable = 1'b0;
-    data_err_enable  = 1'b0;
-    intr_enable      = 1'b0;
+    i = $value$plusargs("CAP_ERR_RATE=%d", cfg_cap_err_rate);
+    if (i == 1) cap_err_rate = cfg_cap_err_rate[2:0];
 
     @(posedge rstn_i);
     repeat (10) @(posedge clk_i);    // wait after the hardware mtvec init
-
-    // wait for 
-    while (1) begin
-      @(posedge clk_i);
-      if (u_tb_top.data_req & u_tb_top.data_gnt & (u_tb_top.data_addr == 32'h8380_0100)) 
-        break;
-    end
-
-    $display ("TB: embedded test init done, enabling faults and interrupts");
-
-    instr_err_enable = 1'b1;
-    data_err_enable  = 1'b1;
-    intr_enable      = 1'b1;
-   
   end
+
+  
+  assign instr_err_enable = err_enable_vec[0];
+  assign data_err_enable  = err_enable_vec[1];
+  assign intr_enable      = err_enable_vec[2];
+  assign cap_err_enable   = err_enable_vec[3];
 
   //
   // RAMs 
@@ -341,6 +337,7 @@ module tb_cheriot_top (
     .tsmap_rdata     (tsmap_rdata),
     .mmreg_corein    (mmreg_corein),
     .mmreg_coreout   (mmreg_coreout),
+    .err_enable_vec  (err_enable_vec),
     .intr_ack        (intr_ack     )  
   );
 
@@ -353,8 +350,20 @@ module tb_cheriot_top (
     .INTR_INTVL      (intr_intvl   ),
     .intr_en         (intr_enable  ),
     .intr_ack        (intr_ack     ),  
-    .irq             (irq_vec      )
+    .irq_o           (irq_vec      )
   );
+
+  //
+  // random cap error injection
+  //
+  cap_err_gen u_cap_err_gen ( 
+    .clk             (clk_i        ),
+    .rst_n           (rstn_i       ),
+    .ERR_RATE        (cap_err_rate ),
+    .err_enable      (cap_err_enable),
+    .err_active      ( )
+  );
+
 
 endmodule
 

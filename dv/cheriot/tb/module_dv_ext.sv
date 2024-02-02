@@ -9,6 +9,7 @@
 //
 module bindfiles;
   bind ibex_if_stage         ibex_if_stage_dv_ext      if_stage_dv_ext_i (.*);
+  bind ibex_id_stage         ibex_id_stage_dv_ext      id_stage_dv_ext_i (.*);
   bind ibex_controller       ibex_controller_dv_ext    controller_dv_ext_i (.*);
   bind ibex_load_store_unit  ibex_lsu_dv_ext           lsu_dv_ext_i (.*);
   bind cheri_ex              cheri_ex_dv_ext           cheri_ex_dv_ext_i (.*);
@@ -37,6 +38,31 @@ module ibex_if_stage_dv_ext (
 endmodule
 
 ////////////////////////////////////////////////////////////////
+// ibex_id_stage
+////////////////////////////////////////////////////////////////
+
+module ibex_id_stage_dv_ext (
+  input  logic        clk_i,
+  input  logic        rst_ni,
+  input  logic [31:0] rf_reg_rdy_i,
+  input  logic        rf_ren_a,
+  input  logic [4:0]  rf_raddr_a_o,
+  input  logic        rf_ren_b,
+  input  logic [4:0]  rf_raddr_b_o,
+  input  logic        cheri_rf_we,
+  input  logic [4:0]  rf_waddr_id_o
+);
+
+  logic [2:0] fcov_trvk_stall_cause;
+
+  assign fcov_trvk_stall_cause[0] = rf_ren_a && ~rf_reg_rdy_i[rf_raddr_a_o];
+  assign fcov_trvk_stall_cause[1] = rf_ren_b && ~rf_reg_rdy_i[rf_raddr_b_o];
+  assign fcov_trvk_stall_cause[2] = cheri_rf_we && ~rf_reg_rdy_i[rf_waddr_id_o]; 
+
+
+endmodule
+
+////////////////////////////////////////////////////////////////
 // ibex_controller
 ////////////////////////////////////////////////////////////////
 
@@ -49,7 +75,8 @@ module ibex_controller_dv_ext import ibex_pkg::*; (
   input  logic                  do_single_step_d,
   input  logic                  do_single_step_q,
   input  ctrl_fsm_e             ctrl_fsm_cs,
-  input  ctrl_fsm_e             ctrl_fsm_ns
+  input  ctrl_fsm_e             ctrl_fsm_ns,
+  input  logic                  flush_id
 );
 
   `DV_FCOV_SIGNAL(logic, all_debug_req, debug_req_i || debug_mode_q || debug_single_step_i)
@@ -60,7 +87,10 @@ module ibex_controller_dv_ext import ibex_pkg::*; (
       (ctrl_fsm_cs != DBG_TAKEN_IF) & (ctrl_fsm_ns == DBG_TAKEN_IF))
   `DV_FCOV_SIGNAL(logic, debug_entry_id,
       (ctrl_fsm_cs != DBG_TAKEN_ID) & (ctrl_fsm_ns == DBG_TAKEN_ID))
-  `DV_FCOV_SIGNAL(logic, pipe_flush, (ctrl_fsm_cs != FLUSH) & (ctrl_fsm_ns == FLUSH))
+
+   //  `DV_FCOV_SIGNAL(logic, pipe_flush, (ctrl_fsm_cs != FLUSH) & (ctrl_fsm_ns == FLUSH))
+   // QQQ flush_id aligns with instr_unstalled
+  `DV_FCOV_SIGNAL(logic, pipe_flush, flush_id)
   `DV_FCOV_SIGNAL(logic, debug_req, debug_req_i & ~debug_mode_q)
   `DV_FCOV_SIGNAL(logic, debug_single_step_taken, do_single_step_d & ~do_single_step_q)
 
@@ -90,7 +120,10 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic         pmp_err_q,
   input  logic         data_pmp_err_i,
   input  logic         cheri_err_q,
-  input  logic         resp_is_tbre_q
+  input  logic         resp_is_tbre_q,
+  input  cap_rx_fsm_t  cap_rx_fsm_q,
+  input  logic         data_we_q,  
+  input  logic         cap_lsw_err_q  
 
 );
   // Set when awaiting the response for the second half of a misaligned access
@@ -137,6 +170,34 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
     (ls_fsm_cs inside {WAIT_RVALID_MIS, WAIT_GNT_MIS}) && pmp_err_q)
   `DV_FCOV_SIGNAL(logic, ls_mis_pmp_err_2,
     (ls_fsm_cs inside {WAIT_RVALID_MIS, WAIT_RVALID_MIS_GNTS_DONE}) && data_pmp_err_i)
+
+   logic [1:0] fcov_ls_exception_type;
+   assign fcov_ls_exception_type = fcov_ls_error_exception ? 1 : fcov_ls_pmp_exception ? 2 :
+                                   fcov_ls_cheri_exception ? 3 : 0;
+
+   logic [2:0] fcov_clsc_mem_err;
+   always_comb begin
+     fcov_clsc_mem_err = 3'h0;       // no error;
+     if ((cap_rx_fsm_q == CRX_WAIT_RESP2) && data_rvalid_i) begin
+       if (data_err_i & ~data_we_q & cap_lsw_err_q)
+          fcov_clsc_mem_err = 3'h1;       // clc both word error
+       else if (data_err_i & ~data_we_q & ~cap_lsw_err_q)
+          fcov_clsc_mem_err = 3'h2;       // clc word 1 error only
+       else if (~data_err_i & ~data_we_q & ~cap_lsw_err_q)
+          fcov_clsc_mem_err = 3'h3;       // clc word 0 error only
+       else if (data_err_i & data_we_q & cap_lsw_err_q)
+          fcov_clsc_mem_err = 3'h4;       // csc both word error
+       else if (data_err_i & data_we_q & ~cap_lsw_err_q)
+          fcov_clsc_mem_err = 3'h5;       // csc word 1 error only
+       else if (~data_err_i & data_we_q & cap_lsw_err_q)
+          fcov_clsc_mem_err = 3'h6;       // csc word 0 error only
+       else 
+          fcov_clsc_mem_err = 3'h0;       // no error;
+     end
+   end
+    
+
+
 
   ////////////////
   // Assertions //
@@ -252,9 +313,9 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
 
   always_comb begin
     if (cheri_lsu_req)
-      fcov_room_in_cs1_cap = u_cheri_ex.rf_fullcap_a.top33 - u_cheri_ex.cs1_addr_plusimm;
+      fcov_room_in_cs1_cap = u_cheri_ex.rf_fullcap_a.top33 - u_cheri_ex.cheri_ls_chkaddr;
     else if (rv32_lsu_req_i)
-      fcov_room_in_cs1_cap = u_cheri_ex.rf_fullcap_a.top33 - rv32_lsu_addr_i + 
+      fcov_room_in_cs1_cap = u_cheri_ex.rf_fullcap_a.top33 - u_cheri_ex.rv32_ls_chkaddr + 
                              {u_cheri_ex.addr_incr_req_i, 2'b00};
     else 
       fcov_room_in_cs1_cap = 0;
@@ -376,7 +437,7 @@ module cheri_tbre_dv_ext (
    
     while (1) begin
       @(posedge clk_i);
-      if (snoop_lsu_req_done_i)
+      if (snoop_lsu_req_done_i) begin
         // search through req_fifo for hazard/collision case
         fcov_tbre_fifo_hazard      = 1'b0;
         fcov_tbre_fifo_head_hazard = 1'b0;
@@ -390,7 +451,10 @@ module cheri_tbre_dv_ext (
             if (i == 0) fcov_tbre_fifo_head_hazard = 1'b1;
           end
         end
-
+      end else begin
+        fcov_tbre_fifo_hazard      = 1'b0;
+        fcov_tbre_fifo_head_hazard = 1'b0;
+      end 
     end
   end
 
@@ -426,7 +490,6 @@ module cheri_stkz_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   );
 
   logic [1:0] fcov_ztop_wr_type;
-  logic       fcov_bk2bk_cmd;
 
   always_comb begin
     if (ztop_wfcap_i.valid && (ztop_wfcap_i.base32 != ztop_wdata_i))
@@ -439,8 +502,6 @@ module cheri_stkz_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
       fcov_ztop_wr_type = 2'h3;
   end
 
-  assign fcov_bk2bk_cmd = cmd_new & cmd_cap_good & (cheri_stkz_i.stkz_fsm_q == 2'b1) && 
-                          lsu_stkz_req_done_i;
 
 endmodule
 
