@@ -438,15 +438,20 @@ $display("--- set_bounds: exact = %x, ovrflw = %x, exp1 = %x, exp2 = %x, exp = %
 $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, base2, top2);
 `endif
 
-    // Note in this case always addr >= base, but top < base or address is possible
-    //   so - addr_hi = FALSE, top_cor can only be either either 0 or +1;
+    // top/base correction values
+    //   Note the new base == addr >> exp, so addr_hi == FALSE, thus base_cor == 0
+    //   as such, top_cor can only be either either 0 or +1;
     out_cap.top_cor  = tophi ? 2'b00 : 2'b01;
     out_cap.base_cor = 2'b00;
 
     if (req_exact & (topoff | baseoff)) out_cap.valid = 1'b0;
 
     // we used the "requested top" to verify the results against original bounds
-    if (top33req > in_cap.top33 ) out_cap.valid = 1'b0;
+    // also compare address >= old base 32 to handle exp=24 case
+    //   exp = 24 case: can have addr < base (not covered by representibility checking);
+    //   other exp cases: always addr >= base when out_cap.tag == 1
+    if ((top33req > in_cap.top33) || (addr < in_cap.base32)) 
+      out_cap.valid = 1'b0;
 
     return out_cap;
   endfunction

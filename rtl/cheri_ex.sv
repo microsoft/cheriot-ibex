@@ -884,7 +884,6 @@ module cheri_ex import cheri_pkg::*; #(
     else
       addr_bound_vio = 1'b0;
 
-
     // main permission logic
     perm_vio_vec = 0;
     cs2_bad_type = 1'b0;
@@ -948,8 +947,19 @@ module cheri_ex import cheri_pkg::*; #(
 
   assign cheri_wb_err_d      = cheri_wb_err_raw & cheri_exec_id_i & ~debug_mode_i;
 
+  // addr_bound_vio is the timing optimized version (gating data_req) 
+  // However we need to generate full version of addr_bound_vio to match the sail exception 
+  // priority definition (bound_vio has higher priority over alignment_error).
+  // this has less timing impact since it goes to a flop stage
+  logic addr_bound_vio_ext;
+  logic [32:0] cheri_top_chkaddr_ext;
+
+  assign cheri_top_chkaddr_ext = cheri_ls_chkaddr + 8;   // extend to 33 bit for compare
+  assign addr_bound_vio_ext = is_cap ?  addr_bound_vio | (cheri_top_chkaddr_ext > rf_fullcap_a.top33) :
+                              addr_bound_vio;
+
   always_comb begin : err_cause_comb 
-    cheri_err_cause  = vio_cause_enc(addr_bound_vio, perm_vio_vec);
+    cheri_err_cause  = vio_cause_enc(addr_bound_vio_ext, perm_vio_vec);
     rv32_err_cause   = vio_cause_enc(addr_bound_vio_rv32, perm_vio_vec_rv32);
 
     ls_addr_misaligned_only = perm_vio_vec[PVIO_ALIGN] && (cheri_err_cause == 0);
