@@ -473,8 +473,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic          lsu_tbre_resp_valid;
   logic          lsu_tbre_resp_err;
   logic          lsu_resp_is_wr;
-  logic [32:0]   lsu_tbre_raw_lsw;   
-  logic          lsu_tbre_req_done;   
+  logic [32:0]   lsu_tbre_raw_lsw;
+  logic          lsu_tbre_req_done;
   logic          lsu_tbre_addr_incr;
   logic          tbre_lsu_req;
   logic          tbre_lsu_is_cap;
@@ -487,7 +487,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic          lsu_tbre_sel, cpu_lsu_dec;
   logic          rf_trsv_en;
 
-  
+
 
 
   //////////////////////
@@ -944,7 +944,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .tbre_lsu_we_i        (tbre_lsu_we),
       .tbre_lsu_addr_i      (tbre_lsu_addr),
       .tbre_lsu_wdata_i     (tbre_lsu_wdata),
-      .cpu_lsu_dec_o        (cpu_lsu_dec),  
+      .cpu_lsu_dec_o        (cpu_lsu_dec),
       .csr_rdata_i          (cheri_csr_rdata),
       .csr_rcap_i           (cheri_csr_rcap),
       .csr_mstatus_mie_i    (csr_mstatus_mie),
@@ -964,7 +964,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .stkz_abort_i         (stkz_abort),
       .stkz_ptr_i           (stkz_ptr),
       .stkz_base_i          (stkz_base),
-      .ztop_wr_o            (ztop_wr),  
+      .ztop_wr_o            (ztop_wr),
       .ztop_wdata_o         (ztop_wdata),
       .ztop_wfcap_o         (ztop_wfcap),
       .ztop_rdata_i         (ztop_rdata),
@@ -978,16 +978,16 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   end else begin : gen_no_cheri_ex
     assign rf_trsv_en_o           = 1'b0;
     assign rf_trsv_addr_o         = 5'h0;
-                                  
+
     assign cheri_branch_req       = 1'b0;
     assign cheri_branch_req_spec  = 1'b0;
     assign branch_target_ex       = branch_target_ex_rv32;
     assign pcc_cap_w              = NULL_PCC_CAP;
-                                  
+
     assign cheri_rf_we            = 1'b0;
     assign cheri_result_data      = 32'h0;
     assign cheri_result_cap       = NULL_REG_CAP;
-                                  
+
     assign cheri_ex_valid         = 1'b0;
     assign cheri_ex_err           = 1'b0;
     assign cheri_ex_err_info      = 11'h0;
@@ -1017,10 +1017,10 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     assign cheri_csr_op_en        = 1'b0;
     assign cheri_csr_set_mie      = 1'b0;
     assign cheri_csr_clr_mie      = 1'b0;
-     
+
     assign csr_mshwm_set          = 1'b0;
     assign csr_mshwm_new          = 1'b0;
- 
+
   end
 
   /////////////////////////////
@@ -1048,7 +1048,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .rf_trvk_en_o      (rf_trvk_en_o    ),
     .rf_trvk_clrtag_o  (rf_trvk_clrtag_o),
     .tbre_trvk_en_o    (tbre_trvk_en    ),
-    .tbre_trvk_clrtag_o(tbre_trvk_clrtag),          
+    .tbre_trvk_clrtag_o(tbre_trvk_clrtag),
     .tsmap_cs_o        (tsmap_cs_o      ),
     .tsmap_addr_o      (tsmap_addr_o    ),
     .tsmap_rdata_i     (tsmap_rdata_i   )
@@ -1079,22 +1079,22 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .MMRegDoutW  (MMRegDoutW)
   ) cheri_tbre_wrapper_i (
    // Clock and Reset
-    .clk_i                   (clk_i),                 
+    .clk_i                   (clk_i),
     .rst_ni                  (rst_ni),
     .mmreg_corein_i          (mmreg_corein_i),
     .mmreg_coreout_o         (mmreg_coreout_o),
     .lsu_tbre_resp_valid_i   (lsu_tbre_resp_valid),
     .lsu_tbre_resp_err_i     (lsu_tbre_resp_err),
     .lsu_tbre_resp_is_wr_i   (lsu_resp_is_wr),
-    .lsu_tbre_raw_lsw_i      (lsu_tbre_raw_lsw),   
-    .lsu_tbre_req_done_i     (lsu_tbre_req_done),   
+    .lsu_tbre_raw_lsw_i      (lsu_tbre_raw_lsw),
+    .lsu_tbre_req_done_i     (lsu_tbre_req_done),
     .lsu_tbre_addr_incr_i    (lsu_addr_incr_req),
     .tbre_lsu_req_o          (tbre_lsu_req),
     .tbre_lsu_is_cap_o       (tbre_lsu_is_cap),
     .tbre_lsu_we_o           (tbre_lsu_we),
     .tbre_lsu_addr_o         (tbre_lsu_addr),
     .tbre_lsu_wdata_o        (tbre_lsu_wdata),
-    .snoop_lsu_req_done_i    (snoop_lsu_req_done),  
+    .snoop_lsu_req_done_i    (snoop_lsu_req_done),
     .snoop_lsu_req_i         (lsu_req),
     .snoop_lsu_is_cap_i      (lsu_is_cap),
     .snoop_lsu_we_i          (lsu_we),
@@ -1102,7 +1102,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .snoop_lsu_addr_i        (lsu_addr),
     .trvk_en_i               (tbre_trvk_en),
     .trvk_clrtag_i           (tbre_trvk_clrtag),
-    .ztop_wr_i               (ztop_wr),  
+    .ztop_wr_i               (ztop_wr),
     .ztop_wdata_i            (ztop_wdata),
     .ztop_wfcap_i            (ztop_wfcap),
     .ztop_rdata_o            (ztop_rdata),
@@ -1111,10 +1111,10 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .stkz_active_o           (stkz_active),
     .stkz_abort_o            (stkz_abort),
     .stkz_ptr_o              (stkz_ptr),
-    .stkz_base_o             (stkz_base)          
+    .stkz_base_o             (stkz_base)
   ) ;
-   
-   
+
+
   /////////////////////
   // Load/store unit //
   /////////////////////
@@ -1177,11 +1177,11 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .lsu_req_done_intl_o (lsu_req_done_intl),
     .lsu_resp_valid_o (lsu_resp_valid),
     .lsu_resp_valid_intl_o(lsu_resp_valid_intl),
-    .lsu_resp_is_wr_o      (lsu_resp_is_wr),    
+    .lsu_resp_is_wr_o      (lsu_resp_is_wr),
 
     .tbre_lsu_req_i        (tbre_lsu_req),
     .cpu_lsu_dec_i         (cpu_lsu_dec),
-    .lsu_tbre_sel_o        (lsu_tbre_sel),     
+    .lsu_tbre_sel_o        (lsu_tbre_sel),
     .lsu_tbre_raw_lsw_o    (lsu_tbre_raw_lsw),
     .lsu_tbre_req_done_o   (lsu_tbre_req_done),
     .lsu_tbre_resp_valid_o (lsu_tbre_resp_valid),
@@ -1293,7 +1293,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .data_i({26'h0, rf_trsv_en_o, rf_trsv_addr_o}),
       .data_o({rf_trsv_par_o, unused_sig32_0})
     );
-    
+
     prim_secded_inv_39_32_enc trvk_ecc_enc (
       .data_i({25'h0, rf_trvk_en_o, rf_trvk_clrtag_o, rf_trvk_addr_o}),
       .data_o({rf_trvk_par_o, unused_sig32_1})
@@ -1305,7 +1305,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
 
     assign rdata_a_tmp = rf_rdata_a_ecc_i[31:0] ^ rf_rcap_a_vec[31:0] ^ {20'h0, 1'b1, rf_raddr_a, rf_rcap_a_vec[37:32]};
     assign rdata_b_tmp = rf_rdata_b_ecc_i[31:0] ^ rf_rcap_b_vec[31:0] ^ {20'h0, 1'b1, rf_raddr_b, rf_rcap_b_vec[37:32]};
-    
+
     //assign rdata_a_tmp = rf_rdata_a_ecc_i[31:0] ^ rf_rcap_a_vec[31:0] ^ {26'h0, rf_rcap_a_vec[37:32]};
     //assign rdata_b_tmp = rf_rdata_b_ecc_i[31:0] ^ rf_rcap_b_vec[31:0] ^ {26'h0, rf_rcap_b_vec[37:32]};
     prim_secded_inv_39_32_dec regfile_ecc_dec_a (
@@ -2096,7 +2096,7 @@ end
       end
     end
   end else begin
-    assign rvfi_rs1_cap_d  = NULL_REG_CAP; 
+    assign rvfi_rs1_cap_d  = NULL_REG_CAP;
     assign rvfi_rs2_cap_d  = NULL_REG_CAP;
   end
 
@@ -2184,8 +2184,8 @@ end
   always_comb begin
     rvfi_set_trap_pc_d = rvfi_set_trap_pc_q;
 
-    //if (pc_set && pc_mux_id == PC_EXC &&           // kliu - interrupt only 
-    //    (exc_pc_mux_id == EXC_PC_EXC || exc_pc_mux_id == EXC_PC_IRQ)) begin   
+    //if (pc_set && pc_mux_id == PC_EXC &&           // kliu - interrupt only
+    //    (exc_pc_mux_id == EXC_PC_EXC || exc_pc_mux_id == EXC_PC_IRQ)) begin
     if (pc_set && pc_mux_id == PC_EXC && (exc_pc_mux_id == EXC_PC_IRQ)) begin
       // PC is set to enter a trap handler
       rvfi_set_trap_pc_d = 1'b1;

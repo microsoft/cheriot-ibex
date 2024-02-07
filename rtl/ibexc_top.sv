@@ -383,7 +383,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .ic_tag_rdata_i     (),
     .ic_tag_wdata_o     (),
     .ic_tag_addr_o      (),
-    .ic_tag_write_o     (), 
+    .ic_tag_write_o     (),
     .ic_tag_req_o       ()
   );
 

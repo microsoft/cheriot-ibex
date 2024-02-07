@@ -266,7 +266,7 @@ module ibex_compressed_decoder # (
             end else begin
               instr_o = instr_i;
               illegal_instr_o = 1'b1;
-            end 
+            end
           end
 
           3'b100: begin
@@ -308,7 +308,7 @@ module ibex_compressed_decoder # (
               // c.cscsp -> csc cs2, imm(c2),  reuse c.sdsp
               instr_o = {3'b0, instr_i[9:7], instr_i[12], instr_i[6:2], 5'h02, 3'b011,
                          instr_i[11:10], 3'b000, {OPCODE_STORE}};
-            end else begin 
+            end else begin
               instr_o = instr_i;
               illegal_instr_o = 1'b1;
             end

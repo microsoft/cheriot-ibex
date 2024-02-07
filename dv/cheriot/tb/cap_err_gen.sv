@@ -1,12 +1,12 @@
 //`timescale 1ns/1ps
 
-module cap_err_gen import ibex_pkg::*; import cheri_pkg::*; ( 
+module cap_err_gen import ibex_pkg::*; import cheri_pkg::*; (
   input  logic        clk,
   input  logic        rst_n,
   input  logic [2:0]  ERR_RATE,
   input  logic        err_enable,
   output logic        err_active,
-  output logic        err_failed 
+  output logic        err_failed
 );
 
   typedef struct packed {
@@ -30,15 +30,15 @@ module cap_err_gen import ibex_pkg::*; import cheri_pkg::*; (
     lsu_acc_out.flag = 8'h0;
 
     // let's just inject one single error for now QQQ
-    if (lsu_acc_in.is_cap) begin                   // CLC/CSC 
+    if (lsu_acc_in.is_cap) begin                   // CLC/CSC
       err_type = seed[15:0] % 5;
       lsu_acc_out.flag = err_type;
 
       if (err_type == 0) begin                   // TAG error
-        lsu_acc_out.cs1_cap.valid = 1'b0;                    
+        lsu_acc_out.cs1_cap.valid = 1'b0;
       end else if (err_type == 1) begin          // SEALED error
-        lsu_acc_out.cs1_cap.otype = OTYPE_SENTRY;         
-      end else if (err_type == 2) begin          
+        lsu_acc_out.cs1_cap.otype = OTYPE_SENTRY;
+      end else if (err_type == 2) begin
         perm_tmp = expand_perms(lsu_acc_in.cs1_cap.cperms);
         if (~lsu_acc_in.we)                        // LD perm error
           perm_tmp &= ~(1 << PERM_LD);
@@ -50,53 +50,53 @@ module cap_err_gen import ibex_pkg::*; import cheri_pkg::*; (
       end else if (err_type == 3) begin          // address bound error
         fcap = reg2fullcap(lsu_acc_in.cs1_cap, lsu_acc_in.cs1_data);
         lsu_acc_out.flag[6] = 1'b1;              // flag address change
- 
+
         if (seed[31] & (fcap.base32 != 0))       // base vio
           lsu_acc_out.addr = fcap.base32 - 1;        // reduce address by 1
         else if (fcap.top33 != 33'h1_0000_0000)  // top_vio
-          lsu_acc_out.addr  = fcap.top33 - seed[2:0];     
+          lsu_acc_out.addr  = fcap.top33 - seed[2:0];
         else
           lsu_acc_out.addr  = 32'hffff_ffff;
       end else if (err_type == 4) begin          // alignment error
         lsu_acc_out.flag[6] = 1'b1;              // flag address change
-        lsu_acc_out.addr[2:0] = seed[31:24] % 7 + 1'b1;               
-      end 
+        lsu_acc_out.addr[2:0] = seed[31:24] % 7 + 1'b1;
+      end
     end else begin                               // RV32 load/store
       err_type = seed[15:0] % 4;
       lsu_acc_out.flag = err_type;
 
       if (err_type == 0) begin                   // TAG error
-        lsu_acc_out.cs1_cap.valid = 1'b0;                    
+        lsu_acc_out.cs1_cap.valid = 1'b0;
       end else if (err_type == 1) begin          // SEALED error
-        lsu_acc_out.cs1_cap.otype = OTYPE_SENTRY;         
-      end else if (err_type == 2) begin          
+        lsu_acc_out.cs1_cap.otype = OTYPE_SENTRY;
+      end else if (err_type == 2) begin
         perm_tmp = expand_perms(lsu_acc_in.cs1_cap.cperms);
         if (~lsu_acc_in.we)                        // LD perm error
           perm_tmp &= ~(1 << PERM_LD);
-        else 
+        else
           perm_tmp &= ~(1 << PERM_SD);
         lsu_acc_out.cs1_cap.cperms = compress_perms(perm_tmp, 0);
       end else if (err_type == 3) begin          // address bound error
         fcap = reg2fullcap(lsu_acc_in.cs1_cap, lsu_acc_in.cs1_data);
         lsu_acc_out.flag[6] = 1'b1;              // flag address change
-        
+
         if (seed[31] & (fcap.base32 != 0))           // base vio
-          lsu_acc_out.addr = fcap.base32 - 1;            
+          lsu_acc_out.addr = fcap.base32 - 1;
         else if ((lsu_acc_in.rv32_type == 2'b00) & (fcap.top33 != 33'h1_0000_0000))      // top vio - word
-          lsu_acc_out.addr = fcap.top33 - seed[1:0];   
+          lsu_acc_out.addr = fcap.top33 - seed[1:0];
         else if ((lsu_acc_in.rv32_type == 2'b01) & (fcap.top33 != 33'h1_0000_0000))      // half word
-          lsu_acc_out.addr = fcap.top33 - seed[0];   
+          lsu_acc_out.addr = fcap.top33 - seed[0];
         else if (fcap.top33 != 33'h1_0000_0000)                                        // byte
           lsu_acc_out.addr = fcap.top33;
-        else 
-          lsu_acc_out.flag[7] = 1'b1;      // let's give up here - have to change both bound and addr..   
+        else
+          lsu_acc_out.flag[7] = 1'b1;      // let's give up here - have to change both bound and addr..
       end
     end
 
 
     return lsu_acc_out;
   endfunction
-    
+
 
   logic        cheri_exec_id, cheri_ex_valid;
   logic [35:0] cheri_operator;
@@ -118,13 +118,13 @@ module cap_err_gen import ibex_pkg::*; import cheri_pkg::*; (
   assign cheri_ex_valid = dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.cheri_ex_valid_o;
   assign cheri_operator = dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.cheri_operator_i;
 
-  assign rv32_lsu_start_addr = dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.rv32_lsu_addr_i - 
+  assign rv32_lsu_start_addr = dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.rv32_lsu_addr_i -
                                {29'h0, dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.addr_incr_req_i, 2'b00};
 
-  assign lsu_acc_orig   = is_rv32_lsu ?  
+  assign lsu_acc_orig   = is_rv32_lsu ?
                           '{8'h0, 1'b0, dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.rv32_lsu_we_i,
-                            dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.rv32_lsu_type_i, 
-                            rv32_lsu_start_addr, 
+                            dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.rv32_lsu_type_i,
+                            rv32_lsu_start_addr,
                             rcap_a, rdata_a} :
                           '{8'h0, 1'b1,  cheri_operator[CSTORE_CAP], 2'b00,
                             dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.cs1_addr_plusimm,
@@ -143,7 +143,7 @@ module cap_err_gen import ibex_pkg::*; import cheri_pkg::*; (
   assign pc_in_isr    = (pc_id >= 32'h8000_0000) & (pc_id < 32'h8000_0200);
 
   assign err_failed = err_active & dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.lsu_req_o &
-                      (~dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.lsu_cheri_err_o) & 
+                      (~dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.lsu_cheri_err_o) &
                       (~lsu_acc_mod.flag[7]);
 
   always @(posedge clk, negedge rst_n) begin
@@ -156,9 +156,9 @@ module cap_err_gen import ibex_pkg::*; import cheri_pkg::*; (
         cap_err_seed <= $urandom();
       end
     end
-  end 
+  end
 
-  
+
   initial begin
     err_active = 1'b1;
 
@@ -168,7 +168,7 @@ module cap_err_gen import ibex_pkg::*; import cheri_pkg::*; (
       @(posedge clk);
       #1;
       force dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.rf_rcap_a = rcap_a;  // default
-      if ((is_cheri_lsu | is_rv32_lsu) & cap_err_schd & ~pc_in_isr) begin 
+      if ((is_cheri_lsu | is_rv32_lsu) & cap_err_schd & ~pc_in_isr) begin
         lsu_acc_mod  = inject_ls_cap_err(lsu_acc_orig, cap_err_seed);
         force dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.rf_rcap_a = lsu_acc_mod.cs1_cap;
         if (is_rv32_lsu && (lsu_acc_mod.flag[7:6] == 2'b01))   // modify address

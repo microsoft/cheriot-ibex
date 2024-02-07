@@ -84,7 +84,7 @@ module tb_cheriot_top (
     defparam dut.u_ibex_top.WritebackStage = 1'b1;
     assign rf_rd_a_hz = dut.u_ibex_top.u_ibex_core.id_stage_i.gen_stall_mem.rf_rd_a_hz;
     assign rf_rd_b_hz = dut.u_ibex_top.u_ibex_core.id_stage_i.gen_stall_mem.rf_rd_b_hz;
-  `endif  
+  `endif
 
   `ifdef MEMCAPFMT1
     defparam dut.u_ibex_top.MemCapFmt = 1'b1;
@@ -118,16 +118,16 @@ module tb_cheriot_top (
     assign cheri_pmode = 1'b1;
   `endif
 
-  `ifdef TSAFE0 
+  `ifdef TSAFE0
     assign cheri_tsafe_en = 0;
   `else
     assign cheri_tsafe_en = 1;
   `endif
 
-  `ifdef MULT_1CYCLE  
+  `ifdef MULT_1CYCLE
     defparam dut.u_ibex_top.u_ibex_core.RV32M = RV32MSingleCycle;
   `endif
-   
+
   `ifdef BRANCH_PREDICT
     defparam dut.u_ibex_top.BranchPredictor = 1'b1;
   `endif
@@ -184,7 +184,7 @@ module tb_cheriot_top (
     .irq_timer_i          (irq_timer   ),
     .irq_external_i       (irq_external),
     .irq_fast_i           (15'h0       ),
-    .irq_nm_i             (1'b0        ), 
+    .irq_nm_i             (1'b0        ),
     .scramble_key_valid_i (1'b0        ),
     .scramble_key_i       (128'h0      ),
     .scramble_nonce_i     (64'h0       ),
@@ -196,18 +196,18 @@ module tb_cheriot_top (
     .data_is_cap_o        ()
   );
 
-  assign {irq_timer, irq_software,  irq_external} = irq_vec; 
+  assign {irq_timer, irq_software,  irq_external} = irq_vec;
 
   assign data_rdata_intg  = 7'h0;
   assign instr_rdata_intg = 7'h0;
-  
+
   // detect internal alerts
   always @(posedge clk_i) begin
 
     if (dut.u_ibex_top.alert_major_internal_o | dut.u_ibex_top.alert_major_bus_o |
         dut.u_ibex_top.alert_minor_o) begin
       $display("Alert detected !!!!!!! @%t, major_int = %1b, major_bus = %1b, minor = %1b", $time,
-               dut.u_ibex_top.alert_major_internal_o, dut.u_ibex_top.alert_major_bus_o, 
+               dut.u_ibex_top.alert_major_internal_o, dut.u_ibex_top.alert_major_bus_o,
                dut.u_ibex_top.alert_minor_o);
     end
   end
@@ -216,7 +216,7 @@ module tb_cheriot_top (
 `ifndef VERILATOR
   initial begin
     #0 $fsdbDumpfile("tb_cheriot_top.fsdb");
-    $fsdbDumpvars(0, "+all", tb_cheriot_top); 
+    $fsdbDumpvars(0, "+all", tb_cheriot_top);
   end
 `endif
 
@@ -232,11 +232,11 @@ module tb_cheriot_top (
   );
 
 
-`ifdef DII_SIM 
+`ifdef DII_SIM
   assign instr_rdata = 32'h0;
 `else
   assign instr_rdata = instr_rdata_mem;
-`endif  
+`endif
 
   logic [2:0] instr_err_rate, data_err_rate;
   logic [3:0] instr_gnt_wmax, data_gnt_wmax;
@@ -292,17 +292,17 @@ module tb_cheriot_top (
     repeat (10) @(posedge clk_i);    // wait after the hardware mtvec init
   end
 
-  
+
   assign instr_err_enable = err_enable_vec[0];
   assign data_err_enable  = err_enable_vec[1];
   assign intr_enable      = err_enable_vec[2];
   assign cap_err_enable   = err_enable_vec[3];
 
   //
-  // RAMs 
+  // RAMs
   //
   instr_mem_model u_instr_mem (
-    .clk             (clk_i         ), 
+    .clk             (clk_i         ),
     .rst_n           (rstn_i        ),
     .ERR_RATE        (instr_err_rate),
     .GNT_WMAX        (instr_gnt_wmax),
@@ -317,7 +317,7 @@ module tb_cheriot_top (
   );
 
   data_mem_model u_data_mem (
-    .clk             (clk_i        ), 
+    .clk             (clk_i        ),
     .rst_n           (rstn_i       ),
     .ERR_RATE        (data_err_rate),
     .GNT_WMAX        (data_gnt_wmax),
@@ -338,25 +338,25 @@ module tb_cheriot_top (
     .mmreg_corein    (mmreg_corein),
     .mmreg_coreout   (mmreg_coreout),
     .err_enable_vec  (err_enable_vec),
-    .intr_ack        (intr_ack     )  
+    .intr_ack        (intr_ack     )
   );
 
   //
   // random interrupt generator
   //
   intr_gen u_intr_gen (
-    .clk             (clk_i        ), 
+    .clk             (clk_i        ),
     .rst_n           (rstn_i       ),
     .INTR_INTVL      (intr_intvl   ),
     .intr_en         (intr_enable  ),
-    .intr_ack        (intr_ack     ),  
+    .intr_ack        (intr_ack     ),
     .irq_o           (irq_vec      )
   );
 
   //
   // random cap error injection
   //
-  cap_err_gen u_cap_err_gen ( 
+  cap_err_gen u_cap_err_gen (
     .clk             (clk_i        ),
     .rst_n           (rstn_i       ),
     .ERR_RATE        (cap_err_rate ),
@@ -366,4 +366,3 @@ module tb_cheriot_top (
 
 
 endmodule
-

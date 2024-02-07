@@ -85,7 +85,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
 
   always_comb begin
     int i;
-    for (i=0;i<32;i++) 
+    for (i=0;i<32;i++)
       if ((cheri_ops >> i) & 1) fcov_cheri_instr = cheri_op_e'(i);
   end
 
@@ -156,7 +156,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
         id_instr_category = InstrCategoryCheriBounds;
       cheri_ops[CCLEAR_TAG], cheri_ops[CMOVE_CAP], cheri_ops[CSEAL], cheri_ops[CUNSEAL], cheri_ops[CAND_PERM]:
         id_instr_category = InstrCategoryCheriMod;
-      cheri_ops[CGET_PERM], cheri_ops[CGET_TYPE], cheri_ops[CGET_BASE], cheri_ops[CGET_TOP], cheri_ops[CGET_LEN], 
+      cheri_ops[CGET_PERM], cheri_ops[CGET_TYPE], cheri_ops[CGET_BASE], cheri_ops[CGET_TOP], cheri_ops[CGET_LEN],
       cheri_ops[CGET_TAG], cheri_ops[CGET_ADDR], cheri_ops[CSUB_CAP], cheri_ops[CIS_SUBSET], cheri_ops[CIS_EQUAL]:
         id_instr_category = InstrCategoryCheriQuery;
       // cheri_ops[CJAL]:
@@ -444,7 +444,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
   logic lockstep_glitch_err;
 
   logic fcov_tag_clear_cs1cd;
-  assign fcov_tag_clear_cs1cd = g_cheri_ex.u_cheri_ex.rf_fullcap_a.valid & 
+  assign fcov_tag_clear_cs1cd = g_cheri_ex.u_cheri_ex.rf_fullcap_a.valid &
                                ~g_cheri_ex.u_cheri_ex.result_cap_o.valid;
 
   covergroup uarch_cg @(posedge clk_i);
@@ -690,7 +690,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
       // illegal_bins illegal = binsof(cp_misaligned_first_data_bus_err) intersect {1'b1} &&
       //  binsof(cp_misaligned_second_data_bus_err) intersect {1'b1};
    // }
-    
+
     //
     // New coverage points
     //
@@ -709,8 +709,8 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
       bins bin8to14 = {[8:14]};
       bins bin15    = {15};
     }
- 
-    cp_rd_addr:  coverpoint id_stage_i.rf_waddr_id_o[3:0] iff 
+
+    cp_rd_addr:  coverpoint id_stage_i.rf_waddr_id_o[3:0] iff
                  (id_stage_i.rf_we_id_o | g_cheri_ex.u_cheri_ex.cheri_rf_we_o) {
       bins bin0     = {0};
       bins bin1to7  = {[1:7]};
@@ -719,8 +719,8 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     }
 
     // all CHERIoT instructions enumerated
-    cp_cheri_instr_set: coverpoint fcov_cheri_instr iff (|cheri_ops); 
-     
+    cp_cheri_instr_set: coverpoint fcov_cheri_instr iff (|cheri_ops);
+
     // coverage points for PCC
     cp_pcc_tag: coverpoint cs_registers_i.pcc_cap_o.valid;
 
@@ -736,13 +736,13 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
       bins bin1 = {[1:7]};
     }
 
-    cp_pcc_perm_ex: coverpoint cs_registers_i.pcc_cap_o.perms[PERM_EX] iff 
+    cp_pcc_perm_ex: coverpoint cs_registers_i.pcc_cap_o.perms[PERM_EX] iff
                               (cs_registers_i.pcc_cap_o.valid);
 
     // coverage points for CS1
     cp_cs1_tag: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_a.valid;
 
-    cp_cs1_exp: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_a.exp iff 
+    cp_cs1_exp: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_a.exp iff
                           (g_cheri_ex.u_cheri_ex.rf_fullcap_a.valid) {
       bins bin0 = {0};
       bins bin1 = {[1:14]};
@@ -750,84 +750,84 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
       illegal_bins illegal = default;
     }
 
-    cp_cs1_otype: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_a.otype iff 
+    cp_cs1_otype: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_a.otype iff
                             (g_cheri_ex.u_cheri_ex.rf_fullcap_a.valid) {
       bins bin[] = {[0:7]};    // including reserved values for coverage
     }
 
-    cp_cs1_cor: coverpoint {g_cheri_ex.u_cheri_ex.rf_fullcap_a.base_cor, 
-                            g_cheri_ex.u_cheri_ex.rf_fullcap_a.top_cor} iff 
+    cp_cs1_cor: coverpoint {g_cheri_ex.u_cheri_ex.rf_fullcap_a.base_cor,
+                            g_cheri_ex.u_cheri_ex.rf_fullcap_a.top_cor} iff
                             (g_cheri_ex.u_cheri_ex.rf_fullcap_a.valid) {
-      bins bin0 = {4'b0000}; 
-      bins bin1 = {4'b0001}; 
+      bins bin0 = {4'b0000};
+      bins bin1 = {4'b0001};
       // bins bin2 = {4'b0011}; // base_cor = 0, top_cor = -1, impossible case
-      bins bin3 = {4'b1100}; 
+      bins bin3 = {4'b1100};
       // bins bin4 = {4'b1101};    // impossible case
       // bins bin5 = {4'b1111};    // impossible case
       illegal_bins illegal = default;
     }
 
-    cp_cs1_top: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_a.top iff 
+    cp_cs1_top: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_a.top iff
                             (g_cheri_ex.u_cheri_ex.rf_fullcap_a.valid) {
       bins bin_all1 = {9'h1ff};
       bins bin_all0 = {9'h0};
       bins bin1     = {[9'h1:9'h1fe]};
     }
 
-    cp_cs1_base: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_a.base iff 
+    cp_cs1_base: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_a.base iff
                            (g_cheri_ex.u_cheri_ex.rf_fullcap_a.valid) {
       bins bin_all1 = {9'h1ff};
       bins bin_all0 = {9'h0};
       bins bin1     = {[9'h1:9'h1fe]};
     }
 
-    cp_cs1_perms: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_a.perms iff 
+    cp_cs1_perms: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_a.perms iff
                             (g_cheri_ex.u_cheri_ex.rf_fullcap_a.valid) {
-      wildcard bins gl0  = {13'b?_????_????_???0}; 
+      wildcard bins gl0  = {13'b?_????_????_???0};
       wildcard bins gl1  = {13'b?_????_????_???1};
       wildcard bins lg0  = {13'b?_????_????_??0?};
       wildcard bins lg1  = {13'b?_????_????_??1?};
       wildcard bins sd0  = {13'b?_????_????_?0??};
       wildcard bins sd1  = {13'b?_????_????_?1??};
-      wildcard bins lm0  = {13'b?_????_????_0???}; 
+      wildcard bins lm0  = {13'b?_????_????_0???};
       wildcard bins lm1  = {13'b?_????_????_1???};
-      wildcard bins sl0  = {13'b?_????_???0_????}; 
+      wildcard bins sl0  = {13'b?_????_???0_????};
       wildcard bins sl1  = {13'b?_????_???1_????};
-      wildcard bins ld0  = {13'b?_????_??0?_????}; 
+      wildcard bins ld0  = {13'b?_????_??0?_????};
       wildcard bins ld1  = {13'b?_????_??1?_????};
-      wildcard bins mc0  = {13'b?_????_?0??_????}; 
+      wildcard bins mc0  = {13'b?_????_?0??_????};
       wildcard bins mc1  = {13'b?_????_?1??_????};
-      wildcard bins sr0  = {13'b?_????_0???_????}; 
+      wildcard bins sr0  = {13'b?_????_0???_????};
       wildcard bins sr1  = {13'b?_????_1???_????};
-      wildcard bins ex0  = {13'b?_???0_????_????}; 
+      wildcard bins ex0  = {13'b?_???0_????_????};
       wildcard bins ex1  = {13'b?_???1_????_????};
-      wildcard bins us0  = {13'b?_??0?_????_????}; 
+      wildcard bins us0  = {13'b?_??0?_????_????};
       wildcard bins us1  = {13'b?_??1?_????_????};
-      wildcard bins se0  = {13'b?_?0??_????_????}; 
+      wildcard bins se0  = {13'b?_?0??_????_????};
       wildcard bins se1  = {13'b?_?1??_????_????};
-      wildcard bins u00  = {13'b?_0???_????_????}; 
+      wildcard bins u00  = {13'b?_0???_????_????};
       wildcard bins u01  = {13'b?_1???_????_????};
-      wildcard bins u10  = {13'b0_????_????_????}; 
+      wildcard bins u10  = {13'b0_????_????_????};
       wildcard ignore_bins u11 = {13'b1_????_????_????};
       illegal_bins illegal = default;
     }
 
     cp_cd_tag: coverpoint g_cheri_ex.u_cheri_ex.result_cap_o.valid iff (g_cheri_ex.u_cheri_ex.cheri_rf_we_o);
 
-    cp_cd_cor: coverpoint {g_cheri_ex.u_cheri_ex.result_cap_o.base_cor, 
-                           g_cheri_ex.u_cheri_ex.result_cap_o.top_cor} iff 
+    cp_cd_cor: coverpoint {g_cheri_ex.u_cheri_ex.result_cap_o.base_cor,
+                           g_cheri_ex.u_cheri_ex.result_cap_o.top_cor} iff
                           (g_cheri_ex.u_cheri_ex.cheri_rf_we_o && g_cheri_ex.u_cheri_ex.result_cap_o.valid) {
-      bins bin0 = {4'b0000}; 
-      bins bin1 = {4'b0001}; 
-      // bins bin2 = {4'b0011}; 
-      bins bin3 = {4'b1100}; 
-      // bins bin4 = {4'b1101}; 
-      // bins bin5 = {4'b1111}; 
+      bins bin0 = {4'b0000};
+      bins bin1 = {4'b0001};
+      // bins bin2 = {4'b0011};
+      bins bin3 = {4'b1100};
+      // bins bin4 = {4'b1101};
+      // bins bin5 = {4'b1111};
       illegal_bins illegal = default;
     }
 
     // addr/perm violations. this may cause either tag clearing or exception
-    cp_cheri_vio: coverpoint {g_cheri_ex.u_cheri_ex.perm_vio_vec, g_cheri_ex.u_cheri_ex.addr_bound_vio}  iff 
+    cp_cheri_vio: coverpoint {g_cheri_ex.u_cheri_ex.perm_vio_vec, g_cheri_ex.u_cheri_ex.addr_bound_vio}  iff
                             (g_cheri_ex.u_cheri_ex.cheri_exec_id_i) {
       wildcard bins bound = {10'b??_????_???1};
       wildcard bins tag   = {10'b??_????_??1?};
@@ -841,7 +841,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
       wildcard bins slc   = {10'b1?_????_????};
     }
 
-    cp_tag_clear_cs1cd: coverpoint fcov_tag_clear_cs1cd iff 
+    cp_tag_clear_cs1cd: coverpoint fcov_tag_clear_cs1cd iff
                                          (g_cheri_ex.u_cheri_ex.cheri_exec_id_i);
 
     // coverage points for exception conditions
@@ -880,7 +880,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
 
 
     cp_cheri_exception_reg_id: coverpoint g_cheri_ex.u_cheri_ex.cheri_wb_err_info_d[9:5] iff
-                          ((g_cheri_ex.u_cheri_ex.cheri_wb_err_d & !cheri_ops[CCSR_RW]) | 
+                          ((g_cheri_ex.u_cheri_ex.cheri_wb_err_d & !cheri_ops[CCSR_RW]) |
                           (g_cheri_ex.u_cheri_ex.lsu_req_o & g_cheri_ex.u_cheri_ex.lsu_cheri_err_o )) {
       wildcard illegal_bins illegal = {5'b1????} ;
     }
@@ -907,14 +907,14 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     cp_cpu_lsu_req: coverpoint g_cheri_ex.u_cheri_ex.cheri_ex_dv_ext_i.fcov_cpu_lsu_acc;
 
     cp_cpu_lsu_err: coverpoint g_cheri_ex.u_cheri_ex.cheri_ex_dv_ext_i.fcov_cpu_lsu_err;
- 
-    cp_lsu_xfer_size: coverpoint g_cheri_ex.u_cheri_ex.cheri_ex_dv_ext_i.fcov_ls_xfer_size iff 
+
+    cp_lsu_xfer_size: coverpoint g_cheri_ex.u_cheri_ex.cheri_ex_dv_ext_i.fcov_ls_xfer_size iff
                                  (g_cheri_ex.u_cheri_ex.cheri_ex_dv_ext_i.fcov_cpu_lsu_req) {
       bins good[] = {1, 2, 4, 8};
       illegal_bins illegal = default;
     }
 
-    cp_ls_room_cs1_chk: coverpoint g_cheri_ex.u_cheri_ex.cheri_ex_dv_ext_i.fcov_ls_cap_room_chk iff 
+    cp_ls_room_cs1_chk: coverpoint g_cheri_ex.u_cheri_ex.cheri_ex_dv_ext_i.fcov_ls_cap_room_chk iff
                                    (g_cheri_ex.u_cheri_ex.cheri_ex_dv_ext_i.fcov_cpu_lsu_req) {
       bins good[] = {0, 1};
       bins bad    = {2};
@@ -928,7 +928,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     cp_stkz_stall0: coverpoint g_cheri_ex.u_cheri_ex.cpu_stkz_stall0 iff
                                (g_cheri_ex.u_cheri_ex.cheri_ex_dv_ext_i.fcov_cpu_lsu_req);
 
-    cp_sktz_err: coverpoint g_cheri_ex.u_cheri_ex.cpu_stkz_err; 
+    cp_sktz_err: coverpoint g_cheri_ex.u_cheri_ex.cpu_stkz_err;
 
     cp_clsc_mem_err: coverpoint  load_store_unit_i.lsu_dv_ext_i.fcov_clsc_mem_err {
       illegal_bins illegal = {7};        // rsvd value
@@ -936,7 +936,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
 
     cp_cheri_fetch_vio: coverpoint if_stage_i.cheri_acc_vio iff (if_stage_i.fetch_valid);
 
-    cp_trvk_addr: coverpoint g_trvk_stage.cheri_trvk_stage_i.rf_trvk_addr_o[3:0] iff 
+    cp_trvk_addr: coverpoint g_trvk_stage.cheri_trvk_stage_i.rf_trvk_addr_o[3:0] iff
                              (g_trvk_stage.cheri_trvk_stage_i.rf_trvk_en_o);
 
     cp_trvk_cond: coverpoint {g_trvk_stage.cheri_trvk_stage_i.trvk_status,
@@ -946,7 +946,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
 
     cp_trvk_stall: coverpoint id_stage_i.stall_cheri_trvk;
 
-    cp_trvk_stall_cause: coverpoint id_stage_i.id_stage_dv_ext_i.fcov_trvk_stall_cause iff 
+    cp_trvk_stall_cause: coverpoint id_stage_i.id_stage_dv_ext_i.fcov_trvk_stall_cause iff
                                      (id_stage_i.stall_cheri_trvk) {
       wildcard bins cs1hz  = {3'b??1};
       wildcard bins cs2hz  = {3'b?1?};
@@ -971,12 +971,12 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
       bins store2idle = (2 => 0);
       bins store2load = (2 => 1);
     }
-    
+
     // this equalss the tbre req fifo depth
     cp_tbre_os_cnt : coverpoint cheri_tbre_wrapper_i.g_tbre.cheri_tbre_i.os_req_cnt {
       bins normal[] = {[0:4]};
       illegal_bins illegal = default;
-    } 
+    }
 
     cp_tbre_fifo_hazard : coverpoint {cheri_tbre_wrapper_i.g_tbre.cheri_tbre_i.tbre_dv_ext_i.fcov_tbre_fifo_hazard,
                                      cheri_tbre_wrapper_i.g_tbre.cheri_tbre_i.tbre_dv_ext_i.fcov_tbre_fifo_head_hazard} {
@@ -986,7 +986,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
 
     cp_tbre_mem_err: coverpoint cheri_tbre_wrapper_i.g_tbre.cheri_tbre_i.tbre_err_o;
 
-    cp_concur_mem_reqs: coverpoint {g_cheri_ex.u_cheri_ex.lsu_req_o, 
+    cp_concur_mem_reqs: coverpoint {g_cheri_ex.u_cheri_ex.lsu_req_o,
                                    cheri_tbre_wrapper_i.g_tbre.cheri_tbre_i.tbre_lsu_req_o,
                                    cheri_tbre_wrapper_i.g_stkz.cheri_stkz_i.stkz_lsu_req_o};
 
@@ -994,7 +994,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
       bins good[]      = {[0:2]};
       illegal_bins bad = default;
     }
-   
+
     cp_stkz_ztop_wr: coverpoint cheri_tbre_wrapper_i.g_stkz.cheri_stkz_i.stkz_dv_ext_i.fcov_ztop_wr_type iff
                                 (cheri_tbre_wrapper_i.g_stkz.cheri_stkz_i.stkz_dv_ext_i.ztop_wr_i);
 
@@ -1035,7 +1035,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
 //         binsof(cp_ls_error_exception) intersect {1'b1});
 //    }
 
-    `define ListOfInstrRegOperands  {InstrCategoryALU, InstrCategoryMul, \ 
+    `define ListOfInstrRegOperands  {InstrCategoryALU, InstrCategoryMul, \
                                      InstrCategoryDiv, InstrCategoryBranch, \
                                      InstrCategoryJump, InstrCategoryLoad, \
                                      InstrCategoryStore, InstrCategoryCSRAccess, \
@@ -1065,7 +1065,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     }
 
     pipe_cross: cross cp_id_instr_category, cp_if_stage_state, cp_id_stage_state, cp_wb_stage_state {
-      // QQQ IF stage shouldn't be idle unless when sleep or reset 
+      // QQQ IF stage shouldn't be idle unless when sleep or reset
       // ignore_bins ignore = (!binsof(cp_id_instr_category) intersect {InstrCategoryWFI, InstrCategoryNone} &&
       ignore_bins ignore0 = ( binsof(cp_if_stage_state) intersect {IFStageEmptyAndIdle, IFStageFullAndIdle});
       // When ID stage is empty the only legal instruction category is InstrCategoryNone. Conversly
@@ -1074,10 +1074,10 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
       illegal_bins illegal0 = (!binsof(cp_id_instr_category) intersect {InstrCategoryNone} &&
         binsof(cp_id_stage_state) intersect {PipeStageEmpty}) ||
       (binsof(cp_id_instr_category) intersect {InstrCategoryNone} &&
-        !binsof(cp_id_stage_state) intersect {PipeStageEmpty}); 
+        !binsof(cp_id_stage_state) intersect {PipeStageEmpty});
       // Impossible to have a case where WB is stalled but ID is not
       illegal_bins illegal1 = (binsof(cp_id_stage_state) intersect {PipeStageFullAndUnstalled}) &&
-                              (binsof(cp_wb_stage_state) intersect {PipeStageFullAndStalled}); 
+                              (binsof(cp_wb_stage_state) intersect {PipeStageFullAndStalled});
     }
 
     // interrupt_taken_instr_cross: cross cp_nmi_taken, instr_unstalled_last,
@@ -1100,7 +1100,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
          binsof(cp_stall_type_id) intersect {IdStallTypeInstr})
     ||
         // Only ALU, Mul, Div, Branch, Jump, Load, Store and CSR Access can see a load hazard stall
-        (!binsof(cp_id_instr_category) intersect `ListOfInstrRegOperands && 
+        (!binsof(cp_id_instr_category) intersect `ListOfInstrRegOperands &&
          binsof(cp_stall_type_id) intersect {IdStallTypeLdHz});
 
       // Cannot have a memory stall when we see an LS exception unless it is a load or store
@@ -1136,7 +1136,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     dummy_instr_config_cross: cross cp_dummy_instr_type, cp_dummy_instr_mask
                                 iff (cs_registers_i.dummy_instr_en_o);
 
-    rf_ecc_err_cross: cross ibex_core_dv_ext_i.fcov_rf_ecc_err_a_id, 
+    rf_ecc_err_cross: cross ibex_core_dv_ext_i.fcov_rf_ecc_err_a_id,
                             ibex_core_dv_ext_i.fcov_rf_ecc_err_b_id
                                 iff (id_stage_i.instr_valid_i);
 
@@ -1153,10 +1153,10 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     //
     // CHERIoT cross coverage
     //
-    
+
     // cs1/cs2/cd cross. QQQ need to further cross with instr types.
     rs_rd_cross: cross cp_rs1_addr, cp_rs2_addr, cp_rd_addr;
-   
+
     // Cap manipulation and tag clearing
     //  QQQ CAUIPCC/CJAL/CJALR needs to be treated separately since it's from PCC, not cs1
     `define ListOfCs1CdInstr {CSEAL, CUNSEAL, CSET_ADDR, CINC_ADDR, \
@@ -1165,19 +1165,19 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     `define ListOfPcc2CdInstr {CAUIPCC, CJAL, CJALR}
 
     cheri_cs1cd_tag_cross: cross cp_cs1_tag, cp_cd_tag, cp_cheri_instr_set {
-      ignore_bins ignore0 = 
+      ignore_bins ignore0 =
         ((!binsof(cp_cheri_instr_set) intersect `ListOfCs1CdInstr) ||
-        ((binsof(cp_cs1_tag) intersect {1'b0}) && (binsof(cp_cd_tag) intersect {1'b0}))); 
-      illegal_bins illegal = 
+        ((binsof(cp_cs1_tag) intersect {1'b0}) && (binsof(cp_cd_tag) intersect {1'b0})));
+      illegal_bins illegal =
         ((binsof(cp_cs1_tag) intersect {1'b0}) && (binsof(cp_cd_tag) intersect {1'b1}) &&
          (binsof(cp_cheri_instr_set) intersect `ListOfCs1CdInstr));
     }
 
     cheri_pcc2cd_tag_cross: cross cp_pcc_tag, cp_cd_tag, cp_cheri_instr_set {
-      ignore_bins ignore0 = 
+      ignore_bins ignore0 =
         ((!binsof(cp_cheri_instr_set) intersect `ListOfPcc2CdInstr) ||
-        ((binsof(cp_pcc_tag) intersect {1'b0}))); 
-      illegal_bins illegal = 
+        ((binsof(cp_pcc_tag) intersect {1'b0})));
+      illegal_bins illegal =
         ((binsof(cp_pcc_tag) intersect {1'b0}) && (binsof(cp_cd_tag) intersect {1'b1}) &&
          (binsof(cp_cheri_instr_set) intersect `ListOfPcc2CdInstr)) ||
         ((binsof(cp_pcc_tag) intersect {1'b1}) && (binsof(cp_cd_tag) intersect {1'b0}) &&
@@ -1185,32 +1185,32 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     }
 
     cheri_xfer_room_cross: cross cp_lsu_xfer_size, cp_ls_room_cs1_chk;
-    
+
     // non-load/store CHERI exceptions
     cheri_jump_exception_cross: cross cp_cheri_wb_exception_causes, cp_cheri_instr_set {
-      ignore_bins ignore0 = 
+      ignore_bins ignore0 =
         (!binsof(cp_cheri_instr_set) intersect {CJAL, CJALR}) ||
-        ((binsof(cp_cheri_instr_set) intersect {CJAL}) && (binsof(cp_cheri_wb_exception_causes) intersect {5'h2, 5'h3, 5'h11, 5'h18})) || 
-        ((binsof(cp_cheri_instr_set) intersect {CJALR}) && (binsof(cp_cheri_wb_exception_causes) intersect {5'h18}));  
+        ((binsof(cp_cheri_instr_set) intersect {CJAL}) && (binsof(cp_cheri_wb_exception_causes) intersect {5'h2, 5'h3, 5'h11, 5'h18})) ||
+        ((binsof(cp_cheri_instr_set) intersect {CJALR}) && (binsof(cp_cheri_wb_exception_causes) intersect {5'h18}));
     }
-    
+
     cheri_scr_exception_cross: cross cp_cheri_wb_exception_causes, cp_cheri_instr_set {
-      ignore_bins ignore0 = 
+      ignore_bins ignore0 =
         (!binsof(cp_cheri_instr_set) intersect {CCSR_RW}) ||
         (!binsof(cp_cheri_wb_exception_causes.perm_sr));
     }
-    
+
     // LSU access cross QQQ
 
     // IF fetch violation
     cheri_fetch_cross: cross cp_cheri_fetch_vio, cp_pcc_tag, cp_pcc_perm_ex, cp_pcc_otype {
-      illegal_bins illegal = (binsof(cp_cheri_fetch_vio) intersect {1'b0}) &&  
-                             ((binsof(cp_pcc_tag) intersect {1'b0})     || 
-                              (binsof(cp_pcc_perm_ex) intersect {1'b0}) || 
-                              (binsof(cp_pcc_otype) intersect {[1:7]})); 
+      illegal_bins illegal = (binsof(cp_cheri_fetch_vio) intersect {1'b0}) &&
+                             ((binsof(cp_pcc_tag) intersect {1'b0})     ||
+                              (binsof(cp_pcc_perm_ex) intersect {1'b0}) ||
+                              (binsof(cp_pcc_otype) intersect {[1:7]}));
     }
 
-    // trvk stall 
+    // trvk stall
     cheri_trvk_cross: cross cp_trvk_stall, cp_rd_a_hz, cp_rd_b_hz;
 
     // stkz ztop writes

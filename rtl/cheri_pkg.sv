@@ -299,9 +299,9 @@ package cheri_pkg;
   endfunction
 
   // set address of a capability
-  //   by default we check for representability only. 
+  //   by default we check for representability only.
   //   use checktop/checkbase to check explicitly against top33/base32 bounds (pcc updates)
-  //   * note, representability check in most cases (other than exp=24) covers the base32 check 
+  //   * note, representability check in most cases (other than exp=24) covers the base32 check
 
   function automatic full_cap_t set_address (full_cap_t in_cap, logic [31:0] newptr, logic chktop, logic chkbase);
     full_cap_t        out_cap;
@@ -450,7 +450,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     // also compare address >= old base 32 to handle exp=24 case
     //   exp = 24 case: can have addr < base (not covered by representibility checking);
     //   other exp cases: always addr >= base when out_cap.tag == 1
-    if ((top33req > in_cap.top33) || (addr < in_cap.base32)) 
+    if ((top33req > in_cap.top33) || (addr < in_cap.base32))
       out_cap.valid = 1'b0;
 
     return out_cap;
@@ -512,7 +512,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
     full_cap.top33  = get_bound33(reg_cap.top, reg_cap.top_cor, reg_cap.exp, addr);
     full_cap.base32 = get_bound33(reg_cap.base, reg_cap.base_cor, reg_cap.exp, addr);
-    // full_cap  = update_bounds(full_cap, addr);   // for some reason this increases area 
+    // full_cap  = update_bounds(full_cap, addr);   // for some reason this increases area
 
     full_cap.maska    = 0;
     full_cap.rlen     = 0;
@@ -547,8 +547,8 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
   function automatic full_cap_t pcc2fullcap (pcc_cap_t in_pcap);
     full_cap_t pcc_fullcap;
 
-    pcc_fullcap.valid    = in_pcap.valid;   
-    pcc_fullcap.exp      = in_pcap.exp; 
+    pcc_fullcap.valid    = in_pcap.valid;
+    pcc_fullcap.exp      = in_pcap.exp;
     pcc_fullcap.top33    = in_pcap.top33;
     pcc_fullcap.base32   = in_pcap.base32;
     pcc_fullcap.otype    = in_pcap.otype;
@@ -561,7 +561,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     pcc_fullcap.maska    = 0;             // not used in pcc_cap
     pcc_fullcap.rsvd     = in_pcap.rsvd;
     pcc_fullcap.rlen     = 0;             // not used in pcc_cap
- 
+
     return pcc_fullcap;
   endfunction
 
@@ -614,7 +614,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     logic                valid_in;
 
     valid_in      = msw[32] & addr33[32];
-    regcap.valid  = valid_in & ~clrperm[3];   
+    regcap.valid  = valid_in & ~clrperm[3];
 
     tmp32    = msw[CEXP_LO+:CEXP_W];
     if (tmp32 == RESETCEXP) tmp32 = RESETEXP;
@@ -627,7 +627,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     sealed = (regcap.otype != OTYPE_UNSEALED);
     cperms_mem      = msw[CPERMS_LO+:CPERMS_W];
     regcap.cperms   = mask_clcperms(cperms_mem, clrperm, valid_in, sealed);
-    addrmi9         = {1'b0, addr33[31:0]} >> regcap.exp;   // ignore the tag valid bit 
+    addrmi9         = {1'b0, addr33[31:0]} >> regcap.exp;   // ignore the tag valid bit
     tmp4            = update_temp_fields(regcap.top, regcap.base, addrmi9);
     regcap.top_cor  = tmp4[3:2];
     regcap.base_cor = tmp4[1:0];
@@ -670,7 +670,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
     // lsw is now EXP+B+T+A
     valid_in      = msw[32] & lsw[32];
-    regcap.valid  = valid_in & ~clrperm[3];   
+    regcap.valid  = valid_in & ~clrperm[3];
     regcap.exp    = (lsw[30:27] == RESETCEXP) ?  RESETEXP : {1'b0, lsw[30:27]};
     regcap.base   = lsw[26:18];
     regcap.top    = lsw[17:9];
@@ -744,7 +744,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
   endfunction
 
-  // simply cast regcap to a 38-bit vector. 
+  // simply cast regcap to a 38-bit vector.
   // we can do this with systemverilog casting but let's be explicit here
   function automatic logic [REGCAP_W-1:0] reg2vec (reg_cap_t regcap);
 
@@ -767,27 +767,27 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
     reg_cap_t regcap;
 
-    regcap.valid    = vec_in[REGCAP_W-1];  
-    regcap.top_cor  = vec_in[35+:2];       
-    regcap.base_cor = vec_in[33+:2];       
-    regcap.exp      = vec_in[28+:EXP_W];   
-    regcap.top      = vec_in[19+:TOP_W];   
-    regcap.base     = vec_in[10+:BOT_W];   
-    regcap.otype    = vec_in[7+:OTYPE_W];  
-    regcap.rsvd     = vec_in[6+:1];  
-    regcap.cperms   = vec_in[0+:CPERMS_W]; 
+    regcap.valid    = vec_in[REGCAP_W-1];
+    regcap.top_cor  = vec_in[35+:2];
+    regcap.base_cor = vec_in[33+:2];
+    regcap.exp      = vec_in[28+:EXP_W];
+    regcap.top      = vec_in[19+:TOP_W];
+    regcap.base     = vec_in[10+:BOT_W];
+    regcap.otype    = vec_in[7+:OTYPE_W];
+    regcap.rsvd     = vec_in[6+:1];
+    regcap.cperms   = vec_in[0+:CPERMS_W];
 
     return regcap;
   endfunction
 
   // test whether 2 caps are equal
-  function automatic logic is_equal (full_cap_t cap_a, full_cap_t cap_b, 
+  function automatic logic is_equal (full_cap_t cap_a, full_cap_t cap_b,
                                      logic [31:0] addra, logic[31:0] addrb);
 
     is_equal =  (cap_a.valid  == cap_b.valid) &&
                 (cap_a.top  == cap_b.top) && (cap_a.base == cap_b.base) &&
-                (cap_a.cperms  == cap_b.cperms) && (cap_a.rsvd == cap_b.rsvd) && 
-                (cap_a.exp    == cap_b.exp) && (cap_a.otype  == cap_b.otype) && 
+                (cap_a.cperms  == cap_b.cperms) && (cap_a.rsvd == cap_b.rsvd) &&
+                (cap_a.exp    == cap_b.exp) && (cap_a.otype  == cap_b.otype) &&
                 (addra == addrb);
     return is_equal;
 
@@ -859,11 +859,11 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
   parameter logic [3:0] PVIO_ASR   = 4'h6;
   parameter logic [3:0] PVIO_ALIGN = 4'h7;
   parameter logic [3:0] PVIO_SLC   = 4'h8;
-  
+
 
   function automatic logic [4:0] vio_cause_enc (logic bound_vio, logic[W_PVIO-1:0] perm_vio_vec);
     logic [4:0] vio_cause;
-    
+
     if (perm_vio_vec[PVIO_TAG])
       vio_cause = 5'h2;
     else if (perm_vio_vec[PVIO_SEAL])
@@ -887,5 +887,5 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
     return vio_cause;
   endfunction
- 
+
 endpackage

@@ -75,12 +75,12 @@ Exceptions are generated in the case of access rule violations.
 
 The cheriot-ibex CLC implementation provides an optional load-filter feature. When enabled (cheri_tsafe_en_i == 1), the CLC instruction checks a memory area which contains shadow bits for the heap memory data at 8-byte granularity. The tag bit of the loaded capability is cleared if the corresponding shadow bits == 1 (revoked). The shadow bits are accessed through a dedicated memory interface (tsmap_*).
 
-## Integrated hardware accelerators 
+## Integrated hardware accelerators
 
 When configured accordingly, cheriot-ibex contains 2 internal tightly-coupled hardware accelerators,
 - The background revocation engine (TBRE). The TBRE engine is controlled by a memory-mapped registor interface. When activated, the engine scans a designated memory region and check all capabilities stored in the region against the revocation shadowbits area. If a match is found, the tag of the capability is cleared and stored back to the same memory location.
 - The stack zerorization engine (STKZ). The STKZ engine is controlled by the special capability register ZTOPC. The STKZ is used to zeroize a (stack) memory region as specified by ZTOPC, in order to facilitate context switching.
-  
+
 Note that the main CPU pipeline, TBRE and STKZ all use the load-store unit to access the data memory space. The priorities in the case of contention are,
 1. CPU pipeline (highest priority)
 2. STKZ
@@ -116,9 +116,9 @@ To debug capability-related software issues, cheriot-ibex also provides a debug 
 
 ## Timing, area and power
 
-A PPA study conducted at Microsoft shows that cheriot-ibex is similar to the original ibex design in terms of area and power, however with moderate increase in area. 
+A PPA study conducted at Microsoft shows that cheriot-ibex is similar to the original ibex design in terms of area and power, however with moderate increase in area.
 
-cheriot-ibex (configured as 3-stage pipeline) has been synthesized successfully using Synopsys DC-topo at 250MHz using TSMC 28nm (28LP) libraries (ss 1.03v) and 550MHz using TSMC 5nm (N5) libraries (ss 0.6v). Timing is mostly limited by TCM read access time (which approaches 1.6ns in the N5 case). 
+cheriot-ibex (configured as 3-stage pipeline) has been synthesized successfully using Synopsys DC-topo at 250MHz using TSMC 28nm (28LP) libraries (ss 1.03v) and 550MHz using TSMC 5nm (N5) libraries (ss 0.6v). Timing is mostly limited by TCM read access time (which approaches 1.6ns in the N5 case).
 
 The design area is ~60k gate equivalents (~25% more the original ibex design). Both dynamic and leakage power are shown as similar to the original ibex design.
 
@@ -126,5 +126,4 @@ The design area is ~60k gate equivalents (~25% more the original ibex design). B
 ## Build the design for simulation and emulation
 See [README-CHERI.md](https://github.com/microsoft/cheriot-ibex/blob/main/README-CHERI.md) for the list of RTL files need to compile/simulate/synthesize the cheriot_ibex design.
 
-In addition, [cheriot-safe](https://github.com/microsoft/cheriot-safe) provides an open-source FPGA platform for emulation and prototyping. 
-
+In addition, [cheriot-safe](https://github.com/microsoft/cheriot-safe) provides an open-source FPGA platform for emulation and prototyping.

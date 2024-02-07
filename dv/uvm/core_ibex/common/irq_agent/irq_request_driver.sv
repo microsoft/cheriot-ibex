@@ -78,4 +78,3 @@ class irq_request_driver extends uvm_driver #(irq_seq_item);
   endtask : drive_reset_value
 
 endclass : irq_request_driver
-

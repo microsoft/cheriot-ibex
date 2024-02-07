@@ -234,7 +234,7 @@ module ibex_controller #(
   // to pc_set_o.  Clear when controller is in FLUSH so it won't remain set
   // once illegal instruction is handled.
   // All terms in this expression are qualified by instr_valid_i
-  assign illegal_insn_d = (illegal_insn_i | illegal_dret | illegal_umode | (cheri_pmode_i & illegal_mret_cheri)) & 
+  assign illegal_insn_d = (illegal_insn_i | illegal_dret | illegal_umode | (cheri_pmode_i & illegal_mret_cheri)) &
                           (ctrl_fsm_cs != FLUSH);
   assign cheri_ex_err_d = cheri_pmode_i & cheri_ex_err & (ctrl_fsm_cs != FLUSH);
 
@@ -764,7 +764,7 @@ module ibex_controller #(
                   exc_cause_o = EXC_CAUSE_STORE_ADDR_MISALIGN;
                   csr_mtval_o = lsu_addr_last_i;
                 end else begin
-                  exc_cause_o = EXC_CAUSE_CHERI_FAULT; 
+                  exc_cause_o = EXC_CAUSE_CHERI_FAULT;
                   csr_mtval_o = cheri_wb_err_info_i[10:0];
                 end
               end else begin
@@ -789,7 +789,7 @@ module ibex_controller #(
             cheri_ex_err_prio: begin
               if (cheri_pmode_i) begin
                 exc_cause_o = EXC_CAUSE_CHERI_FAULT;
-                csr_mtval_o = cheri_ex_err_info_i[10:0];        
+                csr_mtval_o = cheri_ex_err_info_i[10:0];
               end
             end
             cheri_wb_err_prio: begin

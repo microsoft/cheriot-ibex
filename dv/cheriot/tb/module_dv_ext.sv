@@ -57,7 +57,7 @@ module ibex_id_stage_dv_ext (
 
   assign fcov_trvk_stall_cause[0] = rf_ren_a && ~rf_reg_rdy_i[rf_raddr_a_o];
   assign fcov_trvk_stall_cause[1] = rf_ren_b && ~rf_reg_rdy_i[rf_raddr_b_o];
-  assign fcov_trvk_stall_cause[2] = cheri_rf_we && ~rf_reg_rdy_i[rf_waddr_id_o]; 
+  assign fcov_trvk_stall_cause[2] = cheri_rf_we && ~rf_reg_rdy_i[rf_waddr_id_o];
 
 
 endmodule
@@ -122,8 +122,8 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic         cheri_err_q,
   input  logic         resp_is_tbre_q,
   input  cap_rx_fsm_t  cap_rx_fsm_q,
-  input  logic         data_we_q,  
-  input  logic         cap_lsw_err_q  
+  input  logic         data_we_q,
+  input  logic         cap_lsw_err_q
 
 );
   // Set when awaiting the response for the second half of a misaligned access
@@ -191,11 +191,11 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
           fcov_clsc_mem_err = 3'h5;       // csc word 1 error only
        else if (~data_err_i & data_we_q & cap_lsw_err_q)
           fcov_clsc_mem_err = 3'h6;       // csc word 0 error only
-       else 
+       else
           fcov_clsc_mem_err = 3'h0;       // no error;
      end
    end
-    
+
 
 
 
@@ -210,7 +210,7 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   `ASSERT_KNOWN(IbexDataTypeQKnown, data_type_q)
   `ASSERT(IbexLsuStateValid, ls_fsm_cs inside {
       IDLE, WAIT_GNT_MIS, WAIT_RVALID_MIS, WAIT_GNT,
-      WAIT_RVALID_MIS_GNTS_DONE, 
+      WAIT_RVALID_MIS_GNTS_DONE,
       CTX_WAIT_GNT1, CTX_WAIT_GNT2, CTX_WAIT_RESP})
 
   // Address must not contain X when request is sent.
@@ -242,8 +242,8 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic [1:0]     rv32_lsu_type_i,
   input  logic           cheri_lsu_err,
   input  logic           rv32_lsu_err,
-  input  logic           lsu_req_o,   
-  input  logic           lsu_req_done_i,   
+  input  logic           lsu_req_o,
+  input  logic           lsu_req_done_i,
   input  logic [31:0]    cpu_lsu_addr,
   input  logic           cpu_lsu_we
   );
@@ -251,8 +251,8 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   // assertion: STKZ active won't change in the middle of load/store (thus lsu_req will stay asserted till req_done)
   logic       outstanding_lsu_req;
 
-  typedef enum logic [3:0] {ACC_NULL, CAP_RD, CAP_WR, BYTE_RD, BYTE_WR, 
-                            HW_RD_ALIGNED, HW_RD_UNALIGNED, HW_WR_ALIGNED, HW_WR_UNALIGNED, 
+  typedef enum logic [3:0] {ACC_NULL, CAP_RD, CAP_WR, BYTE_RD, BYTE_WR,
+                            HW_RD_ALIGNED, HW_RD_UNALIGNED, HW_WR_ALIGNED, HW_WR_UNALIGNED,
                             WORD_RD_ALIGNED, WORD_RD_UNALIGNED, WORD_WR_ALIGNED, WORD_WR_UNALIGNED
                             } lsu_acc_type_e;
 
@@ -268,12 +268,12 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
         outstanding_lsu_req <= 1'b1;
     end
   end
-  `ASSERT(IbexLsuReqStable, (outstanding_lsu_req) |-> ($stable(pc_id_i) && $stable(instr_valid_i) && 
-                                                       $stable(cpu_lsu_we))) 
+  `ASSERT(IbexLsuReqStable, (outstanding_lsu_req) |-> ($stable(pc_id_i) && $stable(instr_valid_i) &&
+                                                       $stable(cpu_lsu_we)))
   // Cheri and RV32 LSU req can't both be active per decoder
-  `ASSERT(IbexLsuReqSrc, !(cheri_lsu_req & rv32_lsu_req_i)) 
+  `ASSERT(IbexLsuReqSrc, !(cheri_lsu_req & rv32_lsu_req_i))
 
-  // Functional coverage signals 
+  // Functional coverage signals
 
   `DV_FCOV_SIGNAL(logic, cpu_lsu_req, cheri_lsu_req | rv32_lsu_req_i);
   `DV_FCOV_SIGNAL(logic, cpu_lsu_err, (cheri_lsu_err | rv32_lsu_err) && (cheri_lsu_req | rv32_lsu_req_i));
@@ -304,7 +304,7 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
       fcov_cpu_lsu_acc = BYTE_RD;
     else if (rv32_lsu_req_i)
       fcov_cpu_lsu_acc = BYTE_WR;
-      
+
   end
 
   logic [3:0]  fcov_ls_xfer_size;
@@ -315,9 +315,9 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
     if (cheri_lsu_req)
       fcov_room_in_cs1_cap = u_cheri_ex.rf_fullcap_a.top33 - u_cheri_ex.cheri_ls_chkaddr;
     else if (rv32_lsu_req_i)
-      fcov_room_in_cs1_cap = u_cheri_ex.rf_fullcap_a.top33 - u_cheri_ex.rv32_ls_chkaddr + 
+      fcov_room_in_cs1_cap = u_cheri_ex.rf_fullcap_a.top33 - u_cheri_ex.rv32_ls_chkaddr +
                              {u_cheri_ex.addr_incr_req_i, 2'b00};
-    else 
+    else
       fcov_room_in_cs1_cap = 0;
 
     if (cheri_lsu_req)
@@ -331,7 +331,7 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
     else
       fcov_ls_xfer_size = 4'h0;
 
-    fcov_ls_cap_room_chk = (fcov_room_in_cs1_cap > fcov_ls_xfer_size) ? 0 : 
+    fcov_ls_cap_room_chk = (fcov_room_in_cs1_cap > fcov_ls_xfer_size) ? 0 :
                            (fcov_room_in_cs1_cap == fcov_ls_xfer_size)? 1 : 2;
   end
 
@@ -339,7 +339,7 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
       (csr_op_o == CHERI_CSR_RW) && csr_access_o & ~csr_op_en_o & cheri_operator_i[CCSR_RW] & cheri_exec_id_i)
   `DV_FCOV_SIGNAL(logic, scr_write,
       (csr_op_o == CHERI_CSR_RW) && csr_op_en_o & cheri_operator_i[CCSR_RW] & cheri_exec_id_i)
- 
+
 endmodule
 
 ////////////////////////////////////////////////////////////////
@@ -349,7 +349,7 @@ endmodule
 module cheri_trvk_stage_dv_ext (
   input  logic                clk_i,
   input  logic                rst_ni,
- 
+
   input  logic                rf_trsv_en_i,
   input  logic [4:0]          rf_trsv_addr_i,
   input  logic [4:0]          rf_trvk_addr_o,
@@ -362,7 +362,7 @@ module cheri_trvk_stage_dv_ext (
   int         outstanding_trsv_cnt;
 
   // make sure all trsv reqs will be mapped to a trvk, in order.
-  initial begin 
+  initial begin
     int i;
 
     tqueue = {};
@@ -434,14 +434,14 @@ module cheri_tbre_dv_ext (
     logic [1:0] fifo_index;
 
     @(posedge rst_ni);
-   
+
     while (1) begin
       @(posedge clk_i);
       if (snoop_lsu_req_done_i) begin
         // search through req_fifo for hazard/collision case
         fcov_tbre_fifo_hazard      = 1'b0;
         fcov_tbre_fifo_head_hazard = 1'b0;
-        
+
         for (i = 0; i < req_fifo_depth; i++) begin
           fifo_index = cheri_tbre_i.fifo_rd_ptr + i;
           if (snoop_lsu_req_done_i & snoop_lsu_we_i & cheri_tbre_i.req_fifo_mem[fifo_index][21] &&
@@ -454,7 +454,7 @@ module cheri_tbre_dv_ext (
       end else begin
         fcov_tbre_fifo_hazard      = 1'b0;
         fcov_tbre_fifo_head_hazard = 1'b0;
-      end 
+      end
     end
   end
 
@@ -463,7 +463,7 @@ module cheri_tbre_dv_ext (
     fcov_tbre_done_addr  = 0;
     fcov_snoop_done_addr = 0;
     @(posedge rst_ni);
-   
+
     while (1) begin
       @(posedge clk_i);
       if (lsu_tbre_req_done_i) fcov_tbre_done_addr = tbre_lsu_addr_o;
@@ -493,12 +493,12 @@ module cheri_stkz_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
 
   always_comb begin
     if (ztop_wfcap_i.valid && (ztop_wfcap_i.base32 != ztop_wdata_i))
-      fcov_ztop_wr_type = 2'h0;           
+      fcov_ztop_wr_type = 2'h0;
     else if  (ztop_wfcap_i.valid)
       fcov_ztop_wr_type = 2'h1;
     else if ((ztop_wfcap_i == NULL_FULL_CAP) && (ztop_wdata_i == 0))
       fcov_ztop_wr_type = 2'h2;
-    else 
+    else
       fcov_ztop_wr_type = 2'h3;
   end
 
@@ -557,7 +557,7 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
 
     `ASSERT(NoMemRFWriteWithoutPendingLoad, rf_we_lsu |-> outstanding_load_resp, clk_i, !rst_ni)
   end
-  
+
   if (~u_ibex_core.CheriTBRE) begin
   `ASSERT(NoMemResponseWithoutPendingAccess,
     // this doesn't work for CLC since 1st data_rvalid comes back before wb
@@ -586,7 +586,7 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
       `ASSERT(CheriWrRegs, u_ibex_core.rf_we_wb |-> instr_done_wb, clk_i, !rst_ni)
     end
   end
- 
+
   // These assertions are in top-level as instr_valid_id required as the enable term
   `ASSERT(IbexCsrOpValid, u_ibex_core.instr_valid_id |-> u_ibex_core.csr_op inside {
       CSR_OP_READ,
@@ -675,19 +675,19 @@ module ibex_top_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
 
   `ASSERT_KNOWN(IbexDataGntX, data_gnt_i)
   `ASSERT_KNOWN(IbexDataRValidX, data_rvalid_i)
-  
+
   // kliu - check data_rdata_i for reads only (FPGA ram model drives rdata for writes also)
   logic [3:0]  data_be_q;
   logic [32:0] data_strb;
 
-  assign data_strb = {|data_be_q, {8{data_be_q[3]}}, {8{data_be_q[2]}}, {8{data_be_q[1]}}, {8{data_be_q[0]}}} & 
+  assign data_strb = {|data_be_q, {8{data_be_q[3]}}, {8{data_be_q[2]}}, {8{data_be_q[1]}}, {8{data_be_q[0]}}} &
                      {33{~u_ibex_core.load_store_unit_i.data_we_q}};
   always @(posedge clk_i, negedge rst_ni) begin
     if (~rst_ni) data_be_q <= 4'h0;
     else if (data_req_o && data_gnt_i) data_be_q <= data_be_o;
   end
-  
-  `ASSERT_KNOWN_IF(IbexDataRPayloadX, {(data_strb & {33{~data_err_i}} &  data_rdata_i), 
+
+  `ASSERT_KNOWN_IF(IbexDataRPayloadX, {(data_strb & {33{~data_err_i}} &  data_rdata_i),
     ({7{~u_ibex_core.load_store_unit_i.data_we_q}} & data_rdata_intg_i), data_err_i}, data_rvalid_i)
 
   `ASSERT_KNOWN(IbexIrqX, {irq_software_i, irq_timer_i, irq_external_i, irq_fast_i, irq_nm_i})

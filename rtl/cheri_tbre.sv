@@ -5,13 +5,13 @@
 
 module cheri_tbre #(
   parameter int unsigned FifoSize = 4,        // must be power-of-2
-  parameter int unsigned AddrHi = 31 
+  parameter int unsigned AddrHi = 31
 ) (
    // Clock and Reset
   input  logic          clk_i,
   input  logic          rst_ni,
 
-  // MMIO register interface 
+  // MMIO register interface
   input  logic [65:0]   tbre_ctrl_vec_i,
   output logic          tbre_stat_o,
   output logic          tbre_err_o,
@@ -20,8 +20,8 @@ module cheri_tbre #(
   input  logic          lsu_tbre_resp_valid_i,
   input  logic          lsu_tbre_resp_err_i,
   input  logic          lsu_tbre_resp_is_wr_i,
-  input  logic [32:0]   lsu_tbre_raw_lsw_i,   
-  input  logic          lsu_tbre_req_done_i,   
+  input  logic [32:0]   lsu_tbre_raw_lsw_i,
+  input  logic          lsu_tbre_req_done_i,
   input  logic          lsu_tbre_addr_incr_i,
   output logic          tbre_lsu_req_o,
   output logic          tbre_lsu_is_cap_o,
@@ -30,7 +30,7 @@ module cheri_tbre #(
   output logic [32:0]   tbre_lsu_wdata_o,
 
   // LSU snoop interface
-  input  logic          snoop_lsu_req_done_i,   
+  input  logic          snoop_lsu_req_done_i,
   input  logic          snoop_lsu_req_i,
   input  logic          snoop_lsu_is_cap_i,
   input  logic          snoop_lsu_we_i,
@@ -60,9 +60,9 @@ module cheri_tbre #(
   logic [AddrHi-3:0]     cur_load_addr8, load_addr8_p1;
   logic [FifoPtrW:0]     req_fifo_ext_wr_ptr, cap_fifo_ext_wr_ptr, shdw_fifo_ext_wr_ptr;
   logic [FifoPtrW:0]     os_req_cnt;
-  logic [FifoPtrW:0]     fifo_ext_rd_ptr;    
+  logic [FifoPtrW:0]     fifo_ext_rd_ptr;
   logic [FifoPtrW-1:0]   req_fifo_wr_ptr, cap_fifo_wr_ptr, shdw_fifo_wr_ptr;
-  logic [FifoPtrW-1:0]   fifo_rd_ptr;    
+  logic [FifoPtrW-1:0]   fifo_rd_ptr;
   logic                  shdw_fifo_wr_data;
   logic [CapFifoDW-1:0]  cap_fifo_wr_data;
   logic [ReqFifoDW-1:0]  req_fifo_wr_data;
@@ -70,7 +70,7 @@ module cheri_tbre #(
   logic [31:0]           fifo_rd_data;
   logic [AddrHi-3:0]     fifo_rd_addr8;
   logic                  fifo_not_empty;
-  
+
 
   typedef enum logic [1:0] {TBRE_IDLE, TBRE_LOAD, TBRE_WAIT} tbre_fsm_t;
   tbre_fsm_t tbre_fsm_q, tbre_fsm_d;
@@ -94,14 +94,14 @@ module cheri_tbre #(
   assign tbre_ctrl.end_addr   = tbre_ctrl_vec_i[63:32];
   assign tbre_stat_o          = (tbre_fsm_q != TBRE_IDLE);
 
-  // QQQ note having resp_valid here improves performance but making timing a bit worse 
+  // QQQ note having resp_valid here improves performance but making timing a bit worse
   //     (data_rvalid --> tbre_lsu_req --> core/tbre mux select --> data_wdata_o
   assign tbre_lsu_req_o    = ((tbre_sch_q == SCH_LOAD) | ((tbre_sch_q == SCH_STORE) && store_req_valid)) & (~wait_resp_q |  (lsu_tbre_resp_valid_i & ~tbre_ctrl.add1wait));
   assign tbre_lsu_is_cap_o = (tbre_sch_q == SCH_LOAD);
   assign tbre_lsu_we_o     = (tbre_sch_q == SCH_STORE);
   assign tbre_lsu_addr_o   = (tbre_sch_q == SCH_LOAD) ? load_addr + {lsu_tbre_addr_incr_i, 2'b00} : store_addr;
   assign tbre_lsu_wdata_o  = {1'b0, fifo_rd_data};
-         
+
   assign load_addr8_p1     = cur_load_addr8 + 1;
 
   assign load_stop_cond  = (load_addr8_p1 > tbre_ctrl.end_addr[AddrHi:3]);
@@ -109,10 +109,10 @@ module cheri_tbre #(
   assign store_gnt       = (tbre_sch_q == SCH_STORE) & lsu_tbre_req_done_i;
 
   // expand load/store address by concatnating the MSB from start_address (save some area)
-  assign load_addr       = (AddrHi >= 31) ? {cur_load_addr8, 3'b000} : 
-                           {tbre_ctrl.start_addr[31:AddrHi+1], cur_load_addr8, 3'b000}; 
-  assign store_addr      = (AddrHi >= 31) ? {fifo_rd_addr8, 3'b000} : 
-                           {tbre_ctrl.start_addr[31:AddrHi+1], fifo_rd_addr8, 3'b000}; 
+  assign load_addr       = (AddrHi >= 31) ? {cur_load_addr8, 3'b000} :
+                           {tbre_ctrl.start_addr[31:AddrHi+1], cur_load_addr8, 3'b000};
+  assign store_addr      = (AddrHi >= 31) ? {fifo_rd_addr8, 3'b000} :
+                           {tbre_ctrl.start_addr[31:AddrHi+1], fifo_rd_addr8, 3'b000};
 
   always_comb begin
     logic load_stall, req_fifo_full;
@@ -131,13 +131,13 @@ module cheri_tbre #(
     //   TBRE assumes a non-buffered memory model (new req won't be gnt'd if the prev response
     //   still outstanding). If not, we have to change this to throttle on resp as well since
     //   the load_store_unit can't handle multiple outstanding requests.
- 
+
     load_stall    = (os_req_cnt >= FifoSize-1);
     req_fifo_full = (os_req_cnt >= FifoSize);
 
     tbre_sch_d = tbre_sch_q;   // default
-    case (tbre_sch_q) 
-      SCH_NONE: 
+    case (tbre_sch_q)
+      SCH_NONE:
         if ((tbre_fsm_q == TBRE_LOAD) && !req_fifo_full)
           tbre_sch_d = SCH_LOAD;
         else if (store_req_valid)
@@ -155,7 +155,7 @@ module cheri_tbre #(
       default:;
     endcase
   end
-  
+
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       tbre_fsm_q      <= TBRE_IDLE;
@@ -207,7 +207,7 @@ module cheri_tbre #(
       if (fifo_rd_en) fifo_ext_rd_ptr <= fifo_ext_rd_ptr + 1;
 
       if (req_fifo_wr_en)  req_fifo_ext_wr_ptr  <= req_fifo_ext_wr_ptr + 1;
-      if (cap_fifo_wr_en)  cap_fifo_ext_wr_ptr  <= cap_fifo_ext_wr_ptr + 1;      
+      if (cap_fifo_wr_en)  cap_fifo_ext_wr_ptr  <= cap_fifo_ext_wr_ptr + 1;
       if (shdw_fifo_wr_en) shdw_fifo_ext_wr_ptr <= shdw_fifo_ext_wr_ptr + 1;
     end
   end
@@ -215,11 +215,11 @@ module cheri_tbre #(
   logic [FifoSize-1:0][ReqFifoDW-1:0] req_fifo_mem;          // packed entry: addr, valid, 32-bit data
   logic [FifoSize-1:0][CapFifoDW-1:0] cap_fifo_mem;          // packed entry: addr, valid, 32-bit data
   logic [FifoSize-1:0]                shdw_fifo_mem;         // single shadow bit per entry
-  
+
   for (genvar i= 0; i < FifoSize; i++) begin : gen_fifo_mem
     logic [28:0] req_fifo_item_addr8;
-    assign req_fifo_item_addr8 = (AddrHi >= 31) ? req_fifo_mem[i][AddrHi-3:0] : 
-                           {tbre_ctrl.start_addr[31:AddrHi+1], req_fifo_mem[i][AddrHi-3:0]}; 
+    assign req_fifo_item_addr8 = (AddrHi >= 31) ? req_fifo_mem[i][AddrHi-3:0] :
+                           {tbre_ctrl.start_addr[31:AddrHi+1], req_fifo_mem[i][AddrHi-3:0]};
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
         req_fifo_mem[i]  <= 0;
@@ -227,8 +227,8 @@ module cheri_tbre #(
         shdw_fifo_mem[i] <= 1'b0;
       end else begin
         // monitoring the ongoing writes to LSU to detect collisiona
-        // also  what about a collision between write request and head of the FIFO? 
-        if (req_fifo_wr_en && (i == req_fifo_wr_ptr)) 
+        // also  what about a collision between write request and head of the FIFO?
+        if (req_fifo_wr_en && (i == req_fifo_wr_ptr))
           req_fifo_mem[i] <= req_fifo_wr_data;
         else if ((req_fifo_item_addr8 == snoop_lsu_addr_i[31:3]) && snoop_lsu_req_done_i && snoop_lsu_we_i)
           req_fifo_mem[i] <= req_fifo_mem[i] & {1'b0, {(AddrHi-2){1'b1}}};
@@ -248,10 +248,10 @@ module cheri_tbre #(
   assign fifo_rd_shdw   = shdw_fifo_mem[fifo_rd_ptr];
 
   // only issue invalidation store requests if
-  //   valid cap returned && no write collision on the address && shadow_bit == 1 
+  //   valid cap returned && no write collision on the address && shadow_bit == 1
   assign store_req_valid = fifo_not_empty & fifo_rd_tag & fifo_rd_shdw & fifo_rd_valid & ~fifo_rd_err;
 
-  assign fifo_not_empty = (req_fifo_ext_wr_ptr  != fifo_ext_rd_ptr) && 
+  assign fifo_not_empty = (req_fifo_ext_wr_ptr  != fifo_ext_rd_ptr) &&
                           (cap_fifo_ext_wr_ptr  != fifo_ext_rd_ptr) &&
                           (shdw_fifo_ext_wr_ptr != fifo_ext_rd_ptr);
 
@@ -265,5 +265,5 @@ module cheri_tbre #(
 
   assign shdw_fifo_wr_en   = trvk_en_i;
   assign shdw_fifo_wr_data = trvk_clrtag_i;
-  
+
 endmodule

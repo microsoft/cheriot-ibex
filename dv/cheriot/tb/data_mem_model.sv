@@ -5,16 +5,16 @@
 //
 // data interface/memory model
 //
-module data_mem_model ( 
+module data_mem_model (
   input  logic              clk,
   input  logic              rst_n,
 
-  input  logic [2:0]        ERR_RATE,   
+  input  logic [2:0]        ERR_RATE,
   input  logic [3:0]        GNT_WMAX,
   input  logic [3:0]        RESP_WMAX,
 
   input  logic              err_enable,
- 
+
   input  logic              data_req,
   input  logic              data_we,
   input  logic [3:0]        data_be,
@@ -33,13 +33,13 @@ module data_mem_model (
   output logic [127:0]      mmreg_corein,
   input  logic [63:0]       mmreg_coreout,
 
-  output logic [3:0]        err_enable_vec, 
+  output logic [3:0]        err_enable_vec,
   output logic [2:0]        intr_ack
 );
- 
-  localparam int unsigned DRAM_AW     = 16; 
 
-  localparam int unsigned TSRAM_AW    = 10; 
+  localparam int unsigned DRAM_AW     = 16;
+
+  localparam int unsigned TSRAM_AW    = 10;
   localparam int unsigned NMMRI       = 128/32;
   localparam int unsigned NMMRO       = 64/32;
 
@@ -65,8 +65,8 @@ module data_mem_model (
   logic                tsram_p0_err_schd;
   logic [TSRAM_AW-1:0] tsram_p1_addr32;
 
-  logic [NMMRO-1:0][31:0] mmreg_coreout_regs; 
-  logic [NMMRI-1:0][31:0] mmreg_corein_regs; 
+  logic [NMMRO-1:0][31:0] mmreg_coreout_regs;
+  logic [NMMRI-1:0][31:0] mmreg_corein_regs;
   logic [31:0]            mmreg_rdata;
   logic                   mmreg_sel, mmreg_cs;
   logic [7:0]             mmreg_addr32;
@@ -104,19 +104,19 @@ module data_mem_model (
   //
   // Tracking CPU execution of startup/exception handler and
   // suppress error injection during the phase
-  // 
-  
+  //
+
   assign data_req_isr = dut.u_ibex_top.u_ibex_core.id_stage_i.instr_executing &
                         dut.u_ibex_top.u_ibex_core.load_store_unit_i.lsu_req_i &
                         ~dut.u_ibex_top.u_ibex_core.load_store_unit_i.cur_req_is_tbre &
-                        (dut.u_ibex_top.u_ibex_core.id_stage_i.pc_id_i >= 32'h8000_0000) & 
+                        (dut.u_ibex_top.u_ibex_core.id_stage_i.pc_id_i >= 32'h8000_0000) &
                         (dut.u_ibex_top.u_ibex_core.id_stage_i.pc_id_i < 32'h8000_0200);
   //
   // memory signals (sampled @posedge clk)
   //
   logic dram_sel_q, tsram_p0_sel_q, mmreg_sel_q;
 
-  assign mem_rdata = dram_sel_q ? dram_rdata : (tsram_p0_sel_q ? {1'b0, tsram_p0_rdata} : 
+  assign mem_rdata = dram_sel_q ? dram_rdata : (tsram_p0_sel_q ? {1'b0, tsram_p0_rdata} :
                                               (mmreg_sel_q ? {1'b0, mmreg_rdata} : 33'h0));
   // mem_err is in themem_cs
   assign mem_err   = ~mem_req_isr & dram_sel ? dram_err_schd : (tsram_p0_sel ? tsram_p0_err_schd : 1'b0);
@@ -126,8 +126,8 @@ module data_mem_model (
   // starting at 0x8000_0000
   //
   assign dram_addr32 = mem_addr32[DRAM_AW-1:0];
-  assign dram_sel    = mem_cs & mem_addr32[29] & (mem_addr32[28:DRAM_AW+2] == 0);   
-  assign dram_cs     = dram_sel & ~mem_err;   
+  assign dram_sel    = mem_cs & mem_addr32[29] & (mem_addr32[28:DRAM_AW+2] == 0);
+  assign dram_cs     = dram_sel & ~mem_err;
 
   always @(posedge clk, negedge rst_n) begin
     if (~rst_n) begin
@@ -152,17 +152,17 @@ module data_mem_model (
       if(mem_be[3])
         dram[dram_addr32][31:24] <= mem_wdata[31:24];
 
-      // valid tag bit for caps - only allow to update for word accesses, where bit[32] is taken 
+      // valid tag bit for caps - only allow to update for word accesses, where bit[32] is taken
       // care of by CPU, otherwise clear the valid bit.
-      //  - if the physical memory doesn't support BE for bit[32], then needs RMW or 
+      //  - if the physical memory doesn't support BE for bit[32], then needs RMW or
       //    separate mem for tag bits..
        // - only makes sure data accesses can't modify capabilities but could still read..
-      // is this sufficent for cheri - QQQ? 
+      // is this sufficent for cheri - QQQ?
       //  - the original cheri ask is to qualify memory accesses based on the tag bit, which requires RMW
       if (|mem_be)  dram[dram_addr32][32]  <= mem_wdata[32];
-        
+
     end else if (dram_cs)
-      dram_rdata <= dram[dram_addr32];  
+      dram_rdata <= dram[dram_addr32];
   end
 
   always @(negedge clk, negedge rst_n) begin
@@ -172,13 +172,13 @@ module data_mem_model (
       if (dram_sel)
         dram_err_schd <= err_enable & ((ERR_RATE == 0) ? 1'b0 : ($urandom()%(2**(8-ERR_RATE))==0));
     end
-  end 
+  end
   //
   // TSRAM (dual port RAM)
   //
-  // starting at 0x8300_0000 byte address 
+  // starting at 0x8300_0000 byte address
   assign tsram_p0_addr32 = mem_addr32[TSRAM_AW-1:0];
-  assign tsram_p0_sel    = mem_cs && (mem_addr32[29:22] == 8'h83) && 
+  assign tsram_p0_sel    = mem_cs && (mem_addr32[29:22] == 8'h83) &&
                            (mem_addr32[21] == 0) && (mem_addr32[20:DRAM_AW+2] == 0);
   assign tsram_p0_cs     = tsram_p0_sel & ~mem_err;
 
@@ -200,12 +200,12 @@ module data_mem_model (
         if(mem_be[3])
           tsram[tsram_p0_addr32][31:24] <= mem_wdata[31:24];
       end else if (tsram_p0_cs)
-        tsram_p0_rdata <= tsram[tsram_p0_addr32];  
+        tsram_p0_rdata <= tsram[tsram_p0_addr32];
 
         // p1 readonly
       if (tsmap_cs)
         tsmap_rdata <= tsram[tsram_p1_addr32];
-      else 
+      else
         tsmap_rdata <= 32'h0;
     end
   end
@@ -217,8 +217,8 @@ module data_mem_model (
       if (tsram_p0_sel)
         tsram_p0_err_schd <= err_enable & ((ERR_RATE == 0) ? 1'b0 : ($urandom()%(2**(8-ERR_RATE))==0));
     end
-  end 
- 
+  end
+
 
   //
   // MMREG (memory-mapped registers)
@@ -227,7 +227,7 @@ module data_mem_model (
   // 0x8380_0080: scratch register 0,1
   // 0x8380_0100: TB error_enable, Intr_ack
   // 0x8380_0200: UART
-  // 
+  //
   //
   logic [64:0] tbre_ctrl_vec;
   logic        tbre_stat, tbre_stat_q;
@@ -238,9 +238,9 @@ module data_mem_model (
   logic        tbre_err, stkz_active, stkz_err;
   logic [31:0] scratch_reg0, scratch_reg1;
 
-  // starting at 0x8380_0000 byte address 
+  // starting at 0x8380_0000 byte address
   assign mmreg_addr32 = mem_addr32[7:0];
-  assign mmreg_sel    = mem_cs && (mem_addr32[29:22] == 8'h83) && 
+  assign mmreg_sel    = mem_cs && (mem_addr32[29:22] == 8'h83) &&
                         (mem_addr32[21] == 1) && (mem_addr32[20:8] == 0);
   assign mmreg_cs     = mmreg_sel;
 
@@ -255,15 +255,15 @@ module data_mem_model (
 
   always_comb begin
     case (mmreg_addr32_q[7:0])
-      0: mmreg_rdata = tbre_ctrl_vec[31:0];  
-      1: mmreg_rdata = tbre_ctrl_vec[63:32];  
-      2: mmreg_rdata = {tbre_flag, 23'h0, tbre_ctrl_vec[64]};  
+      0: mmreg_rdata = tbre_ctrl_vec[31:0];
+      1: mmreg_rdata = tbre_ctrl_vec[63:32];
+      2: mmreg_rdata = {tbre_flag, 23'h0, tbre_ctrl_vec[64]};
       3: mmreg_rdata = {tbre_epoch, tbre_stat};
-      4: mmreg_rdata = {31'h0, tbre_err};  
+      4: mmreg_rdata = {31'h0, tbre_err};
       5: mmreg_rdata = {30'h0, stkz_err, stkz_active};
-      32: mmreg_rdata = scratch_reg0;  
-      33: mmreg_rdata = scratch_reg1;  
-      default: mmreg_rdata = 32'hdead_beef; 
+      32: mmreg_rdata = scratch_reg0;
+      33: mmreg_rdata = scratch_reg1;
+      default: mmreg_rdata = 32'hdead_beef;
     endcase
   end
 
@@ -275,8 +275,8 @@ module data_mem_model (
       mmreg_addr32_q    <= 0;
       intr_ack          <= 3'h0;
       err_enable_vec    <= 4'h0;
-      scratch_reg0      <= 32'h0; 
-      scratch_reg1      <= 32'h0; 
+      scratch_reg0      <= 32'h0;
+      scratch_reg1      <= 32'h0;
     end
     else begin
       if (mmreg_cs && mem_we && (mmreg_addr32 == 0))
@@ -308,6 +308,6 @@ module data_mem_model (
       else
         intr_ack <= 3'h0;
     end
-  end 
+  end
 
 endmodule

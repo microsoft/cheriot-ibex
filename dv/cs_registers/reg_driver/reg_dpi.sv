@@ -26,4 +26,3 @@ package reg_dpi;
     output bit [31:0] csr_wdata);
 
 endpackage
-

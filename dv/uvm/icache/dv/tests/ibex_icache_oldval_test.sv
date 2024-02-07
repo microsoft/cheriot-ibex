@@ -41,4 +41,3 @@ class ibex_icache_oldval_test extends ibex_icache_base_test;
   endfunction : check_phase
 
 endclass : ibex_icache_oldval_test
-

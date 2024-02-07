@@ -16,4 +16,3 @@ targets:
   default:
     filesets:
       - files_cpp
-

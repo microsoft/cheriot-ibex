@@ -366,7 +366,7 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
   // only issue cheri_acc_vio on valid fetches
   assign cheri_acc_vio = CHERIoTEn & cheri_pmode_i & ~debug_mode_i & fetch_valid & ~fetch_err &
                         ((if_instr_addr < pcc_cap_i.base32) || instr_hdrm[32] || ~hdrm_ok  ||
-                         ~pcc_cap_i.perms[PERM_EX] || ~pcc_cap_i.valid || 
+                         ~pcc_cap_i.perms[PERM_EX] || ~pcc_cap_i.valid ||
                          (pcc_cap_i.otype!=0));
 
   // compressed instruction decoding, or more precisely compressed instruction

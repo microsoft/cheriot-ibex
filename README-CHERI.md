@@ -1,6 +1,6 @@
 ### Compilation:
   - ifdef's: to enable trace generation for simulation, +define+RVFI. no other ifdef's needed
-  - top-level design: ibex_top_tracing 
+  - top-level design: ibex_top_tracing
 
 ### List of design files
 
@@ -40,7 +40,7 @@ Core RTL files:
 To compile a simple top-level (without security options), use
 -  $rtl/ibexc_top.sv
 -  $rtl/ibexc_top_tracing.sv
-  
+
 To compile the full ibex top-level, use
 - $rtl/ibex_core.sv
 - $rtl/ibex_lockstep.sv
@@ -52,7 +52,7 @@ To compile the full ibex top-level, use
 
 
 ### Dependencies
--  dv_fcov_macros.svh 
+-  dv_fcov_macros.svh
 -  prim_cipher_pkg.sv
 -  prim_lfsr.sv
 -  prim_ram_1p_pkg.sv

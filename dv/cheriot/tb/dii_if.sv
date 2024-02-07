@@ -70,39 +70,39 @@ module dii_if (
 
     while (1) begin
       @(posedge clk_i);
-      if (dii_ack) 
+      if (dii_ack)
         hqueue = {hqueue, {dii_pc_o, dii_insn}};    // enqeue
 
       if (rvfi_valid) begin
-        assert (hqueue.size() >= 1) 
+        assert (hqueue.size() >= 1)
           else $error("dii_if: holding queue empty");
 
         if (~flush_active) begin
-          assert(hqueue[0] == {rvfi_pc, rvfi_insn}) 
+          assert(hqueue[0] == {rvfi_pc, rvfi_insn})
             else $error("dii_if: holding queue read mismatch");
-          hqueue = hqueue[1:$];     
+          hqueue = hqueue[1:$];
         end else begin  // exception entry found, flush holding queue
           flush_cnt  = 0;
           while (1) begin
             if (hqueue.size() == 0) break;
             if (hqueue[0] == {rvfi_pc, rvfi_insn}) begin
-              hqueue       = hqueue[1:$];     
+              hqueue       = hqueue[1:$];
               flush_active = 1'b0;
               break;
-            end else begin 
+            end else begin
               flush_cnt += 1;
-              hqueue = hqueue[1:$];     
+              hqueue = hqueue[1:$];
             end
-          end // while 
+          end // while
 
-          assert (!flush_active && (flush_cnt<=MaxFlushCnt)) 
+          assert (!flush_active && (flush_cnt<=MaxFlushCnt))
             else $error("dii_if: holding queue flush error");
         end
-        
-        // in ibex, only need to flush/resync the hqueue in the event of a WB-stage trap 
+
+        // in ibex, only need to flush/resync the hqueue in the event of a WB-stage trap
         if (rvfi_trap) flush_active = 1'b1;
       end
-  
+
     end
   end
 

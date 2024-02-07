@@ -811,7 +811,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     logic                         cheri_pmode_local;
     logic                         cheri_tsafe_en_local;
     logic [37:0]                  rf_wcap_vec_local;
-    logic [37:0]                  rf_rcap_a_vec_local; 
+    logic [37:0]                  rf_rcap_a_vec_local;
     logic [37:0]                  rf_rcap_b_vec_local;
     logic [31:0]                  rf_reg_rdy_local;
     logic                         rf_trsv_en_local;
@@ -1116,7 +1116,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       .tsmap_rdata_i          (tsmap_rdata_local    ),
       .tsmap_rdata_intg_i     (tsmap_rdata_intg_local),
       .mmreg_corein_i         (mmreg_corein_local  ),
-      .mmreg_coreout_i        (mmreg_coreout_local      ), 
+      .mmreg_coreout_i        (mmreg_coreout_local      ),
 
       .ic_tag_req_i           (ic_tag_req_local),
       .ic_tag_write_i         (ic_tag_write_local),

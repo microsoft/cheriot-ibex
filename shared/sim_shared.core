@@ -22,4 +22,3 @@ targets:
   default:
     filesets:
       - files_sim_sv
-

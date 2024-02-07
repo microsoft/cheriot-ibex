@@ -2,17 +2,17 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
-// memory model with random gnt/rvalid waits 
+// memory model with random gnt/rvalid waits
 //
 module mem_obi_if #(
-  parameter int unsigned DW         = 32  
-)( 
+  parameter int unsigned DW         = 32
+)(
   input  logic          clk,
   input  logic          rst_n,
 
   input  logic [3:0]    GNT_WMAX,
   input  logic [3:0]    RESP_WMAX,
-                        
+
   input  logic          data_req,
   input  logic          data_we,
   input  logic [3:0]    data_be,
@@ -34,11 +34,11 @@ module mem_obi_if #(
   input  logic [DW-1:0] mem_rdata,
   input  logic          mem_err
 );
-  
+
   function automatic logic[3:0] gen_wait(int unsigned wmax);
     logic [3:0]  nwait;
     logic [31:0] randnum;
-    
+
     if (wmax == 0) return 0;
 
     randnum = $urandom();
@@ -73,7 +73,7 @@ module mem_obi_if #(
 
   assign cmd_rd_ptr     = cmd_rd_ptr_ext[2:0];
   assign cmd_wr_ptr     = cmd_wr_ptr_ext[2:0];
-  assign fifo_depth     = (cmd_wr_ptr_ext - cmd_rd_ptr_ext); 
+  assign fifo_depth     = (cmd_wr_ptr_ext - cmd_rd_ptr_ext);
   assign cmd_fifo_full  = (fifo_depth >= 8);
   assign cmd_fifo_empty = (cmd_wr_ptr_ext == cmd_rd_ptr_ext);
   assign cmd_avail      = cmd_fifo_wr || !cmd_fifo_empty;
@@ -82,7 +82,7 @@ module mem_obi_if #(
   assign cur_wr_cmd.be      = data_be;
   assign cur_wr_cmd.req_isr = data_req_isr;
   assign cur_wr_cmd.addr32  = data_addr[31:2];   // 32-bit addr
-  assign cur_wr_cmd.wdata   = data_wdata; 
+  assign cur_wr_cmd.wdata   = data_wdata;
 
   assign cur_rd_cmd    = mem_cmd_fifo[cmd_rd_ptr];
 
@@ -95,10 +95,10 @@ module mem_obi_if #(
 
   //
   //  @negedge clk
-  //     Grant stage to issue grants and enqueue granted-requests 
+  //     Grant stage to issue grants and enqueue granted-requests
   //     dequeue requests to generate memory read/writes
   //
-  
+
   always @(negedge clk, negedge rst_n) begin
     if (~rst_n) begin
       data_gnt       <= 1'b0;
@@ -117,7 +117,7 @@ module mem_obi_if #(
       end else if (data_req && gnt_idle) begin // starting to wait
          gnt_cntr  <= gnt_waits;
          gnt_idle  <= 1'b0;
-      end else if (data_req && !gnt_idle && (gnt_cntr > 1)) begin    // continure waiting 
+      end else if (data_req && !gnt_idle && (gnt_cntr > 1)) begin    // continure waiting
          gnt_cntr  <= gnt_cntr - 1;
       end else if (gnt_wait_done) begin        // waiting ends, grant
          gnt_cntr  <= 0;
@@ -125,13 +125,13 @@ module mem_obi_if #(
       end
 
       data_gnt <= (gnt_no_wait || gnt_wait_done);
- 
+
       if (cmd_fifo_wr) begin
          mem_cmd_fifo[cmd_wr_ptr] <= cur_wr_cmd;
          cmd_wr_ptr_ext           <= cmd_wr_ptr_ext + 1;
          gnt_waits   <= gen_wait (GNT_WMAX);
       end
- 
+
       if (resp_no_wait) begin
          resp_cntr  <= 0;
       end else if (cmd_avail && resp_idle) begin
@@ -148,13 +148,13 @@ module mem_obi_if #(
       cmd_fifo_rd <= resp_no_wait | resp_wait_done;
     end
   end
-  
-  // 
+
+  //
   //  @posedge clk
   //    Response stage generate output signals
   //
 
-  assign data_rdata   = mem_rdata & {33{data_rvalid}}; 
+  assign data_rdata   = mem_rdata & {33{data_rvalid}};
 
   always @(posedge clk, negedge rst_n) begin
     if (~rst_n) begin
@@ -169,7 +169,7 @@ module mem_obi_if #(
          resp_waits      <= gen_wait(RESP_WMAX);
          cmd_rd_ptr_ext  <= cmd_rd_ptr_ext + 1;
       end
-      
+
     end
   end
 
@@ -181,6 +181,6 @@ module mem_obi_if #(
   assign mem_be      = cur_rd_cmd.be;
   assign mem_req_isr = cur_rd_cmd.req_isr;
   assign mem_wdata   = cur_rd_cmd.wdata;
-  assign mem_addr32  = cur_rd_cmd.addr32;  
+  assign mem_addr32  = cur_rd_cmd.addr32;
 
 endmodule

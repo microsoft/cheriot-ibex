@@ -21,5 +21,3 @@ package env_dpi;
     output bit test_passed);
 
 endpackage
-
-

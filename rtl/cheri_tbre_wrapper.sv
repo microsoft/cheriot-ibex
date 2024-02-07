@@ -10,13 +10,13 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   parameter  bit         StkZIntrOK  = 1'b0,
   parameter int unsigned MMRegDinW   = 128,
   parameter int unsigned MMRegDoutW  = 64
-  
+
 ) (
    // Clock and Reset
   input  logic          clk_i,
   input  logic          rst_ni,
 
-  // MMIO register interface 
+  // MMIO register interface
   input  logic [MMRegDinW-1:0]  mmreg_corein_i,
   output logic [MMRegDoutW-1:0] mmreg_coreout_o,
 
@@ -24,8 +24,8 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   input  logic          lsu_tbre_resp_valid_i,
   input  logic          lsu_tbre_resp_err_i,
   input  logic          lsu_tbre_resp_is_wr_i,
-  input  logic [32:0]   lsu_tbre_raw_lsw_i,   
-  input  logic          lsu_tbre_req_done_i,   
+  input  logic [32:0]   lsu_tbre_raw_lsw_i,
+  input  logic          lsu_tbre_req_done_i,
   input  logic          lsu_tbre_addr_incr_i,
   output logic          tbre_lsu_req_o,
   output logic          tbre_lsu_is_cap_o,
@@ -34,7 +34,7 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   output logic [32:0]   tbre_lsu_wdata_o,
 
   // LSU snoop interface
-  input  logic          snoop_lsu_req_done_i,   
+  input  logic          snoop_lsu_req_done_i,
   input  logic          snoop_lsu_req_i,
   input  logic          snoop_lsu_is_cap_i,
   input  logic          snoop_lsu_we_i,
@@ -51,7 +51,7 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   input  full_cap_t     ztop_wfcap_i,
   output logic [31:0]   ztop_rdata_o,
   output reg_cap_t      ztop_rcap_o,
- 
+
   input  logic          unmasked_intr_i,
 
   output logic          stkz_active_o,
@@ -62,16 +62,16 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
 
   localparam nMSTR = 2;
 
-  logic          lsu_blk1_resp_valid;    
-  logic          lsu_blk1_req_done;   
+  logic          lsu_blk1_resp_valid;
+  logic          lsu_blk1_req_done;
   logic          blk1_lsu_req;
   logic          blk1_lsu_is_cap;
   logic          blk1_lsu_we;
   logic [31:0]   blk1_lsu_addr;
   logic [32:0]   blk1_lsu_wdata;
 
-  logic          lsu_blk0_resp_valid;    
-  logic          lsu_blk0_req_done;   
+  logic          lsu_blk0_resp_valid;
+  logic          lsu_blk0_req_done;
   logic          blk0_lsu_req;
   logic          blk0_lsu_is_cap;
   logic          blk0_lsu_we;
@@ -90,11 +90,11 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
     assign tbre_ctrl_vec      = mmreg_corein_i[65:0];
 
     cheri_tbre #(
-      .FifoSize (4), 
+      .FifoSize (4),
       .AddrHi   (23)
     ) cheri_tbre_i (
      // Clock and Reset
-      .clk_i                   (clk_i),                 
+      .clk_i                   (clk_i),
       .rst_ni                  (rst_ni),
       .tbre_ctrl_vec_i         (tbre_ctrl_vec),
       .tbre_stat_o             (tbre_stat),
@@ -102,22 +102,22 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
       .lsu_tbre_resp_valid_i   (lsu_blk1_resp_valid),
       .lsu_tbre_resp_err_i     (lsu_tbre_resp_err_i),
       .lsu_tbre_resp_is_wr_i   (lsu_tbre_resp_is_wr_i),
-      .lsu_tbre_raw_lsw_i      (lsu_tbre_raw_lsw_i),   
-      .lsu_tbre_req_done_i     (lsu_blk1_req_done),   
+      .lsu_tbre_raw_lsw_i      (lsu_tbre_raw_lsw_i),
+      .lsu_tbre_req_done_i     (lsu_blk1_req_done),
       .lsu_tbre_addr_incr_i    (lsu_tbre_addr_incr_i),
       .tbre_lsu_req_o          (blk1_lsu_req),
       .tbre_lsu_is_cap_o       (blk1_lsu_is_cap),
       .tbre_lsu_we_o           (blk1_lsu_we),
       .tbre_lsu_addr_o         (blk1_lsu_addr),
       .tbre_lsu_wdata_o        (blk1_lsu_wdata),
-      .snoop_lsu_req_done_i    (snoop_lsu_req_done_i),  
+      .snoop_lsu_req_done_i    (snoop_lsu_req_done_i),
       .snoop_lsu_req_i         (snoop_lsu_req_i),
       .snoop_lsu_is_cap_i      (snoop_lsu_is_cap_i),
       .snoop_lsu_we_i          (snoop_lsu_we_i),
       .snoop_lsu_cheri_err_i   (snoop_lsu_cheri_err_i),
       .snoop_lsu_addr_i        (snoop_lsu_addr_i),
       .trvk_en_i               (trvk_en_i),
-      .trvk_clrtag_i           (trvk_clrtag_i)          
+      .trvk_clrtag_i           (trvk_clrtag_i)
       );
   end else begin
     assign tbre_stat       = 1'b0;
@@ -136,7 +136,7 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
     cheri_stkz cheri_stkz_i (
       .clk_i                  (clk_i             ),
       .rst_ni                 (rst_ni            ),
-      .ztop_wr_i              (ztop_wr_i),  
+      .ztop_wr_i              (ztop_wr_i),
       .ztop_wdata_i           (ztop_wdata_i),
       .ztop_wfcap_i           (ztop_wfcap_i),
       .ztop_rdata_o           (ztop_rdata_o),
@@ -188,15 +188,15 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   // arbitration by strict priority assignment - mst_req[0] == highest priority
   for (genvar i = 0; i < nMSTR; i++) begin
     logic [7:0] pri_mask;
-    assign pri_mask = 8'hff >> (8-i);      // max 8 masters, should be enough 
+    assign pri_mask = 8'hff >> (8-i);      // max 8 masters, should be enough
     assign mstr_arbit[i] = mstr_req[i] & ~(|(mstr_req & pri_mask));
   end
 
-  // Handling delayed-gnt case. 
+  // Handling delayed-gnt case.
   // make the next arbiration decision immediately if any master_req active
-  // If slv_gnt doesn't happen in the same cycle, register the  decision till 
-  // slv_gant so that the address/wdata/ctrl can be hold steady when presenting 
-  // the next request to the slave. 
+  // If slv_gnt doesn't happen in the same cycle, register the  decision till
+  // slv_gant so that the address/wdata/ctrl can be hold steady when presenting
+  // the next request to the slave.
   assign mstr_arbit_comb = req_pending_q ? mstr_arbit_q : mstr_arbit;
   assign req_pending = |mstr_req & ~slv_gnt & ~req_pending_q;
 
@@ -221,10 +221,10 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   assign tbre_lsu_addr_o    = mstr_arbit_comb[1] ? blk1_lsu_addr : blk0_lsu_addr;
   assign tbre_lsu_wdata_o   = mstr_arbit_comb[1] ? blk1_lsu_wdata : blk0_lsu_wdata;
 
-  assign lsu_blk1_req_done  = mstr_arbit_comb[1] & lsu_tbre_req_done_i; 
-  assign lsu_blk0_req_done  = mstr_arbit_comb[0] & lsu_tbre_req_done_i; 
+  assign lsu_blk1_req_done  = mstr_arbit_comb[1] & lsu_tbre_req_done_i;
+  assign lsu_blk0_req_done  = mstr_arbit_comb[0] & lsu_tbre_req_done_i;
 
-  // 
+  //
   logic resp_sel_q;
   always @(posedge clk_i or negedge rst_ni) begin
     if(~rst_ni) begin

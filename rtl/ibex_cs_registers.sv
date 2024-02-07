@@ -861,13 +861,13 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
   // only write CSRs during one clock cycle
 
-  // enforcing the CHERI CSR access policy. 
+  // enforcing the CHERI CSR access policy.
   //  -- is reading zero back ok? or do we need to generate illegal access exception??
   //  -- also note IBEX didn't implement user-mode TIME/counters.
   //     for now we are allowing reading the M-mode counters (assuming only use single priv level)
 
   logic read_ok;
-  assign read_ok = ~CHERIoTEn || ~cheri_pmode_i || debug_mode_i || pcc_cap_q.perms[PERM_SR] || 
+  assign read_ok = ~CHERIoTEn || ~cheri_pmode_i || debug_mode_i || pcc_cap_q.perms[PERM_SR] ||
                    ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<=CSR_CDBG_CTRL));
                    // ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<CSR_MSHWM));
 
@@ -1009,7 +1009,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   assign mtvec_en_combi = mtvec_en | mtvec_en_cheri;
 
   // use only 2'b00 (direct mode) for CHERIoT
-  assign mtvec_d_combi = ({32{mtvec_en}} & mtvec_d) | ({32{mtvec_en_cheri}} & 
+  assign mtvec_d_combi = ({32{mtvec_en}} & mtvec_d) | ({32{mtvec_en_cheri}} &
                           {cheri_csr_wdata_i[31:2],2'b00});
 
   // MTVEC
@@ -1851,7 +1851,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
       full_cap_t   tf_cap;
       reg_cap_t    tr_cap;
       logic [31:0] tr_addr;
-     
+
       if (csr_save_cause_i) begin              // Exception cases
         tr_cap  = mtvec_cap;
         tr_addr = mtvec_q;
@@ -1869,7 +1869,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
       tf_cap = reg2fullcap(tr_cap, tr_addr);
 
       // Exception cases
-      if (csr_save_cause_i | csr_restore_mret_i | (csr_restore_dret_i & debug_mode_i)) begin 
+      if (csr_save_cause_i | csr_restore_mret_i | (csr_restore_dret_i & debug_mode_i)) begin
         pcc_cap_d = full2pcap(tf_cap);
       end else if (cheri_branch_req_i) begin
         pcc_cap_d = pcc_cap_i;
@@ -1893,7 +1893,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
     // let's not worry about non-stanard recoverable NMI/mstack for now QQQ
     //   note we need to do set_address (representability check) when saving pcc_cap to mepc
-    //   otherwise an out-of-bound pcc_cap may cause mepc corruption 
+    //   otherwise an out-of-bound pcc_cap may cause mepc corruption
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni)
         mepc_cap <= MEPC_RESET_CAP;
@@ -1959,7 +1959,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     end
 
   end else begin: gen_no_scr
-    
+
     assign cheri_csr_rdata_o = 32'h0;
     assign cheri_csr_rcap_o  = NULL_REG_CAP;
 

@@ -29,14 +29,14 @@ module tb_env;
     end
   end
 
- 
+
 `ifdef DII_SIM
 
   always @(negedge clk, negedge rst_n) begin
     if (~rst_n) begin
       dii_insn <= 32'h1;
     end else begin
-      dii_insn <= nxt_instr;      // select between possible nxt_instr streams 
+      dii_insn <= nxt_instr;      // select between possible nxt_instr streams
     end
   end
 
@@ -53,8 +53,8 @@ module tb_env;
     rst_n = 1'b1;
     #1;
     rst_n = 1'b0;
-   
-    $readmemh("./bin/instr_stream.vhx", instr_stream, 'h0);   // load stream 
+
+    $readmemh("./bin/instr_stream.vhx", instr_stream, 'h0);   // load stream
     nxt_instr = instr_stream[0];
 
     repeat(10) @(posedge clk);
@@ -74,7 +74,7 @@ module tb_env;
     end
 
     repeat(10) @(posedge clk); // let the last instruction propagate through
-    
+
     $finish;
   end
 
@@ -99,18 +99,18 @@ module tb_env;
     rst_n = 1'b0;
 
     // overlaying the same image in both instr_mem model and data_mem model
-    // so that we can get RO data. this works in this setup since we only use static code images. 
+    // so that we can get RO data. this works in this setup since we only use static code images.
     $readmemh(vhx_path, u_tb_top.u_instr_mem.iram, 'h0);   // load main executable
     $readmemh(vhx_path, u_tb_top.u_data_mem.dram, 'h0);   // load main executable
 
     //for (i=0; i<64;i++)
     //  $display("%08x %08x %08x %08x", u_tb_top.u_instr_mem.mem[4*i], u_tb_top.u_instr_mem.mem[4*i+1],
     //                                  u_tb_top.u_instr_mem.mem[4*i+2], u_tb_top.u_instr_mem.mem[4*i+3]);
-   
-    
+
+
     repeat(10) @(posedge clk);
     rst_n = 1'b1;
-    
+
     cont_flag = 1;
     while (cont_flag) begin
       @(posedge clk);

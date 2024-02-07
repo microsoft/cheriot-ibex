@@ -20,7 +20,7 @@ mkdir build
 cd build
 
 # Configure and build spike
-../configure --enable-commitlog --enable-misaligned --prefix=/opt/spike-cosim 
+../configure --enable-commitlog --enable-misaligned --prefix=/opt/spike-cosim
 # Installs in /opt/spike-cosim
 sudo make -j8 install
 
@@ -36,7 +36,7 @@ cd <ibex_repo>
 # Build simulator
 fusesoc --cores-root=. run --target=sim --setup --build lowrisc:ibex:ibex_simple_system_cosim --RV32E=0 --RV32M=ibex_pkg::RV32MFast
 
-# Build coremark test binary, with performance counter dump disabled. The 
+# Build coremark test binary, with performance counter dump disabled. The
 # co-simulator system doesn't produce matching performance counters in spike so
 # any read of those CSRs results in a mismatch and a failure.
 make -C ./examples/sw/benchmarks/coremark SUPPRESS_PCOUNT_DUMP=1

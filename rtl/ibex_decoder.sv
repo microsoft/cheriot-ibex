@@ -375,10 +375,10 @@ module ibex_decoder import cheri_pkg::*; #(
         if (instr[14]) begin
           illegal_insn     = 1'b1;
         end else if (instr[13:12] == 2'b11) begin
-          if (CHERIoTEn & cheri_pmode_i) begin 
+          if (CHERIoTEn & cheri_pmode_i) begin
             cheri_cstore_en  =  ~illegal_c_insn_i; // csc
             cheri_data_req_o =  ~illegal_c_insn_i;
-            data_req_o       =  1'b0; 
+            data_req_o       =  1'b0;
             illegal_insn     =  1'b0;
           end else begin
             cheri_cstore_en  =  1'b0; // csc
@@ -416,7 +416,7 @@ module ibex_decoder import cheri_pkg::*; #(
             end
           end
           2'b11: begin
-            // illegal_c_insn_i is added to fix the c.clcsp case 
+            // illegal_c_insn_i is added to fix the c.clcsp case
             //   (compressed decoder translate to cheri instruction but could still assert illegal_c_insn
             //   if rd == 0
             if (CHERIoTEn & cheri_pmode_i && ~instr[14] && ~illegal_c_insn_i) begin
@@ -1372,11 +1372,11 @@ module ibex_decoder import cheri_pkg::*; #(
     assign cheri_imm21_o          = 21'h0;
     assign cheri_operator_o       = 'h0;
     assign cheri_cs2_dec_o        = 1'b0;
-    assign cheri_rf_ren_a         = 1'b0;    
+    assign cheri_rf_ren_a         = 1'b0;
     assign cheri_rf_ren_b         = 1'b0;
     assign cheri_rf_we_dec_o      = 1'b0;
     assign cheri_multicycle_dec_o = 1'b0;
- 
+
   end
 
   ////////////////a

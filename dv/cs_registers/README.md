@@ -48,4 +48,3 @@ Testbench structure
 The driver component contains one DPI "interface" to drive new random transactions into the DUT, and another to monitor issued transactions including the DUT's responses.
 Each time a new transaction is detected by the monitor component, it is captured and sent to the model.
 The model reads incoming transactions, updates its internal state and checks that the DUT outputs matches its own predictions.
-

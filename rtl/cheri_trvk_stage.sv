@@ -61,7 +61,7 @@ module cheri_trvk_stage #(
   assign tsmap_addr_o  = tsmap_ptr[15:5];
 
   // not a sealling cap and pointing to valid TSMAP range
-  assign range_ok      = (tsmap_ptr[31:5] <= TSMapSize) && 
+  assign range_ok      = (tsmap_ptr[31:5] <= TSMapSize) &&
                          ~((in_cap_q.cperms[4:3]==2'b00) && (|in_cap_q.cperms[2:0]));
   assign tsmap_cs_o    = (cpu_op_valid_q[0] | tbre_op_valid_q[0]) & cap_good_q[0];
 
@@ -84,8 +84,8 @@ module cheri_trvk_stage #(
     end
   end
 
-  
-  assign cpu_op_valid  =  cpu_op_active & lsu_resp_valid_i;    // CPU op only active when Load cap 
+
+  assign cpu_op_valid  =  cpu_op_active & lsu_resp_valid_i;    // CPU op only active when Load cap
   assign tbre_op_valid =  lsu_tbre_resp_valid_i & ~lsu_resp_is_wr_i;    // TBRE Load
   assign cap_good      =  (cpu_op_active & lsu_resp_valid_i & ~lsu_load_err_i & rf_wcap_lsu_i.valid) |
                           (lsu_tbre_resp_valid_i & ~lsu_tbre_resp_err_i &  rf_wcap_lsu_i.valid);

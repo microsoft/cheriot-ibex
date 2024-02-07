@@ -5,11 +5,11 @@
 //
 // instr interface/memory model
 //
-module instr_mem_model ( 
+module instr_mem_model (
   input  logic        clk,
   input  logic        rst_n,
 
-  input  logic [2:0]  ERR_RATE,    
+  input  logic [2:0]  ERR_RATE,
   input  logic [3:0]  GNT_WMAX,
   input  logic [3:0]  RESP_WMAX,
   input  logic        err_enable,
@@ -22,9 +22,9 @@ module instr_mem_model (
   output logic [31:0] instr_rdata,
   output logic        instr_err
 );
-  localparam int unsigned MEM_AW     = 16;  
-  localparam int unsigned MEM_DW     = 32; 
- 
+  localparam int unsigned MEM_AW     = 16;
+  localparam int unsigned MEM_DW     = 32;
+
   logic              mem_cs;
   logic [MEM_DW-1:0] mem_din;
   logic [MEM_DW-1:0] mem_rdata;
@@ -60,7 +60,7 @@ module instr_mem_model (
     .mem_rdata    (mem_rdata),
     .mem_err      (iram_err)
   );
- 
+
   //
   // memory signals (sampled @posedge clk)
   //
@@ -71,12 +71,12 @@ module instr_mem_model (
 
   assign iram_addr32 = mem_addr32[MEM_AW-1:0];
 
-  assign iram_err = iram_err_q && ((mem_addr32 < err_keepout_base[31:2]) || 
+  assign iram_err = iram_err_q && ((mem_addr32 < err_keepout_base[31:2]) ||
                                    (mem_addr32 > err_keepout_top[31:2]));
 
   always @(posedge clk) begin
     if (mem_cs)
-      mem_rdata <= iram[iram_addr32];  
+      mem_rdata <= iram[iram_addr32];
   end
 
   always @(negedge clk, negedge rst_n) begin
@@ -87,7 +87,7 @@ module instr_mem_model (
         iram_err_q <= err_enable & ((ERR_RATE == 0) ? 1'b0 : ($urandom()%(2**(8-ERR_RATE))==0));
 
     end
-  end 
- 
+  end
+
 
 endmodule

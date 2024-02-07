@@ -142,4 +142,3 @@ To open the design in OpenSTA
 $ sta
 % source ./tcl/sta_open_design.tcl
 ```
-

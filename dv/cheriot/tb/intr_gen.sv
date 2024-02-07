@@ -30,7 +30,7 @@ module intr_gen (
     // irq state machine
     while (1) begin
       case (irq)
-        0: begin       
+        0: begin
           rand32 = $urandom();
           if (intr_en && (INTR_INTVL != 0)) begin
             nwait = ((rand32 % (2** INTR_INTVL)) + 1) * 10;   // wait at least 10 clk cycles
@@ -42,7 +42,7 @@ module intr_gen (
             @(posedge clk);
           end
         end
-        default: begin    // 
+        default: begin    //
           while (intr_ack == 0) @(posedge clk);
           rand32 = $urandom();
           if (rand32[31] | ~intr_en) begin
@@ -50,12 +50,12 @@ module intr_gen (
             //$display ("going irq=0 @%t", $time);
           end else begin
             // irq = rand32[15:0] % 7 + 1;   // back-to-back interrupts
-            irq = {2'b00, rand32[0]};  
+            irq = {2'b00, rand32[0]};
           end
           @(posedge clk);
         end
       endcase
-    end   
+    end
   end
 
 endmodule

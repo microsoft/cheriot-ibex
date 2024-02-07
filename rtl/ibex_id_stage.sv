@@ -37,7 +37,7 @@ module ibex_id_stage import cheri_pkg::*; #(
   input  logic                      rst_ni,
 
   input  logic                      cheri_pmode_i,
-  input  logic                      cheri_tsafe_en_i,    
+  input  logic                      cheri_tsafe_en_i,
   output logic                      ctrl_busy_o,
   output logic                      illegal_insn_o,
 
@@ -140,7 +140,7 @@ module ibex_id_stage import cheri_pkg::*; #(
 
   input  logic                      lsu_load_err_i,
   input  logic                      lsu_store_err_i,
-  input  logic                      lsu_err_is_cheri_i, 
+  input  logic                      lsu_err_is_cheri_i,
 
   // Debug Signal
   output logic                      debug_mode_o,
@@ -722,7 +722,7 @@ module ibex_id_stage import cheri_pkg::*; #(
   // access is illegal. A combinational loop would be created if csr_op_en_o was used along (as
   // asserting it for an illegal csr access would result in a flush that would need to deassert it).
   // assign csr_op_en_o             = csr_access_o & instr_executing & instr_id_done_o;
-  assign csr_op_en_o             = csr_access_o & instr_executing & 
+  assign csr_op_en_o             = csr_access_o & instr_executing &
                                    ((CHERIoTEn & cheri_pmode_i) ? instr_first_cycle : instr_id_done_o);
 // QQQQQQQ KLIU - this needs to be looked into!!!!
 
@@ -1105,7 +1105,7 @@ module ibex_id_stage import cheri_pkg::*; #(
 
     assign stall_ld_hz = outstanding_load_wb_i & (rf_rd_a_hz | rf_rd_b_hz);
 
-    assign stall_cheri_trvk = (CHERIoTEn & cheri_pmode_i & CheriPPLBC) ? 
+    assign stall_cheri_trvk = (CHERIoTEn & cheri_pmode_i & CheriPPLBC) ?
                                ((rf_ren_a && ~rf_reg_rdy_i[rf_raddr_a_o]) |
                                 (rf_ren_b && ~rf_reg_rdy_i[rf_raddr_b_o]) |
                                 (cheri_rf_we && ~ rf_reg_rdy_i[rf_waddr_id_o])) :

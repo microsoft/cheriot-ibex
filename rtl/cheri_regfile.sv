@@ -1,4 +1,3 @@
-
 // Copyright Microsoft Corporation
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
@@ -37,11 +36,11 @@ module cheri_regfile import cheri_pkg::*; #(
   input  logic          [4:0]   trvk_addr_i,
   input  logic                  trvk_en_i,
   input  logic                  trvk_clrtag_i,
-  input  logic          [6:0]   trvk_par_i,     // make sure this is included in lockstep compare      
+  input  logic          [6:0]   trvk_par_i,     // make sure this is included in lockstep compare
   input  logic          [4:0]   trsv_addr_i,
   input  logic                  trsv_en_i,
-  input  logic          [6:0]   trsv_par_i,     
-  
+  input  logic          [6:0]   trsv_par_i,
+
   output logic                  alert_o
 );
 
@@ -55,10 +54,10 @@ module cheri_regfile import cheri_pkg::*; #(
 
   logic [31:0] rf_reg   [NREGS-1:0];
   logic [31:0] rf_reg_q [NREGS-1:1];
-  
+
   logic [6:0]  rf_reg_par   [NREGS-1:0];
   logic [6:0]  rf_reg_par_q [NREGS-1:0];
-  
+
   reg_cap_t         rf_cap   [NCAPS-1:0];
   reg_cap_t         rf_cap_q [NCAPS-1:1];
 
@@ -67,9 +66,9 @@ module cheri_regfile import cheri_pkg::*; #(
   logic [NREGS-1:1] we_a_dec;
   logic [NREGS-1:1] trvk_dec, trsv_dec;
   logic [31:0]      reg_rdy_vec;
-  
+
   logic             pplbc_alert;
-  
+
   always_comb begin : we_a_decoder
     for (int unsigned i = 1; i < NREGS; i++) begin
       we_a_dec[i] = (waddr_a_i == 5'(i)) ? we_a_i : 1'b0;
@@ -81,21 +80,21 @@ module cheri_regfile import cheri_pkg::*; #(
   // No flops for R0 as it's hard-wired to 0
   for (genvar i = 1; i < NREGS; i++) begin : g_rf_flops
     logic cap_valid;
-    
-    
+
+
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
         rf_reg_q[i] <= 32'h0;
       end else if (we_a_dec[i]) begin
         rf_reg_q[i] <= wdata_a_i[31:0];
-      end 
+      end
     end
-    
+
     if (RegFileECC) begin : g_reg_par
       logic [6:0] wdata_par;
-      
+
       assign wdata_par = wdata_a_i[DataWidth-1:DataWidth-7];
-      
+
       // split reset of data and parity to detect spurious reset (fault protection)
       always_ff @(posedge clk_i or negedge par_rst_ni) begin
         if (!par_rst_ni) begin
@@ -105,7 +104,7 @@ module cheri_regfile import cheri_pkg::*; #(
           rf_reg_par_q[i] <= rf_reg_par_q[i] ^ TrvkParIncr;
         end else if (we_a_dec[i]) begin
           rf_reg_par_q[i] <= wdata_par;
-        end 
+        end
       end
     end else begin : g_no_reg_par
       assign rf_reg_par_q[i] = 7'h0;
@@ -117,8 +116,8 @@ module cheri_regfile import cheri_pkg::*; #(
   assign rf_reg[0]     = 32'h0;
   assign rf_reg_par[0] = DefParBits[0];
   for (genvar i=1; i<NREGS ; i++) begin
-    assign rf_reg[i]     = rf_reg_q[i];         
-    assign rf_reg_par[i] = rf_reg_par_q[i];     
+    assign rf_reg[i]     = rf_reg_q[i];
+    assign rf_reg_par[i] = rf_reg_par_q[i];
   end
 
   assign rdata_a_o = {rf_reg_par[raddr_a_i], rf_reg[raddr_a_i]};
@@ -151,12 +150,12 @@ module cheri_regfile import cheri_pkg::*; #(
 // QQQ_09112023 (contention when TRVKBypass=1)
 //   Note, when 33-bit memory bus is used, trsv and trvk should NEVER point to the same register
 //   -- trsv_en and trvk_en could active in the same cycle but should be pointing to different registers
-//   -- since trsv_en can only be asserted by CLC&lsu_req_done. Even in trvk_bypass case, trsv can only 
+//   -- since trsv_en can only be asserted by CLC&lsu_req_done. Even in trvk_bypass case, trsv can only
 //   -- happen 1 cycle later than trvk_en (to the same register)
 //   However when 65-bit memory is used, trsv and trvk can point to the same register at the same time
 //   -- here lsu_req/req_done happens at the same time as the bypassed TRVK uninstall the instruction.
 //   -- to resolve the contention we need to prioritize trsv over trvk when updating the flopped reg_rdy_vec
-    
+
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni)
         reg_rdy_vec[0] <= 1'b1;
@@ -166,7 +165,7 @@ module cheri_regfile import cheri_pkg::*; #(
       always_ff @(posedge clk_i or negedge rst_ni) begin
         if (!rst_ni)
           reg_rdy_vec[i] <= 1'b1;
-        else if (i >= NCAPS) 
+        else if (i >= NCAPS)
           reg_rdy_vec[i] <= 1'b1;
         else if (trsv_dec[i] & trsv_en_i)   // prioritize trsv to address the corner case in the QQQ_09112023
           reg_rdy_vec[i] <= 1'b0;
@@ -185,24 +184,24 @@ module cheri_regfile import cheri_pkg::*; #(
       logic        trsv_en_q;
       logic  [6:0] trsv_par_q;
 
-      logic      [31:0] reg_rdy_vec_shdw, reg_rdy_vec_q;  
+      logic      [31:0] reg_rdy_vec_shdw, reg_rdy_vec_q;
       logic [NREGS-1:1] trvk_dec_shdw, trsv_dec_shdw;
-      logic             shdw_mismatch_err, cap_rvk_err;            
+      logic             shdw_mismatch_err, cap_rvk_err;
 
 
-      always_comb begin  
+      always_comb begin
         for (int unsigned i = 1; i < NREGS; i++) begin
           trvk_dec_shdw[i] = (trvk_addr_q == 5'(i));
           trsv_dec_shdw[i] = (trsv_addr_q == 5'(i));
         end
       end
-      
+
       always_ff @(posedge clk_i or negedge par_rst_ni) begin
         if (!par_rst_ni) begin
            trvk_addr_q   <= 5'h0;
-           trvk_en_q     <= 1'b0;        
+           trvk_en_q     <= 1'b0;
            trvk_clrtag_q <= 1'b0;
-           trvk_par_q    <= NullParBits;   
+           trvk_par_q    <= NullParBits;
            trsv_addr_q   <= 5'h0;
            trsv_en_q     <= 1'b0;
            trsv_par_q    <= NullParBits;
@@ -211,14 +210,14 @@ module cheri_regfile import cheri_pkg::*; #(
            trvk_addr_q   <= trvk_addr_i;
            trvk_en_q     <= trvk_en_i;
            trvk_clrtag_q <= trvk_clrtag_i;
-           trvk_par_q    <= trvk_par_i;   
+           trvk_par_q    <= trvk_par_i;
            trsv_addr_q   <= trsv_addr_i;
            trsv_en_q     <= trsv_en_i;
            trsv_par_q    <= trsv_par_i;
            reg_rdy_vec_q <= reg_rdy_vec;
         end
       end
-      
+
       for (genvar i = 0; i < 32; i++) begin
         if ((i == 0) || (i >= NCAPS)) begin
           assign reg_rdy_vec_shdw[i] = 1'b1;
@@ -234,18 +233,18 @@ module cheri_regfile import cheri_pkg::*; #(
         end
       end
 
-      // generate alert 
+      // generate alert
       assign shdw_mismatch_err = (reg_rdy_vec_shdw != reg_rdy_vec_q);
 
       // readback revoked cap to make sure the valid bit is actually cleared
       always_comb begin
-        cap_rvk_err = 0;        
+        cap_rvk_err = 0;
         for (int unsigned i = 1; i < NCAPS; i++) begin
           cap_rvk_err = cap_rvk_err | (trvk_en_q & trvk_clrtag_q & trvk_dec_shdw[i] & rf_cap_q[i].valid);
         end
       end
- 
-       
+
+
       // check parity of trsv and trvk requests
       logic [1:0] trsv_ecc_err, trvk_ecc_err;
 
@@ -264,21 +263,21 @@ module cheri_regfile import cheri_pkg::*; #(
       );
 
       assign pplbc_alert = shdw_mismatch_err | cap_rvk_err | (|trsv_ecc_err) | (|trvk_ecc_err);
-      
+
     end else begin : gen_no_shdw // no ECC or shdw checking
-      assign pplbc_alert = 1'b0;      
+      assign pplbc_alert = 1'b0;
     end
-    
+
   end else begin : g_no_regrdy
     assign reg_rdy_vec = {32{1'b1}};
     assign pplbc_alert = 1'b0;
   end  // not pplbc
-  
+
   //
   //  read back last-writen register for fault protection
   //
   logic reg_rdbk_err;
-  
+
   if (RegFileECC) begin : gen_fault_rdbk
     logic [NREGS-1:1] we_a_dec_shdw;
     logic       [4:0] waddr_a_q;
@@ -290,8 +289,8 @@ module cheri_regfile import cheri_pkg::*; #(
     logic       [6:0] rpar_tmp;
     logic       [1:0] wreq_ecc_err;
     logic             rdbk_cmp_err;
-    
-    // flop the write request and check parity 
+
+    // flop the write request and check parity
     //   need all fields to compute parity bits
     always_ff @(posedge clk_i or negedge par_rst_ni) begin
       if (!par_rst_ni) begin
@@ -307,7 +306,7 @@ module cheri_regfile import cheri_pkg::*; #(
         wcap_vec_q  <= reg2vec(wcap_a_i);
         we_a_q      <= we_a_i;
       end
-    end      
+    end
 
     assign wdata_tmp    = wdata_a_q ^ wcap_vec_q[31:0] ^ {20'h0, we_a_q, waddr_a_q, wcap_vec_q[37:32]};
 
@@ -317,24 +316,24 @@ module cheri_regfile import cheri_pkg::*; #(
       .syndrome_o(),
       .err_o     (wreq_ecc_err)
     );
-   
+
     // decode and read back to verify (only parity bits)
-    always_comb begin 
+    always_comb begin
       for (int unsigned i = 1; i < NREGS; i++) begin
         we_a_dec_shdw[i] = (waddr_a_q == 5'(i)) ? we_a_q : 1'b0;
       end
     end
 
-    assign rpar_tmp     = rf_reg_par[waddr_a_q]; 
-   
+    assign rpar_tmp     = rf_reg_par[waddr_a_q];
+
     assign rdbk_cmp_err = (rpar_tmp != wpar_a_q) && (waddr_a_q != 0) && we_a_q;
 
     assign reg_rdbk_err = (|wreq_ecc_err) | rdbk_cmp_err;
 
   end else begin : gen_no_fault_rdbk
     assign reg_rdbk_err = 1'b0;
-  end 
-  
+  end
+
   assign alert_o   = pplbc_alert | reg_rdbk_err;
 
   reg_cap_t rcap_a_rvkd, rcap_b_rvkd;
@@ -343,7 +342,7 @@ module cheri_regfile import cheri_pkg::*; #(
     // Bypass the registier update cycle and directly update the read ports
     always_comb begin
       reg_rdy_o = reg_rdy_vec | ({NREGS{trvk_en_i}} & {trvk_dec, 1'b0});
-      
+
       rcap_a_rvkd = rcap_a;
       if (trvk_en_i && trvk_clrtag_i && (trvk_addr_i == raddr_a_i))
         rcap_a_rvkd.valid = 1'b0;
@@ -353,7 +352,7 @@ module cheri_regfile import cheri_pkg::*; #(
       if (trvk_en_i && trvk_clrtag_i && (trvk_addr_i == raddr_b_i))
         rcap_b_rvkd.valid = 1'b0;
       rcap_b_o = rcap_b_rvkd;
-    
+
     end
   end else begin
     assign reg_rdy_o = reg_rdy_vec;
@@ -363,7 +362,7 @@ module cheri_regfile import cheri_pkg::*; #(
     assign rcap_b_rvkd = rcap_b;
     assign rcap_b_o  = rcap_b_rvkd;
   end
-   
+
 
 
 endmodule
