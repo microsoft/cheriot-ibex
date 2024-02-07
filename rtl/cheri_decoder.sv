@@ -33,7 +33,7 @@ module cheri_decoder import cheri_pkg::*; # (
   output logic            cheri_multicycle_dec_o
   );
 
-  logic  [6:0] opcode;
+  logic  [6:0] unused_opcode;
   logic  [2:0] func3_op;
   logic  [6:0] func7_op;
   logic  [4:0] imm5_op;
@@ -44,14 +44,14 @@ module cheri_decoder import cheri_pkg::*; # (
   //  - fmt2: R-format, func3(14:12) = 0x0, func7(31:25) = subFunc, etc.
   //  - fmt3: I-format, func3(14:12) = 0x0, func7(31:25) = 0x7f, imm5(24:20) = subFunc
   //  - opcode [6:0] == 0x5b for all CHERI instructions
-  assign opcode   = instr_rdata_i[6:0];
-  assign func3_op = instr_rdata_i[14:12];
-  assign func7_op = instr_rdata_i[31:25];
-  assign imm5_op  = instr_rdata_i[24:20];
-  assign rd_op    = instr_rdata_i[11:7];
+  assign unused_opcode = instr_rdata_i[6:0];
+  assign func3_op      = instr_rdata_i[14:12];
+  assign func7_op      = instr_rdata_i[31:25];
+  assign imm5_op       = instr_rdata_i[24:20];
+  assign rd_op         = instr_rdata_i[11:7];
 
   always_comb begin
-    cheri_operator_o = 32'h0;
+    cheri_operator_o = OPDW'('h0);
 
     cheri_operator_o[CCSR_RW]         = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h01);
     cheri_operator_o[CSET_BOUNDS]     = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h08);
