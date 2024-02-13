@@ -27,6 +27,7 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   input  logic [32:0]   lsu_tbre_raw_lsw_i,   
   input  logic          lsu_tbre_req_done_i,   
   input  logic          lsu_tbre_addr_incr_i,
+  input  logic          lsu_tbre_sel_i,
   output logic          tbre_lsu_req_o,
   output logic          tbre_lsu_is_cap_o,
   output logic          tbre_lsu_we_o,
@@ -197,8 +198,14 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   // If slv_gnt doesn't happen in the same cycle, register the  decision till 
   // slv_gant so that the address/wdata/ctrl can be hold steady when presenting 
   // the next request to the slave. 
+  // Corner case:
+  // -- adding the lsu_tbre_sel term to req_pending (allow the arbitration to
+  //    change when LSU is handling CPU requests.
+  //    this is needed since TBRE could cancel write requests in the case of
+  //    a pipeline hazard (cpu write to the same location TBRE is working on)
+  
   assign mstr_arbit_comb = req_pending_q ? mstr_arbit_q : mstr_arbit;
-  assign req_pending = |mstr_req & ~slv_gnt & ~req_pending_q;
+  assign req_pending = |mstr_req & ~slv_gnt & ~req_pending_q & lsu_tbre_sel_i;
 
   always @(posedge clk_i or negedge rst_ni) begin
     if(~rst_ni) begin

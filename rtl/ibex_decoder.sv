@@ -121,7 +121,7 @@ module ibex_decoder import cheri_pkg::*; #(
 
   import ibex_pkg::*;
 
-  localparam bit CheriLimit16Regs = 1'b0;
+  localparam bit CheriLimit16Regs = 1'b1;
 
   logic        illegal_insn;
   logic        illegal_reg_rv32e;

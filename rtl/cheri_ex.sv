@@ -945,7 +945,7 @@ module cheri_ex import cheri_pkg::*; #(
   assign cheri_ex_err_info_o = cheri_ex_err_info_q;
   assign cheri_wb_err_info_o = cheri_wb_err_info_q;
 
-  assign cheri_wb_err_d      = cheri_wb_err_raw & cheri_exec_id_i & ~debug_mode_i;
+  assign cheri_wb_err_d      = cheri_wb_err_raw & cheri_exec_id_i & cheri_ex_valid_raw & ~debug_mode_i;
 
   // addr_bound_vio is the timing optimized version (gating data_req) 
   // However we need to generate full version of addr_bound_vio to match the sail exception 
@@ -993,8 +993,11 @@ module cheri_ex import cheri_pkg::*; #(
       cheri_wb_err_info_q <= 'h0;
       cheri_ex_err_info_q <= 'h0;
     end else begin
-      // Simple flop here works since if cheri_wb_err, lsu request won't be generated 
-      //   so wb stage only takes 1 cycle. 
+      // Simple flop here works since
+      //  -- cheri_wb_err is gated by cheri_exec_id/ex_valid
+      //  --  all non-load/store cheriot instructions that can generate exceptions 
+      //      only takes 1 cycle in ID/EX stage
+      //  -- faulted non-load/store instruction can only stay 1 cycle in wb_stage
       cheri_wb_err_q      <= cheri_wb_err_d; 
       cheri_wb_err_info_q <= cheri_wb_err_info_d;
       cheri_ex_err_info_q <= cheri_ex_err_info_d;

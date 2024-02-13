@@ -1089,6 +1089,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .lsu_tbre_raw_lsw_i      (lsu_tbre_raw_lsw),   
     .lsu_tbre_req_done_i     (lsu_tbre_req_done),   
     .lsu_tbre_addr_incr_i    (lsu_addr_incr_req),
+    .lsu_tbre_sel_i          (lsu_tbre_sel),
     .tbre_lsu_req_o          (tbre_lsu_req),
     .tbre_lsu_is_cap_o       (tbre_lsu_is_cap),
     .tbre_lsu_we_o           (tbre_lsu_we),
