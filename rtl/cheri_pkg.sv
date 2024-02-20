@@ -330,7 +330,7 @@ package cheri_pkg;
   endfunction
 
 
-  // utillity function
+  // utility function
   // return the size (bit length) of input number without leading zeros
   function automatic logic [5:0] get_size(logic [31:0] din);
     logic  [5:0] count;
