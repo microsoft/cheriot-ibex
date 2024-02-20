@@ -1115,6 +1115,14 @@ module cheri_ex import cheri_pkg::*; #(
     assign unused_intl_lsu_we = 1'b0;
     assign intl_lsu_wdata  = 33'h0;
     assign intl_lsu_wcap   = NULL_REG_CAP;
+    assign clbc_done = 1'b0;
+    assign clbc_err = 1'b0;
+    assign clbc_revoked = 1'b1;
+
+    always_ff @(posedge clk_i) begin
+      clbc_data_q <= 32'h0;
+      clbc_cap_q <= NULL_REG_CAP;
+    end
   end
 
   //
