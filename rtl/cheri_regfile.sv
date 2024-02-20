@@ -121,8 +121,8 @@ module cheri_regfile import cheri_pkg::*; #(
     assign rf_reg_par[i] = rf_reg_par_q[i];     
   end
 
-  assign rdata_a_o = {rf_reg_par[raddr_a_i], rf_reg[raddr_a_i]};
-  assign rdata_b_o = {rf_reg_par[raddr_b_i], rf_reg[raddr_b_i]};
+  assign rdata_a_o = DataWidth'({rf_reg_par[raddr_a_i], rf_reg[raddr_a_i]});
+  assign rdata_b_o = DataWidth'({rf_reg_par[raddr_b_i], rf_reg[raddr_b_i]});
 
   // capability meta data (MSW)
   for (genvar i = 1; i < NCAPS; i++) begin : g_cap_flops
