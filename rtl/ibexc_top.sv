@@ -372,8 +372,8 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
 `endif
 
     .fetch_enable_i(fetch_enable_buf),
-    .alert_minor_o(),
-    .alert_major_o(),
+    .alert_minor_o(alert_minor_o),
+    .alert_major_o(alert_major_internal_o),
     .icache_inval_o(),
     .core_busy_o   (core_busy_d),
     .ic_scr_key_valid_i (1'b0),
@@ -390,6 +390,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   );
 
   assign data_wdata_intg_o = 7'h0;
+  assign alert_major_bus_o = 1'b0;
 
   /////////////////////////////////
   // Register file Instantiation //
@@ -453,5 +454,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       .alert_o       ()
     );
   end
+
+  assign scramble_req_o = 0;
 
 endmodule
