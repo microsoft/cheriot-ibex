@@ -153,7 +153,7 @@ package cheri_pkg;
   `define TEST_IMSK(P, M) (&((P) | ~(M)))
 
   // compress perms field to memory representation
-  function automatic logic [CPERMS_W-1:0] compress_perms (logic [PERMS_W-1:0] perms, logic [1:0] qqq);   // qqq is a place holder, just to compatible with the old encoding for now.
+  function automatic logic [CPERMS_W-1:0] compress_perms (logic [PERMS_W-1:0] perms, logic [1:0] unused_qqq);   // unused_qqq is a place holder, just to compatible with the old encoding for now.
     logic [CPERMS_W-1:0] cperms;
 
     // test all types encoding and determine encoding (Robert's priority order)
