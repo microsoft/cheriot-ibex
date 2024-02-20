@@ -173,7 +173,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     | (0                 << 13)  // N - User level interrupts supported
     | (0                 << 18)  // S - Supervisor mode implemented
     | (1                 << 20)  // U - User mode implemented
-    | (CHERIoTEn         << 23)  // X - Non-standard extensions present
+    | (32'(CHERIoTEn)    << 23)  // X - Non-standard extensions present
     | (32'(CSR_MISA_MXL) << 30); // M-XLEN
 
   typedef struct packed {
