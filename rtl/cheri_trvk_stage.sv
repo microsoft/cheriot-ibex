@@ -50,12 +50,12 @@ module cheri_trvk_stage #(
 
   logic [31:0] base32;
   logic [31:0] tsmap_ptr;
-  logic  [4:0] bitpos, bitpos_q;    // bit index in a 32-bit word
+  logic  [4:0] bitpos_q; // bit index in a 32-bit word
   logic        range_ok;
   logic  [2:1] range_ok_q;
 
 
-  assign base32    = get_bound33(in_cap_q.base, in_cap_q.base_cor, in_cap_q.exp, in_data_q);
+  assign base32    = 32'(get_bound33(in_cap_q.base, in_cap_q.base_cor, in_cap_q.exp, in_data_q));
   assign tsmap_ptr = (base32 - HeapBase) >> 3;
 
   assign tsmap_addr_o  = tsmap_ptr[15:5];
@@ -75,7 +75,7 @@ module cheri_trvk_stage #(
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       cpu_op_active <= 1'b0;
-      trsv_addr  <= 4'h0;
+      trsv_addr  <= 5'h0;
     end else begin
       if (rf_trsv_en_i) cpu_op_active <= 1'b1;
       else if (lsu_resp_valid_i) cpu_op_active <= 1'b0;
