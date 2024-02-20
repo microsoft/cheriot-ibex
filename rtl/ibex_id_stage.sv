@@ -68,6 +68,8 @@ module ibex_id_stage import cheri_pkg::*; #(
   input  logic                      illegal_c_insn_i,
   input  logic                      instr_fetch_err_i,
   input  logic                      instr_fetch_err_plus2_i,
+  input  logic                      instr_fetch_cheri_acc_vio_i,         
+  input  logic                      instr_fetch_cheri_bound_vio_i,         
 
   input  logic [31:0]               pc_id_i,
 
@@ -109,6 +111,7 @@ module ibex_id_stage import cheri_pkg::*; #(
   output logic                      csr_restore_mret_id_o,
   output logic                      csr_restore_dret_id_o,
   output logic                      csr_save_cause_o,
+  output logic                      csr_mepcc_clrtag_o,
   output logic [31:0]               csr_mtval_o,
   input  ibex_pkg::priv_lvl_e       priv_mode_i,
   input  logic                      csr_mstatus_tw_i,
@@ -628,6 +631,9 @@ module ibex_id_stage import cheri_pkg::*; #(
     .instr_bp_taken_i       (instr_bp_taken_i),
     .instr_fetch_err_i      (instr_fetch_err_i),
     .instr_fetch_err_plus2_i(instr_fetch_err_plus2_i),
+    .instr_fetch_cheri_acc_vio_i  (instr_fetch_cheri_acc_vio_i),       
+    .instr_fetch_cheri_bound_vio_i (instr_fetch_cheri_bound_vio_i),       
+
     .pc_id_i                (pc_id_i),
 
     // to IF-ID pipeline
@@ -671,6 +677,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     .csr_restore_mret_id_o(csr_restore_mret_id_o),
     .csr_restore_dret_id_o(csr_restore_dret_id_o),
     .csr_save_cause_o     (csr_save_cause_o),
+    .csr_mepcc_clrtag_o   (csr_mepcc_clrtag_o),
     .csr_mtval_o          (csr_mtval_o),
     .priv_mode_i          (priv_mode_i),
     .csr_mstatus_tw_i     (csr_mstatus_tw_i),

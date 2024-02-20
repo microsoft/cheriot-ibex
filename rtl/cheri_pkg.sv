@@ -581,13 +581,16 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     return pcc_cap;
   endfunction
 
-  function automatic reg_cap_t pcc2regcap (pcc_cap_t pcc_cap, logic [31:0] address);
+  function automatic reg_cap_t pcc2mepcc (pcc_cap_t pcc_cap, logic [31:0] address, logic clrtag);
     reg_cap_t  reg_cap;
     full_cap_t tfcap0, tfcap1;
 
     tfcap0  = pcc2fullcap(pcc_cap);
+    // we really only need to update_temp_files here 
+    // (representability check is unnecessary due to fetch time bound check). will remove later
     tfcap1  = set_address(tfcap0, address, 0, 0);
     reg_cap = full2regcap(tfcap1);
+    if (clrtag) reg_cap.valid = 1'b0;
 
     return reg_cap;
   endfunction

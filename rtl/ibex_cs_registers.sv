@@ -123,6 +123,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   input  logic                 csr_restore_mret_i,
   input  logic                 csr_restore_dret_i,
   input  logic                 csr_save_cause_i,
+  input  logic                 csr_mepcc_clrtag_i,
   input  ibex_pkg::exc_cause_e csr_mcause_i,
   input  logic [31:0]          csr_mtval_i,
   output logic                 illegal_csr_insn_o,     // access to non-existent CSR,
@@ -1776,7 +1777,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   //////////////////////
 
   if (CHERIoTEn) begin: gen_scr
-    reg_cap_t     pcc_exc_reg_cap;
+    reg_cap_t     pcc_exc_cap;
     reg_cap_t     mtdc_cap;
     logic [31:0]  mtdc_data;
     reg_cap_t     mscratchc_cap;
@@ -1832,8 +1833,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
 
     assign pcc_cap_o = pcc_cap_q;
 
-    // assign pcc_exc_reg_cap = full2regcap(set_address(pcc_fullcap_o, exception_pc, 0, 0));
-    assign pcc_exc_reg_cap = pcc2regcap(pcc_cap_q, exception_pc);
+    assign pcc_exc_cap = pcc2mepcc(pcc_cap_q, exception_pc, csr_mepcc_clrtag_i);
 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
@@ -1898,7 +1898,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
       if (!rst_ni)
         mepc_cap <= MEPC_RESET_CAP;
       else if (csr_save_cause_i & (~debug_csr_save_i) & (~debug_mode_i))
-        mepc_cap <= pcc_exc_reg_cap;
+        mepc_cap <= pcc_exc_cap;
       else if (cheri_pmode_i & mepc_en)            // legacy cssrw; NMI recover
         mepc_cap <= NULL_REG_CAP;
       else if (mepc_en_cheri)
@@ -1938,7 +1938,7 @@ module ibex_cs_registers import cheri_pkg::*;  #(
       if (!rst_ni)
         depc_cap <= NULL_REG_CAP;
       else if (csr_save_cause_i & debug_csr_save_i)
-        depc_cap <= pcc_exc_reg_cap;
+        depc_cap <= pcc_exc_cap;
       else if (depc_en_cheri)
         depc_cap <= cheri_csr_wcap_i;
     end

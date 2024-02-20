@@ -513,6 +513,7 @@ module cheri_ex import cheri_pkg::*; #(
         begin
           logic [31:0] tmp32;
           logic        is_ztop, is_write;
+          reg_cap_t    trcap;
           
           is_ztop            = (cheri_cs2_dec_i==CHERI_SCR_ZTOPC);
           is_write           = (rf_raddr_a_i != 0);
@@ -523,10 +524,20 @@ module cheri_ex import cheri_pkg::*; #(
           ztop_wr_raw        = ~perm_vio && is_write && is_ztop;
           csr_addr_o         = cheri_cs2_dec_i;
 
-          if ((cheri_cs2_dec_i==CHERI_SCR_MTCC)||(cheri_cs2_dec_i==CHERI_SCR_MEPCC)) begin
-            // MTVEC/MTCC or MEPCC 
-            csr_wdata_o      = rf_rdata_a;          
-            csr_wcap_o       = full2regcap(setaddr1_outcap);
+          if (cheri_cs2_dec_i == CHERI_SCR_MTCC) begin
+            // MTVEC/MTCC or MEPCC, legalization (clear tag if checking fails)
+            csr_wdata_o      = {rf_rdata_a[31:2], 2'b00};          
+            trcap            = rf_rcap_a;
+            if ((rf_rdata_a[1:0] != 2'b00) || ~rf_fullcap_a.perms[PERM_EX] || (rf_fullcap_a.otype != 0))
+              trcap.valid = 1'b0; 
+            csr_wcap_o       = trcap;
+          end else if (cheri_cs2_dec_i == CHERI_SCR_MEPCC) begin
+            // MTVEC/MTCC or MEPCC, legalization (clear tag if checking fails)
+            csr_wdata_o      = {rf_rdata_a[31:1], 1'b0};          
+            trcap            = rf_rcap_a;
+            if ((rf_rdata_a[0] != 1'b0) || ~rf_fullcap_a.perms[PERM_EX] || (rf_fullcap_a.otype != 0))
+              trcap.valid = 1'b0; 
+            csr_wcap_o       = trcap;
           end else begin
             csr_wdata_o      = rf_rdata_a;          
             csr_wcap_o       = rf_rcap_a;
@@ -567,7 +578,10 @@ module cheri_ex import cheri_pkg::*; #(
           // -- use the speculative version for instruction fetch
           // -- the ID exception (cheri_ex_err) flushes the pipeline and re-set PC so
           //    the speculatively fetched instruction will be flushed
-          instr_fault           = addr_bound_vio | perm_vio;
+          // -- this is now mitigated since we no longer do address bound checking here 
+          //    but let's keep the solution for now
+
+          instr_fault           = perm_vio;
 
           cheri_rf_we_raw      = ~instr_fault;    // err -> wb exception
           branch_req_raw       = ~instr_fault & cheri_operator_i[CJALR];    // update PCC in CSR
@@ -663,7 +677,8 @@ module cheri_ex import cheri_pkg::*; #(
 
     // set_addr operation 1
     if (cheri_operator_i[CJAL] | cheri_operator_i[CJALR]) begin
-      tfcap1  = pcc2fullcap(pcc_cap_i);        // link register
+      // we don't really need the representability check here, but update_temp_fields is necessary
+      tfcap1  = pcc2fullcap(pcc_cap_i);        // pcc to link register
       taddr1  = pc_id_nxt;
     end else if (cheri_operator_i[CAUIPCC]) begin
       tfcap1  = pcc2fullcap(pcc_cap_i);
@@ -672,11 +687,6 @@ module cheri_ex import cheri_pkg::*; #(
                  cheri_operator_i[CINC_ADDR_IMM] | cheri_operator_i[CAUICGP]) begin
       tfcap1  = rf_fullcap_a;
       taddr1  = addr_result;
-    end else if (cheri_operator_i[CCSR_RW]) begin
-      tfcap1  = rf_fullcap_a;
-      taddr1  = (cheri_cs2_dec_i == CHERI_SCR_MTCC) ? {rf_rdata_a[31:2], 2'b00} :
-                ((cheri_cs2_dec_i == CHERI_SCR_MEPCC) ? {rf_rdata_a[31:1], 1'b0} :
-                 rf_rdata_a);
     end else begin
       tfcap1  = NULL_FULL_CAP;
       taddr1  = 32'h0;
@@ -834,8 +844,6 @@ module cheri_ex import cheri_pkg::*; #(
     // generate the address used to check top bound violation
     if (cheri_operator_i[CSEAL] | cheri_operator_i[CUNSEAL])
       base_chkaddr = rf_rdata_b;           // cs2.address
-    else if (cheri_operator_i[CJAL] | cheri_operator_i[CJALR])
-      base_chkaddr = branch_target_o;
     else if (cheri_operator_i[CIS_SUBSET])
       base_chkaddr = rf_fullcap_b.base32;  // cs2.base32
     else   // CLC/CSC
@@ -843,8 +851,6 @@ module cheri_ex import cheri_pkg::*; #(
 
     if (cheri_operator_i[CIS_SUBSET])
       top_chkaddr = rf_fullcap_b.top33;
-    else if (cheri_operator_i[CJAL] | cheri_operator_i[CJALR])
-      top_chkaddr = {base_chkaddr[31:1], 1'b0};
     else if (is_cap)  // CLC/CSC
       top_chkaddr = {base_chkaddr[31:3], 3'b000};
     else 
@@ -853,12 +859,6 @@ module cheri_ex import cheri_pkg::*; #(
     if (cheri_operator_i[CSEAL] | cheri_operator_i[CUNSEAL]) begin
       top_bound  = rf_fullcap_b.top33;
       base_bound = rf_fullcap_b.base32;
-    end else if (cheri_operator_i[CJAL]) begin
-      top_bound  = {pcc_cap_i.top33[32:1], 1'b0};
-      base_bound = pcc_cap_i.base32;
-    end else if (cheri_operator_i[CJALR]) begin
-      top_bound  = {rf_fullcap_a.top33[32:1], 1'b0};
-      base_bound = rf_fullcap_a.base32;
     end else if (is_cap) begin // CLC/CSC
       top_bound  = {rf_fullcap_a.top33[32:3], 3'b000};       // 8-byte aligned access only
       base_bound = rf_fullcap_a.base32;
@@ -877,8 +877,6 @@ module cheri_ex import cheri_pkg::*; #(
       addr_bound_vio = top_vio | base_vio | top_equal;
     else if (cheri_operator_i[CIS_SUBSET]) 
       addr_bound_vio = top_vio | base_vio;
-    else if (cheri_operator_i[CJAL] | cheri_operator_i[CJALR])
-      addr_bound_vio = top_vio | base_vio | top_equal;
     else if (cheri_operator_i[CSEAL] | cheri_operator_i[CUNSEAL])
       addr_bound_vio = top_vio | base_vio | top_equal;
     else
@@ -1190,9 +1188,14 @@ end
     // - however in the first cycle we speculatively still assert cpu_lsu_dec_o to let LSU choose 
     //   the address from cpu core (and hold back stkz/tbre_req). In the next cycle we can deassert
     //   cpu_lsu_dec_o to let stkz/tbre_req go through
+    // - we also require that lsu_req (after gated by cpu_stkz_stall0) can only go from 0 to 1
+    //   once in an instruction cycle. It's satisfied b/c,
     //   -- Note stkz_active_i is asserted synchronously by writing to the new stkz_ptr CSR. 
     //      As such it is not possible for active to go from '0' to '1' in the middle of an 
     //      load/store instruction when we want to keep lsu_req high while waiting for lsu_req_done
+    //   -- Also, since the cpu_lsu_addr only increments (clc/csc/unaligned) and stkz address
+    //      only decrements, if lsu_addr_in_range = 0 for the 1st word, it will stay 0 for 2nd 
+    //   -- Need to ensure stkz design meet those requirements
     assign cpu_stkz_stall0 = (instr_first_cycle_i & stkz_active_i & lsu_addr_in_range) | stkz_stall_q; 
     assign cpu_stkz_stall1 = ~instr_first_cycle_i & stkz_stall_q;
 

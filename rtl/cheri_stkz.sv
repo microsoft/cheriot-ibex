@@ -45,7 +45,8 @@ module cheri_stkz import cheri_pkg::*; (
   logic  [32:0] ztop_wtop33;
   logic  [31:0] ztop_wbase32;
   logic         ptr_le_base, waddr_eq_base;
-  logic         cmd_new, cmd_avail, cmd_go, cmd_pending;
+  logic         cmd_new, cmd_avail, cmd_pending;
+  logic         cmd_go, cmd_go_null, cmd_go_good;
   logic         cmd_cap_good;
   logic         cmd_n2z;
   logic         cmd_is_null, cmd_is_null_d, cmd_is_null_q;
@@ -58,13 +59,13 @@ module cheri_stkz import cheri_pkg::*; (
   assign stkz_lsu_req_o    = stkz_active;
   assign stkz_lsu_addr_o   = {stkz_ptrw_nxt, 2'h0};
 
+  // stkz_active needs to be asserted as soon as command pending (when ztop SCR write instruction done)
   assign stkz_active_o     = stkz_active;      
-  assign stkz_active       = (stkz_fsm_q == STKZ_ACTIVE);
+  assign stkz_active       = (stkz_fsm_q == STKZ_ACTIVE) | cmd_pending;
   assign stkz_abort_o      = (stkz_fsm_q == STKZ_ABORT);
 
-  // if new command pending, update this immediately so we can block further load/stores
-  assign stkz_ptr_o        = cmd_pending ? cmd_wdata_q : {stkz_ptrw, 2'h0};
-  assign stkz_base_o       = cmd_pending ? cmd_wbase32_q : {stkz_basew, 2'h0};
+  assign stkz_ptr_o        = {stkz_ptrw, 2'h0};
+  assign stkz_base_o       = {stkz_basew, 2'h0};
 
   assign ztop_rdata_o = {stkz_ptrw, 2'h0};
   assign ztop_rcap_o  = ztop_rcap;
@@ -73,11 +74,13 @@ module cheri_stkz import cheri_pkg::*; (
 
   assign ztop_wtop33  = ztop_wfcap_i.top33;
 
-  //     do we need to check permission as well?
+  // QQQ  do we need to check permission as well?
   assign cmd_new       = ztop_wr_i & (cmd_cap_good | cmd_is_null_d);
   assign cmd_avail     = cmd_new || cmd_pending;
-  assign cmd_go        = cmd_avail & (((stkz_fsm_q == STKZ_ACTIVE) && lsu_stkz_req_done_i) || 
-                                       (stkz_fsm_q != STKZ_ACTIVE)); 
+  assign cmd_go_null   = cmd_avail & cmd_is_null && (((stkz_fsm_q == STKZ_ACTIVE) && lsu_stkz_req_done_i) || 
+                                                     (stkz_fsm_q != STKZ_ACTIVE)); 
+  assign cmd_go_good   = cmd_avail & ~cmd_is_null && (stkz_fsm_q != STKZ_ACTIVE);
+  assign cmd_go        = cmd_go_null | cmd_go_good;
 
   assign cmd_is_null   = cmd_new ? cmd_is_null_d : cmd_is_null_q;
   assign cmd_wdata     = cmd_new ? ztop_wdata_i : cmd_wdata_q;
@@ -89,8 +92,8 @@ module cheri_stkz import cheri_pkg::*; (
   assign cmd_n2z       = cmd_wcap.valid & (cmd_wdata[31:2] == cmd_wbase32[31:2]);
 
   assign ptr_le_base   = (stkz_ptrw_nxt <= stkz_basew);
-  assign stkz_start    = cmd_go && ~cmd_is_null && (cmd_wdata[31:2] != cmd_wbase32[31:2]);
-  assign stkz_done     = lsu_stkz_req_done_i && ((~cmd_go & ptr_le_base) || (cmd_go && (cmd_n2z|cmd_is_null)));
+  assign stkz_start    = cmd_go_good && (cmd_wdata[31:2] != cmd_wbase32[31:2]);
+  assign stkz_done     = lsu_stkz_req_done_i &&  (ptr_le_base || cmd_go_null);
   assign stkz_stop     = lsu_stkz_req_done_i && (unmasked_intr_i) && ~ptr_le_base;
 
 
@@ -104,8 +107,6 @@ module cheri_stkz import cheri_pkg::*; (
       stkz_fsm_d = STKZ_IDLE;
     else if ((stkz_fsm_q == STKZ_ACTIVE) & stkz_stop)  // have to abort asynchly due to interrupt
       stkz_fsm_d = STKZ_ABORT;
-    else if ((stkz_fsm_q == STKZ_ABORT) & stkz_start)
-      stkz_fsm_d = STKZ_ACTIVE;    
     else if (stkz_fsm_q == STKZ_ABORT) 
       stkz_fsm_d = STKZ_IDLE;    // self clear by any furtherload/store activity
     else
@@ -143,13 +144,16 @@ module cheri_stkz import cheri_pkg::*; (
       stkz_fsm_q <= stkz_fsm_d;
 
       // zcap is an WARL SCR
-      //   - if active, only allow writing NULL to stop. Readback always return current progress
+      //   - if active
+      //     - Readback return current progress 
+      //     - allow writing NULL to stop (readback NULL in this case)
+      //       also allow writing a new tagged cap (to start next zerorization)
+      //       
       //   - if not active, i
       //     - only allow writing tagged cap (legalized), which starts zeroization, however
       //     - speical case: write a tagged cap with addr == base will NOT start zeroization but 
       //       will clear tag on read
       //
-      // if (stkz_start || (cmd_go & cmd_n2z)) begin
       if (cmd_go) begin
         stkz_ptrw <= cmd_wdata[31:2];
         ztop_rcap <= (cmd_go & cmd_n2z) ? cmd_wcap_untagged : cmd_wcap;
@@ -173,7 +177,7 @@ module cheri_stkz import cheri_pkg::*; (
 
       if (cmd_go)
         cmd_pending <= 1'b0;       // clear
-      else if (cmd_avail)
+      else if (cmd_new)
         cmd_pending <= 1'b1;       // latch command 
 
       if (cmd_new) cmd_is_null_q  <= cmd_is_null_d;
