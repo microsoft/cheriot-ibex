@@ -91,7 +91,6 @@ module cheri_trvk_stage #(
                           (lsu_tbre_resp_valid_i & ~lsu_tbre_resp_err_i &  rf_wcap_lsu_i.valid);
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
-    int i;
     if (!rst_ni) begin
       cpu_op_valid_q  <= 0;
       tbre_op_valid_q <= 0;
