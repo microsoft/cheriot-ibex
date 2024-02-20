@@ -184,14 +184,14 @@ module cheri_ex import cheri_pkg::*; #(
   logic  [31:0]  addr_result;
 
   logic          intl_lsu_req;
-  logic          intl_lsu_we;
+  logic          unused_intl_lsu_we;
   logic [31:0]   intl_lsu_addr;
   logic [32:0]   intl_lsu_wdata;
   reg_cap_t      intl_lsu_wcap;
   logic          intl_lsu_is_cap;
 
   logic          clbc_done;
-  logic          clbc_err, clbc_err_q;
+  logic          clbc_err;
   logic  [31:0]  clbc_data_q;
   reg_cap_t      clbc_cap_q;
   logic          clbc_revoked;
@@ -1026,9 +1026,10 @@ module cheri_ex import cheri_pkg::*; #(
     logic  [4:0] ts_map_bitpos;    // bit index in a 32-bit word
     logic        clbc_map_ok;
     logic [31:0] clbc_map_q;
+    logic        clbc_err_q;
 
     assign clbc_revoked    = clbc_map_ok && clbc_map_q[ts_map_bitpos] & cheri_tsafe_en_i;
-    assign intl_lsu_we    = 1'b0;
+    assign unused_intl_lsu_we    = 1'b0;
     assign intl_lsu_wdata = 33'h0;
     assign intl_lsu_wcap  = NULL_REG_CAP;
 
@@ -1111,7 +1112,7 @@ module cheri_ex import cheri_pkg::*; #(
     assign intl_lsu_req    = 1'b0;
     assign intl_lsu_is_cap = 1'b0;
     assign intl_lsu_addr   = 32'h0;
-    assign intl_lsu_we     = 1'b0;
+    assign unused_intl_lsu_we = 1'b0;
     assign intl_lsu_wdata  = 33'h0;
     assign intl_lsu_wcap   = NULL_REG_CAP;
   end
