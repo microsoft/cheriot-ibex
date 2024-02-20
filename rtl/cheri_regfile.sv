@@ -80,7 +80,6 @@ module cheri_regfile import cheri_pkg::*; #(
 
   // No flops for R0 as it's hard-wired to 0
   for (genvar i = 1; i < NREGS; i++) begin : g_rf_flops
-    logic cap_valid;
     
     
     always_ff @(posedge clk_i or negedge rst_ni) begin
