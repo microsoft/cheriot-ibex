@@ -230,7 +230,7 @@ module ibex_id_stage import cheri_pkg::*; #(
   logic        wfi_insn_dec;
 
   logic        wb_exception;
-  logic        id_exception;
+  logic        unused_id_exception;
   logic        id_exception_nc;
 
   logic        branch_in_dec;
@@ -655,7 +655,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     .store_err_i    (lsu_store_err_i),
     .lsu_err_is_cheri_i (lsu_err_is_cheri_i),
     .wb_exception_o (wb_exception),
-    .id_exception_o (id_exception),
+    .id_exception_o (unused_id_exception),
     .id_exception_nc_o (id_exception_nc),
 
     // jump/branch control
@@ -1170,7 +1170,6 @@ module ibex_id_stage import cheri_pkg::*; #(
     logic unused_outstanding_store_wb;
     logic unused_wb_exception;
     logic [31:0] unused_rf_wdata_fwd_wb;
-    logic unused_id_exception;
 
     assign unused_data_req_done_ex     = lsu_req_done_i;
     assign unused_rf_waddr_wb          = rf_waddr_wb_i;
@@ -1179,7 +1178,6 @@ module ibex_id_stage import cheri_pkg::*; #(
     assign unused_outstanding_store_wb = outstanding_store_wb_i;
     assign unused_wb_exception         = wb_exception;
     assign unused_rf_wdata_fwd_wb      = rf_wdata_fwd_wb_i;
-    assign unused_id_exception         = id_exception;
 
     assign instr_type_wb_o = WB_INSTR_OTHER;
     assign stall_wb        = 1'b0;
