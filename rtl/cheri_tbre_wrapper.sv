@@ -82,7 +82,7 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
 
   logic          tbre_stat, tbre_err, stkz_err;
 
-  assign mmreg_coreout_o = {{(MMRegDoutW-8){1'b0}}, 2'b00, 2'b00, stkz_err, stkz_active_o,
+  assign mmreg_coreout_o = {{(MMRegDoutW-10){1'b0}}, 2'b00, 2'b00, stkz_err, stkz_active_o,
                                                     2'b00,  tbre_err, tbre_stat};
 
   if (CHERIoTEn & CheriTBRE) begin : g_tbre
@@ -190,7 +190,7 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   for (genvar i = 0; i < nMSTR; i++) begin
     logic [7:0] pri_mask;
     assign pri_mask = 8'hff >> (8-i);      // max 8 masters, should be enough 
-    assign mstr_arbit[i] = mstr_req[i] & ~(|(mstr_req & pri_mask));
+    assign mstr_arbit[i] = mstr_req[i] & ~(|(mstr_req & pri_mask[nMSTR-1:0]));
   end
 
   // Handling delayed-gnt case. 
