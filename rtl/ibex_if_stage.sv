@@ -498,6 +498,8 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
         instr_is_compressed_id_o <= instr_is_compressed_out;
         illegal_c_insn_id_o      <= illegal_c_instr_out;
         pc_id_o                  <= pc_if_o;
+        instr_fetch_cheri_acc_vio_o    <= cheri_acc_vio; 
+        instr_fetch_cheri_bound_vio_o  <= cheri_bound_vio; 
       end
     end
   end else begin : g_instr_rdata_nr
