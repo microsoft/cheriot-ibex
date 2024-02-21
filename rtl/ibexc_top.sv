@@ -82,6 +82,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   input  logic [31:0]                  tsmap_rdata_i,
   input  logic [MMRegDinW-1:0]         mmreg_corein_i,
   output logic [MMRegDoutW-1:0]        mmreg_coreout_o,
+  output logic                         cheri_fatal_err_o,
 
   // Interrupt inputs
   input  logic                         irq_software_i,
@@ -321,6 +322,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .tsmap_rdata_i    (tsmap_rdata_i),
     .mmreg_corein_i   (mmreg_corein_i),
     .mmreg_coreout_o  (mmreg_coreout_o),
+    .cheri_fatal_err_o(cheri_fatal_err_o),
 
     .irq_software_i (irq_software_i),
     .irq_timer_i    (irq_timer_i   ),

@@ -115,6 +115,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   input  logic [31:0]                  tsmap_rdata_i,
   input  logic [MMRegDinW-1:0]         mmreg_corein_i,
   output logic [MMRegDoutW-1:0]        mmreg_coreout_o,
+  output logic                         cheri_fatal_err_o,
 
   // RAMs interface
   output logic [IC_NUM_WAYS-1:0]       ic_tag_req_o,
@@ -1563,7 +1564,8 @@ end
     .cheri_branch_target_i  (branch_target_ex_cheri),
     .pcc_cap_i              (pcc_cap_w),
     .pcc_cap_o              (pcc_cap_r),
-    .csr_dbg_tclr_fault_o   (csr_dbg_tclr_fault)
+    .csr_dbg_tclr_fault_o   (csr_dbg_tclr_fault),
+    .cheri_fatal_err_o      (cheri_fatal_err_o)
   );
 
 
