@@ -5,7 +5,7 @@
 //
 // data interface/memory model
 //
-module data_mem_model ( 
+module data_mem_model import cheriot_dv_pkg::*; ( 
   input  logic              clk,
   input  logic              rst_n,
 
@@ -14,17 +14,21 @@ module data_mem_model (
   input  logic [3:0]        RESP_WMAX,
 
   input  logic              err_enable,
+  input  logic              ignore_stkz,
  
   input  logic              data_req,
   input  logic              data_we,
   input  logic [3:0]        data_be,
+  input  logic              data_is_cap,
   input  logic [31:0]       data_addr,
   input  logic [32:0]       data_wdata,
+  input  logic [7:0]        data_flag,
 
   output logic              data_gnt,
   output logic              data_rvalid,
   output logic [32:0]       data_rdata,
   output logic              data_err,
+  output mem_cmd_t          data_resp_info,
 
   input  logic              tsmap_cs,
   input  logic [15:0]       tsmap_addr,
@@ -34,7 +38,8 @@ module data_mem_model (
   input  logic [63:0]       mmreg_coreout,
 
   output logic [3:0]        err_enable_vec, 
-  output logic [2:0]        intr_ack
+  output logic [2:0]        intr_ack,
+  output logic              uart_stop_sim
 );
  
   localparam int unsigned DRAM_AW     = 16; 
@@ -71,30 +76,31 @@ module data_mem_model (
   logic                   mmreg_sel, mmreg_cs;
   logic [7:0]             mmreg_addr32;
 
-  logic                   data_req_isr;
-  logic                   mem_req_isr;
+  logic [7:0]             mem_flag;
 
   mem_obi_if #(
     .DW         (33)
   ) u_mem_obj_if (
-    .clk          (clk),
-    .rst_n        (rst_n),
+    .clk_i        (clk),
+    .rst_ni       (rst_n),
     .GNT_WMAX     (GNT_WMAX),
     .RESP_WMAX    (RESP_WMAX),
     .data_req     (data_req),
-    .data_req_isr (data_req_isr),
     .data_we      (data_we),
     .data_be      (data_be),
+    .data_is_cap  (data_is_cap),
     .data_addr    (data_addr),
     .data_wdata   (data_wdata),
+    .data_flag    (data_flag),
     .data_gnt     (data_gnt),
     .data_rvalid  (data_rvalid),
     .data_rdata   (data_rdata),
     .data_err     (data_err),
+    .data_resp_info (data_resp_info),
     .mem_cs       (mem_cs),
     .mem_we       (mem_we),
     .mem_be       (mem_be),
-    .mem_req_isr  (mem_req_isr),
+    .mem_flag     (mem_flag),
     .mem_addr32   (mem_addr32),
     .mem_wdata    (mem_wdata),
     .mem_rdata    (mem_rdata),
@@ -102,20 +108,13 @@ module data_mem_model (
   );
 
   //
-  // Tracking CPU execution of startup/exception handler and
-  // suppress error injection during the phase
-  // 
-  
-  assign data_req_isr = dut.u_ibex_top.u_ibex_core.id_stage_i.instr_executing &
-                        dut.u_ibex_top.u_ibex_core.load_store_unit_i.lsu_req_i &
-                        ~dut.u_ibex_top.u_ibex_core.load_store_unit_i.cur_req_is_tbre &
-                        (dut.u_ibex_top.u_ibex_core.id_stage_i.pc_id_i >= 32'h8000_0000) & 
-                        (dut.u_ibex_top.u_ibex_core.id_stage_i.pc_id_i < 32'h8000_0200);
-  //
   // memory signals (sampled @posedge clk)
   //
   logic dram_sel_q, tsram_p0_sel_q, mmreg_sel_q;
+  logic mem_req_isr, mem_req_stkz;
 
+  assign mem_req_stkz = mem_flag[2];
+  assign mem_req_isr  = mem_flag[0];
   assign mem_rdata = dram_sel_q ? dram_rdata : (tsram_p0_sel_q ? {1'b0, tsram_p0_rdata} : 
                                               (mmreg_sel_q ? {1'b0, mmreg_rdata} : 33'h0));
   // mem_err is in themem_cs
@@ -125,9 +124,12 @@ module data_mem_model (
   // DRAM (data RAM)
   // starting at 0x8000_0000
   //
+  // don't generate memory access if
+  //   - responds with an error, or
+  //   - accesses from stkz is supposed to be ignored.
   assign dram_addr32 = mem_addr32[DRAM_AW-1:0];
   assign dram_sel    = mem_cs & mem_addr32[29] & (mem_addr32[28:DRAM_AW+2] == 0);   
-  assign dram_cs     = dram_sel & ~mem_err;   
+  assign dram_cs     = dram_sel & ~mem_err & (~mem_req_stkz | ~ignore_stkz);   
 
   always @(posedge clk, negedge rst_n) begin
     if (~rst_n) begin
@@ -169,8 +171,10 @@ module data_mem_model (
     if (~rst_n) begin
       dram_err_schd <= 1'b0;
     end else begin
-      if (dram_sel)
-        dram_err_schd <= err_enable & ((ERR_RATE == 0) ? 1'b0 : ($urandom()%(2**(8-ERR_RATE))==0));
+      if (~err_enable)
+        dram_err_schd <= 1'b0;
+      else if (dram_sel)
+        dram_err_schd <= (ERR_RATE == 0) ? 1'b0 : ($urandom()%(2**(8-ERR_RATE))==0);
     end
   end 
   //
@@ -214,8 +218,10 @@ module data_mem_model (
     if (~rst_n) begin
       tsram_p0_err_schd <= 1'b0;
     end else begin
-      if (tsram_p0_sel)
-        tsram_p0_err_schd <= err_enable & ((ERR_RATE == 0) ? 1'b0 : ($urandom()%(2**(8-ERR_RATE))==0));
+      if (~err_enable)
+        tsram_p0_err_schd <= 1'b0;
+      else if (tsram_p0_sel)
+        tsram_p0_err_schd <= (ERR_RATE == 0) ? 1'b0 : ($urandom()%(2**(8-ERR_RATE))==0);
     end
   end 
  
@@ -309,5 +315,20 @@ module data_mem_model (
         intr_ack <= 3'h0;
     end
   end 
+
+  // UART printout
+  initial begin
+    uart_stop_sim = 1'b0;
+    @(posedge rst_n);
+
+    while (1) begin
+      @(posedge clk);
+      if (mmreg_cs && mem_we && (mmreg_addr32 == 'h80))  // 0x8380_0200
+        if (mem_wdata[7]) 
+          uart_stop_sim = 1'b1;
+       else 
+          $write("%c", mem_wdata[7:0]);
+    end
+  end
 
 endmodule

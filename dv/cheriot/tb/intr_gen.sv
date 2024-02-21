@@ -18,7 +18,8 @@ module intr_gen (
 
   logic [2:0]  irq;
 
-  assign irq_o = intr_en & irq;   // hard gate irq output (otherwise nwait cause delay)
+  //assign irq_o = intr_en & irq;   // hard gate irq output (otherwise nwait cause delay)
+  assign irq_o = irq;   
 
   initial begin
     int nwait;
@@ -35,9 +36,11 @@ module intr_gen (
           if (intr_en && (INTR_INTVL != 0)) begin
             nwait = ((rand32 % (2** INTR_INTVL)) + 1) * 10;   // wait at least 10 clk cycles
             repeat (nwait) @(posedge clk);
-            // irq = rand32[15:0] % 7 + 1;    // new interrupt
-            irq = {2'b00, rand32[0]};         // just do irq_external now. irq_timer causes trouble in sail
-            //$display ("going irq=1 @%t", $time);
+            if (intr_en) begin                  // test intr_en again 
+              // irq = rand32[15:0] % 7 + 1;    // new interrupt
+              irq = {2'b00, rand32[0]};         // just do irq_external now. irq_timer causes trouble in sail
+              //$display ("going irq=1 @%t", $time);
+            end
           end else begin
             @(posedge clk);
           end

@@ -11,13 +11,19 @@ module tb_env;
   logic [31:0]  dii_insn, nxt_instr;
   logic [31:0]  dii_pc;
   logic         dii_ack;
+  logic         uart_stop_sim;
+  logic         end_sim_req;
+  logic         end_sim_ack;
 
   tb_cheriot_top u_tb_top (
-    .clk_i      (clk),
-    .rstn_i     (rst_n),
-    .dii_insn_i (dii_insn),
-    .dii_pc_o   (dii_pc),
-    .dii_ack_o  (dii_ack)
+    .clk_i            (clk),
+    .rst_ni           (rst_n),
+    .dii_insn_i       (dii_insn),
+    .dii_pc_o         (dii_pc),
+    .dii_ack_o        (dii_ack),
+    .uart_stop_sim_o  (uart_stop_sim),
+    .end_sim_req_i    (end_sim_req),
+    .end_sim_ack_o    (end_sim_ack)
   );
 
 
@@ -85,15 +91,23 @@ module tb_env;
 
   initial begin
     bit cont_flag;
+    int timeout, cycle_cnt;
     int i;
+
+    timeout = 20*1000*1000;   // default timeout
 
     i = $value$plusargs("TEST=%s", test_name);
     if (i == 0)
       $sformat(test_name, "hello_world");
 
-    $sformat(vhx_path, "./bin/%s.vhx", test_name);
-    $display("Loading test %s", test_name);
+    i = $value$plusargs("TIMEOUT=%d", timeout);
 
+
+    $sformat(vhx_path, "./bin/%s.vhx", test_name);
+    $display("TB> Loading test %s", test_name);
+    $display("TB> Test timeout = %d", timeout);
+
+    end_sim_req   = 1'b0;
     rst_n = 1'b1;
     #1;
     rst_n = 1'b0;
@@ -114,12 +128,25 @@ module tb_env;
     cont_flag = 1;
     while (cont_flag) begin
       @(posedge clk);
-      if (u_tb_top.data_req & u_tb_top.data_gnt & (u_tb_top.data_addr == 32'h83800200)) begin
-        if (u_tb_top.data_wdata[7])
-          cont_flag = 0;
-        else
-          $write("%c", u_tb_top.data_wdata[7:0]);
+      cycle_cnt += 1;
+      if (cycle_cnt > timeout) begin
+        cont_flag = 0;
+        $display("TB> Simulation timed out after %d cycles", cycle_cnt);
       end
+
+      if (uart_stop_sim) begin
+        cont_flag = 0;
+        $display("TB> Simulation stopped by UART request @ %d cycles", cycle_cnt);
+      end
+    end
+    
+    @(posedge clk);
+    end_sim_req = 1'b1;
+
+    i = 0;
+    while ((i < 10000) && ~end_sim_ack) begin
+      @(posedge clk);
+      i += 1;
     end
 
     repeat(10) @(posedge clk);

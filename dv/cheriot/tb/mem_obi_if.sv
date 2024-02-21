@@ -4,11 +4,11 @@
 
 // memory model with random gnt/rvalid waits 
 //
-module mem_obi_if #(
+module mem_obi_if import cheriot_dv_pkg::*; #(
   parameter int unsigned DW         = 32  
 )( 
-  input  logic          clk,
-  input  logic          rst_n,
+  input  logic          clk_i,
+  input  logic          rst_ni,
 
   input  logic [3:0]    GNT_WMAX,
   input  logic [3:0]    RESP_WMAX,
@@ -16,19 +16,21 @@ module mem_obi_if #(
   input  logic          data_req,
   input  logic          data_we,
   input  logic [3:0]    data_be,
-  input  logic          data_req_isr,
+  input  logic          data_is_cap,
   input  logic [31:0]   data_addr,
   input  logic [DW-1:0] data_wdata,
+  input  logic [7:0]    data_flag,       // sideband signals (flow through)
 
   output logic          data_gnt,
   output logic          data_rvalid,
   output logic [DW-1:0] data_rdata,
   output logic          data_err,
+  output mem_cmd_t      data_resp_info,  // loopback information for checking
 
   output logic          mem_cs,
   output logic          mem_we,
   output logic [3:0]    mem_be,
-  output logic          mem_req_isr,
+  output logic [7:0]    mem_flag,     
   output logic [29:0]   mem_addr32,
   output logic [DW-1:0] mem_wdata,
   input  logic [DW-1:0] mem_rdata,
@@ -60,14 +62,6 @@ module mem_obi_if #(
   logic              resp_no_wait, resp_wait_done;
   logic              resp_valid;
 
-  typedef struct packed {
-    logic          we;
-    logic [3:0]    be;
-    logic          req_isr;
-    logic [29:0]   addr32;
-    logic [DW-1:0] wdata;
-  } mem_cmd_t;
-
   mem_cmd_t mem_cmd_fifo[0:7];
   mem_cmd_t cur_wr_cmd, cur_rd_cmd;
 
@@ -78,9 +72,10 @@ module mem_obi_if #(
   assign cmd_fifo_empty = (cmd_wr_ptr_ext == cmd_rd_ptr_ext);
   assign cmd_avail      = cmd_fifo_wr || !cmd_fifo_empty;
 
+  assign cur_wr_cmd.is_cap  = data_is_cap;
   assign cur_wr_cmd.we      = data_we;
   assign cur_wr_cmd.be      = data_be;
-  assign cur_wr_cmd.req_isr = data_req_isr;
+  assign cur_wr_cmd.flag    = data_flag;
   assign cur_wr_cmd.addr32  = data_addr[31:2];   // 32-bit addr
   assign cur_wr_cmd.wdata   = data_wdata; 
 
@@ -94,13 +89,13 @@ module mem_obi_if #(
   assign resp_wait_done = cmd_avail && !resp_idle &&  (resp_cntr == 1);
 
   //
-  //  @negedge clk
+  //  @negedge clk_i
   //     Grant stage to issue grants and enqueue granted-requests 
   //     dequeue requests to generate memory read/writes
   //
   
-  always @(negedge clk, negedge rst_n) begin
-    if (~rst_n) begin
+  always @(negedge clk_i, negedge rst_ni) begin
+    if (~rst_ni) begin
       data_gnt       <= 1'b0;
       gnt_idle       <= 1'b1;
       gnt_waits      <= 0;
@@ -150,14 +145,14 @@ module mem_obi_if #(
   end
   
   // 
-  //  @posedge clk
+  //  @posedge clk_i
   //    Response stage generate output signals
   //
 
   assign data_rdata   = mem_rdata & {33{data_rvalid}}; 
 
-  always @(posedge clk, negedge rst_n) begin
-    if (~rst_n) begin
+  always @(posedge clk_i, negedge rst_ni) begin
+    if (~rst_ni) begin
       data_rvalid <= 1'b0;
       data_err    <= 1'b0;
       cmd_rd_ptr_ext <= 0;
@@ -174,13 +169,52 @@ module mem_obi_if #(
   end
 
   //
-  // memory signals (sampled @posedge clk)
+  // memory signals (sampled @posedge clk_i)
   //
   assign mem_cs      = resp_valid;
   assign mem_we      = cur_rd_cmd.we;
   assign mem_be      = cur_rd_cmd.be;
-  assign mem_req_isr = cur_rd_cmd.req_isr;
+  assign mem_flag    = cur_rd_cmd.flag;
   assign mem_wdata   = cur_rd_cmd.wdata;
   assign mem_addr32  = cur_rd_cmd.addr32;  
+
+  //
+  // Interface protocol check
+  //
+  logic        outstanding_data_req;
+  logic [7:0]  data_ctrl_info;
+ 
+  assign data_ctrl_info = {data_is_cap, data_we, data_be};
+
+  always @(posedge clk_i, negedge rst_ni) begin
+    if (~rst_ni) begin
+      outstanding_data_req <= 1'b0;
+    end else begin
+      if (data_gnt)
+        outstanding_data_req <= 1'b0;
+      else if (data_req && ~data_gnt)
+        outstanding_data_req <= 1'b1;
+    end
+  end
+
+  // -- once asserted, req can't go low until req_done
+  // -- no change in address/control signals within the same request
+  `ASSERT(obiReqStable1, (data_gnt |-> data_req));
+  `ASSERT(obiReqStable2, (outstanding_data_req |-> data_req));
+  `ASSERT(obiCtrlStable, (outstanding_data_req |-> $stable(data_ctrl_info)));
+  `ASSERT(obiWdataStable, ((outstanding_data_req & data_we) |-> ($stable(data_wdata))));
+  `ASSERT(obiAddrStable, (outstanding_data_req |-> $stable(data_addr)));
+ 
+  mem_cmd_t cur_rd_cmd_q;
+
+  always @(posedge clk_i) begin
+   cur_rd_cmd_q <= cur_rd_cmd;
+  end
+
+  always_comb begin
+    data_resp_info       = cur_rd_cmd_q;
+    data_resp_info.rdata = data_rdata;
+    data_resp_info.err   = data_err;
+  end
 
 endmodule

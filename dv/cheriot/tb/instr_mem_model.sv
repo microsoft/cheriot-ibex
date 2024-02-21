@@ -39,22 +39,26 @@ module instr_mem_model (
   mem_obi_if #(
     .DW         (32)
   ) u_mem_obj_if (
-    .clk          (clk),
-    .rst_n        (rst_n),
+    .clk_i        (clk),
+    .rst_ni       (rst_n),
     .GNT_WMAX     (GNT_WMAX),
     .RESP_WMAX    (RESP_WMAX),
     .data_req     (instr_req),
     .data_we      (1'b0),
     .data_be      (4'hf),
+    .data_is_cap  (1'b0),
     .data_addr    (instr_addr),
     .data_wdata   (32'h0),
+    .data_flag    (8'h0),
     .data_gnt     (instr_gnt),
     .data_rvalid  (instr_rvalid),
     .data_rdata   (instr_rdata),
     .data_err     (instr_err),
+    .data_resp_info (),
     .mem_cs       (mem_cs),
     .mem_we       (),
     .mem_be       (),
+    .mem_flag     (),
     .mem_addr32   (mem_addr32),
     .mem_wdata    (),
     .mem_rdata    (mem_rdata),
@@ -83,8 +87,10 @@ module instr_mem_model (
     if (~rst_n) begin
       iram_err_q    <= 1'b0;
     end else begin
-      if (mem_cs)
-        iram_err_q <= err_enable & ((ERR_RATE == 0) ? 1'b0 : ($urandom()%(2**(8-ERR_RATE))==0));
+      if (~err_enable)
+        iram_err_q    <= 1'b0;
+      else if (mem_cs)
+        iram_err_q <=  (ERR_RATE == 0) ? 1'b0 : ($urandom()%(2**(8-ERR_RATE))==0);
 
     end
   end 

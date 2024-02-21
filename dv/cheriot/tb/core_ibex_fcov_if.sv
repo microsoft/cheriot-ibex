@@ -695,27 +695,26 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     // New coverage points
     //
 
-    // ignore_bins ignore = {[16:31]};              // RV32E/CHERIoT, 16 regs only
-    cp_rs1_addr: coverpoint id_stage_i.rf_raddr_a_o[3:0] iff (id_stage_i.rf_ren_a) {
-      bins bin0     = {0};
-      bins bin1to7  = {[1:7]};
-      bins bin8to14 = {[8:14]};
-      bins bin15    = {15};
+    cp_rs1_addr: coverpoint id_stage_i.rf_raddr_a_o[4:0] iff (id_stage_i.rf_ren_a) {
+      bins bin0      = {0};
+      bins bin1to14  = {[1:14]};
+      bins bin15     = {15};
+      bins bin16to31 = {[16:31]};   // for CHERIoT negative case
     }
 
-    cp_rs2_addr: coverpoint id_stage_i.rf_raddr_b_o[3:0] iff (id_stage_i.rf_ren_b) {
-      bins bin0     = {0};
-      bins bin1to7  = {[1:7]};
-      bins bin8to14 = {[8:14]};
-      bins bin15    = {15};
+    cp_rs2_addr: coverpoint id_stage_i.rf_raddr_b_o[4:0] iff (id_stage_i.rf_ren_b) {
+      bins bin0      = {0};
+      bins bin1to14  = {[1:14]};
+      bins bin15     = {15};
+      bins bin16to31 = {[16:31]};   // for CHERIoT negative case
     }
  
-    cp_rd_addr:  coverpoint id_stage_i.rf_waddr_id_o[3:0] iff 
+    cp_rd_addr:  coverpoint id_stage_i.rf_waddr_id_o[4:0] iff 
                  (id_stage_i.rf_we_id_o | g_cheri_ex.u_cheri_ex.cheri_rf_we_o) {
-      bins bin0     = {0};
-      bins bin1to7  = {[1:7]};
-      bins bin8to14 = {[8:14]};
-      bins bin15    = {15};
+      bins bin0      = {0};
+      bins bin1to14  = {[1:14]};
+      bins bin15     = {15};
+      bins bin16to31 = {[16:31]};   // for CHERIoT negative case
     }
 
     // all CHERIoT instructions enumerated
@@ -763,7 +762,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
       // bins bin2 = {4'b0011}; // base_cor = 0, top_cor = -1, impossible case
       bins bin3 = {4'b1100}; 
       // bins bin4 = {4'b1101};    // impossible case
-      // bins bin5 = {4'b1111};    // impossible case
+      bins bin5 = {4'b1111};    
       illegal_bins illegal = default;
     }
 
@@ -822,7 +821,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
       // bins bin2 = {4'b0011}; 
       bins bin3 = {4'b1100}; 
       // bins bin4 = {4'b1101}; 
-      // bins bin5 = {4'b1111}; 
+      bins bin5 = {4'b1111}; 
       illegal_bins illegal = default;
     }
 
@@ -942,7 +941,9 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     cp_trvk_cond: coverpoint {g_trvk_stage.cheri_trvk_stage_i.trvk_status,
                               g_trvk_stage.cheri_trvk_stage_i.cap_good_q[2],
                               g_trvk_stage.cheri_trvk_stage_i.range_ok_q[2]} iff
-                             (g_trvk_stage.cheri_trvk_stage_i.rf_trvk_en_o);
+                             (g_trvk_stage.cheri_trvk_stage_i.rf_trvk_en_o) {
+      wildcard ignore_bins ignore = {3'b?0?};   // if cap is not good, revocaton status/rang_ok are don't cares
+    }
 
     cp_trvk_stall: coverpoint id_stage_i.stall_cheri_trvk;
 
@@ -989,6 +990,8 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     cp_concur_mem_reqs: coverpoint {g_cheri_ex.u_cheri_ex.lsu_req_o, 
                                    cheri_tbre_wrapper_i.g_tbre.cheri_tbre_i.tbre_lsu_req_o,
                                    cheri_tbre_wrapper_i.g_stkz.cheri_stkz_i.stkz_lsu_req_o};
+
+    cp_tbrewrp_blk1_cancel: coverpoint  cheri_tbre_wrapper_i.tbre_wrapper_dv_ext_i.fcov_blk1_cancel;
 
     cp_stkz_sm: coverpoint cheri_tbre_wrapper_i.g_stkz.cheri_stkz_i.stkz_fsm_q {
       bins good[]      = {[0:2]};
@@ -1092,7 +1095,8 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
 
     // exception_stall_instr_cross: cross cp_ls_pmp_exception, cp_ls_error_exception, cp_ls_cheri_exception,
     exception_stall_instr_cross: cross cp_ls_exception,
-      cp_id_instr_category, cp_stall_type_id, instr_unstalled, cp_irq_pending, cp_debug_req {
+      // cp_id_instr_category, cp_stall_type_id, instr_unstalled, cp_irq_pending, cp_debug_req {  // QQQ add cp_debug_req back later
+      cp_id_instr_category, cp_stall_type_id, instr_unstalled, cp_irq_pending {
       illegal_bins illegal =
         // Only Div, Mul, Branch and Jump instructions can see an instruction stall
         (!binsof(cp_id_instr_category) intersect {InstrCategoryDiv, InstrCategoryMul,

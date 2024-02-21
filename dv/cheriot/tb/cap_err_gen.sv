@@ -140,7 +140,7 @@ module cap_err_gen import ibex_pkg::*; import cheri_pkg::*; (
 
   assign is_rv32_lsu  = dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.rv32_lsu_req_i;
   assign is_cheri_lsu = cheri_exec_id  & (cheri_operator[CLOAD_CAP] | cheri_operator[CSTORE_CAP]);
-  assign pc_in_isr    = (pc_id >= 32'h8000_0000) & (pc_id < 32'h8000_0200);
+  assign pc_in_isr  = dut.u_ibex_top.u_ibex_core.id_stage_i.controller_i.controller_dv_ext_i.cpu_in_isr;
 
   assign err_failed = err_active & dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.lsu_req_o &
                       (~dut.u_ibex_top.u_ibex_core.g_cheri_ex.u_cheri_ex.lsu_cheri_err_o) & 

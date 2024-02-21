@@ -11,7 +11,7 @@
 
 module dii_if (
   input  logic         clk_i,
-  input  logic         rstn_i,
+  input  logic         rst_ni,
 
   // DII generator interface
   input  logic [31:0]  dii_insn_0_i,
@@ -65,7 +65,7 @@ module dii_if (
     int   flush_cnt;
     logic flush_active;
 
-    @(posedge rstn_i);
+    @(posedge rst_ni);
     hqueue = {};
 
     while (1) begin

@@ -14,6 +14,7 @@ module bindfiles;
   bind ibex_load_store_unit  ibex_lsu_dv_ext           lsu_dv_ext_i (.*);
   bind cheri_ex              cheri_ex_dv_ext           cheri_ex_dv_ext_i (.*);
   bind cheri_trvk_stage      cheri_trvk_stage_dv_ext   trvk_dv_ext_i (.*);
+  bind cheri_tbre_wrapper    cheri_tbre_wrapper_dv_ext tbre_wrapper_dv_ext_i (.*);
   bind cheri_tbre            cheri_tbre_dv_ext         tbre_dv_ext_i (.*);
   bind cheri_stkz            cheri_stkz_dv_ext         stkz_dv_ext_i (.*);
   bind ibex_core             ibex_core_dv_ext          ibex_core_dv_ext_i (.*);
@@ -50,7 +51,9 @@ module ibex_id_stage_dv_ext (
   input  logic        rf_ren_b,
   input  logic [4:0]  rf_raddr_b_o,
   input  logic        cheri_rf_we,
-  input  logic [4:0]  rf_waddr_id_o
+  input  logic [4:0]  rf_waddr_id_o,
+  input  logic        cheri_exec_id_o,
+  input  logic        instr_executing
 );
 
   logic [2:0] fcov_trvk_stall_cause;
@@ -58,6 +61,9 @@ module ibex_id_stage_dv_ext (
   assign fcov_trvk_stall_cause[0] = rf_ren_a && ~rf_reg_rdy_i[rf_raddr_a_o];
   assign fcov_trvk_stall_cause[1] = rf_ren_b && ~rf_reg_rdy_i[rf_raddr_b_o];
   assign fcov_trvk_stall_cause[2] = cheri_rf_we && ~rf_reg_rdy_i[rf_waddr_id_o]; 
+
+  `ASSERT(IbexExecInclCheri, (cheri_exec_id_o |-> instr_executing))
+ 
 
 
 endmodule
@@ -76,7 +82,9 @@ module ibex_controller_dv_ext import ibex_pkg::*; (
   input  logic                  do_single_step_q,
   input  ctrl_fsm_e             ctrl_fsm_cs,
   input  ctrl_fsm_e             ctrl_fsm_ns,
-  input  logic                  flush_id
+  input  logic                  flush_id,
+  input  logic                  pc_set_o,
+  input  pc_sel_e               pc_mux_o
 );
 
   `DV_FCOV_SIGNAL(logic, all_debug_req, debug_req_i || debug_mode_q || debug_single_step_i)
@@ -94,6 +102,24 @@ module ibex_controller_dv_ext import ibex_pkg::*; (
   `DV_FCOV_SIGNAL(logic, debug_req, debug_req_i & ~debug_mode_q)
   `DV_FCOV_SIGNAL(logic, debug_single_step_taken, do_single_step_d & ~do_single_step_q)
 
+   // signal used by testbench to see if CPU is executing an exception/intrrupt handler
+   logic cpu_in_isr;
+
+   always @(posedge clk_i, negedge rst_ni) begin
+     if (~rst_ni) begin
+       cpu_in_isr <= 1'b0;
+     end else begin 
+       if (((ctrl_fsm_cs == FLUSH) && pc_set_o && (pc_mux_o == PC_EXC)) ||
+           (ctrl_fsm_cs == IRQ_TAKEN))
+         cpu_in_isr <= 1'b1;
+       else if ((ctrl_fsm_cs == FLUSH) && pc_set_o && (pc_mux_o == PC_ERET))
+         cpu_in_isr <= 1'b0;
+     end
+
+   end
+
+
+
 endmodule
 
 
@@ -105,7 +131,7 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic         rst_ni,
   input  logic         lsu_req_i,
   input  logic         data_req_o,
-  input  logic         addr_incr_req_o,
+  input  logic         lsu_addr_incr_req_o,
   input  logic         data_rvalid_i,
   input  logic [1:0]   lsu_type_i,
   input  logic [1:0]   data_offset,
@@ -165,7 +191,7 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
 
   `DV_FCOV_SIGNAL(logic, ls_first_req, lsu_req_i & (ls_fsm_cs == IDLE))
   `DV_FCOV_SIGNAL(logic, ls_second_req,
-    (ls_fsm_cs inside {WAIT_RVALID_MIS}) & data_req_o & addr_incr_req_o)
+    (ls_fsm_cs inside {WAIT_RVALID_MIS}) & data_req_o & lsu_addr_incr_req_o)
   `DV_FCOV_SIGNAL(logic, ls_mis_pmp_err_1,
     (ls_fsm_cs inside {WAIT_RVALID_MIS, WAIT_GNT_MIS}) && pmp_err_q)
   `DV_FCOV_SIGNAL(logic, ls_mis_pmp_err_2,
@@ -232,24 +258,35 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic           cheri_exec_id_i,
   input  logic [35:0]    cheri_operator_i,
   input  logic [31:0]    pc_id_i,
+  input  logic           instr_is_cheri_i,
   input  logic           instr_valid_i,
   input  logic           csr_op_en_o,
   input  logic           csr_access_o,
   input  cheri_csr_op_e  csr_op_o,
   input  logic           cheri_lsu_req,
+  input  logic           is_load_cap,
   input  logic           rv32_lsu_req_i,
   input  logic [31:0]    rv32_lsu_addr_i,
   input  logic [1:0]     rv32_lsu_type_i,
+  input  logic           rv32_lsu_sign_ext_i,
   input  logic           cheri_lsu_err,
+  input  reg_cap_t       cheri_lsu_wcap,
   input  logic           rv32_lsu_err,
   input  logic           lsu_req_o,   
   input  logic           lsu_req_done_i,   
+  input  logic           cpu_lsu_we,
+  input  logic [32:0]    cpu_lsu_wdata,
+  input  logic           cpu_lsu_is_cap,
   input  logic [31:0]    cpu_lsu_addr,
-  input  logic           cpu_lsu_we
+  input  logic           addr_incr_req_i
   );
 
-  // assertion: STKZ active won't change in the middle of load/store (thus lsu_req will stay asserted till req_done)
-  logic       outstanding_lsu_req;
+  logic        outstanding_lsu_req;
+  logic [1:0]  cpu_lsu_type;
+  logic        cpu_lsu_sign_ext;
+  logic [7:0]  cpu_lsu_ctrls;
+  logic [31:0] cheri_lsu_start_addr;
+  reg_cap_t    cpu_lsu_wcap;
 
   typedef enum logic [3:0] {ACC_NULL, CAP_RD, CAP_WR, BYTE_RD, BYTE_WR, 
                             HW_RD_ALIGNED, HW_RD_UNALIGNED, HW_WR_ALIGNED, HW_WR_UNALIGNED, 
@@ -257,7 +294,19 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
                             } lsu_acc_type_e;
 
   lsu_acc_type_e fcov_cpu_lsu_acc;
+  
+  assign cpu_lsu_sign_ext = (~instr_is_cheri_i) ? rv32_lsu_sign_ext_i : 1'b0;
+  assign cpu_lsu_type     = (~instr_is_cheri_i) ? rv32_lsu_type_i : 2'b00;
+  assign cpu_lsu_ctrls    = {cpu_lsu_we, cpu_lsu_sign_ext, cpu_lsu_is_cap, cpu_lsu_type}; 
+  assign cpu_lsu_wcap     = (instr_is_cheri_i) ? cheri_lsu_wcap : NULL_REG_CAP;
 
+  // for rv32 accesses, addresses are formed by using ALU to do (addr_last_q +4 if addr_incr_req)
+  // when addr_incr_req is owned by tbre, addr_last_q is not related with the EX instruction, there
+  // the address will be toggling when cpu_lsu_req is active.
+  assign cheri_lsu_start_addr = instr_is_cheri_i ? (cpu_lsu_addr - {addr_incr_req_i, 2'b00}) : 0; 
+
+  // protocol check for CPU-generated lsu requests
+  // note lsu_req_o and lsu_req_done_i are for CPU request only
   always @(posedge clk_i, negedge rst_ni) begin
     if (~rst_ni) begin
       outstanding_lsu_req <= 1'b0;
@@ -268,11 +317,28 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
         outstanding_lsu_req <= 1'b1;
     end
   end
-  `ASSERT(IbexLsuReqStable, (outstanding_lsu_req) |-> ($stable(pc_id_i) && $stable(instr_valid_i) && 
-                                                       $stable(cpu_lsu_we))) 
+
+  // -- once asserted, req can't go low until req_done
+  // -- no change in address/control signals within the same request
+  `ASSERT(IbexLsuReqStable1, (lsu_req_done_i |-> lsu_req_o));
+  `ASSERT(IbexLsuReqStable2, (outstanding_lsu_req |-> lsu_req_o));
+  `ASSERT(IbexLsuCtrlStable, (outstanding_lsu_req |-> $stable(cpu_lsu_ctrls)));
+  `ASSERT(IbexLsuWdataStable, ((outstanding_lsu_req & cpu_lsu_we) |-> ($stable(cpu_lsu_wdata) && $stable(cpu_lsu_wcap))));
+  `ASSERT(IbexLsuAddrStable, (outstanding_lsu_req |-> $stable(cheri_lsu_start_addr)));
+  // -- ensure PC/instr_execute is aligned with transactions
+  // -- req & req_done is enclosed in the same instruction always
+  // -- max 1 req per instruction (unless ~cheriPPLBC when CLC has to read TSMAP via LSU)
+  `ASSERT(IbexLsuPCStable, (outstanding_lsu_req |-> ($stable(pc_id_i) && $stable(instr_valid_i))));
+
+  if (u_ibex_core.CheriPPLBC) begin
+    `ASSERT(IbexLsuReqEpoch, (lsu_req_done_i |-> u_ibex_core.id_stage_i.instr_done));
+  end 
+  
+
   // Cheri and RV32 LSU req can't both be active per decoder
   `ASSERT(IbexLsuReqSrc, !(cheri_lsu_req & rv32_lsu_req_i)) 
 
+  // QQQ assertion: STKZ active won't change in the middle of load/store (thus lsu_req will stay asserted till req_done)
   // Functional coverage signals 
 
   `DV_FCOV_SIGNAL(logic, cpu_lsu_req, cheri_lsu_req | rv32_lsu_req_i);
@@ -390,6 +456,60 @@ module cheri_trvk_stage_dv_ext (
 endmodule
 
 ////////////////////////////////////////////////////////////////
+// cheri_tbre_wrapper
+////////////////////////////////////////////////////////////////
+
+module cheri_tbre_wrapper_dv_ext (
+  input  logic        clk_i,
+  input  logic        rst_ni,
+  input  logic        tbre_lsu_req_o,
+  input  logic        lsu_tbre_req_done_i,
+  input  logic        lsu_tbre_sel_i,
+  input  logic [1:0]  mstr_req,
+  input  logic [1:0]  mstr_arbit_comb         
+  );
+
+  // protocol check for CPU-generated lsu requests
+  // note lsu_req_o and lsu_req_done_i are for CPU request only
+  logic        outstanding_lsu_req;
+
+  always @(posedge clk_i, negedge rst_ni) begin
+    if (~rst_ni) begin
+      outstanding_lsu_req <= 1'b0;
+    end else begin
+      if (lsu_tbre_req_done_i)
+        outstanding_lsu_req <= 1'b0;
+      else if (tbre_lsu_req_o && lsu_tbre_sel_i  && ~lsu_tbre_req_done_i)
+        outstanding_lsu_req <= 1'b1;
+    end
+  end
+
+  logic only_blk0_req;
+  assign only_blk0_req = ~mstr_req[1] & mstr_req[0];
+
+  `ASSERT(TbreWArbitOnehot, ($onehot0(mstr_arbit_comb))); 
+  `ASSERT(TbreWArbitStable, (outstanding_lsu_req |-> $stable(mstr_arbit_comb))); 
+
+  // if only blk0 req presents, always choose blk0 
+  //  -- this is to ensure the arbiter doesn't lock to blk1 if blk1 req is canceled
+  `ASSERT(TbreOnlyBlk0Req, (only_blk0_req |-> mstr_arbit_comb[0])); 
+
+  // make sure we cover the blk1 req canceling corner case
+  logic [1:0] mstr_arbit_comb_q;
+  always @(posedge clk_i, negedge rst_ni) begin
+    if (~rst_ni) begin
+      mstr_arbit_comb_q <= 2'h0;
+    end else begin
+      mstr_arbit_comb_q <= mstr_arbit_comb;
+    end
+  end
+
+  logic fcov_blk1_cancel;
+  assign fcov_blk1_cancel = (mstr_arbit_comb_q == 2'b10) && only_blk0_req && ~lsu_tbre_req_done_i;
+
+endmodule
+
+////////////////////////////////////////////////////////////////
 // cheri_tbre
 ////////////////////////////////////////////////////////////////
 
@@ -401,8 +521,12 @@ module cheri_tbre_dv_ext (
   input  logic [2:0]  shdw_fifo_ext_wr_ptr,
   input  logic [2:0]  fifo_ext_rd_ptr,
   input  logic        tbre_lsu_req_o,
+  input  logic        lsu_tbre_addr_incr_i,
+  input  logic        tbre_lsu_is_cap_o,
+  input  logic        tbre_lsu_we_o,
   input  logic        lsu_tbre_req_done_i,
   input  logic [31:0] tbre_lsu_addr_o,
+  input  logic [32:0] tbre_lsu_wdata_o,
   input  logic        snoop_lsu_req_i,
   input  logic        snoop_lsu_req_done_i,
   input  logic        snoop_lsu_we_i,
@@ -424,7 +548,7 @@ module cheri_tbre_dv_ext (
   `ASSERT(lsuReqDoneOneHot, $onehot0({snoop_lsu_req_done_i, lsu_tbre_req_done_i}))
 
   `ASSERT(tbreLsuReqDone, lsu_tbre_req_done_i |-> tbre_lsu_req_o )
-  `ASSERT(snoopLsuReqDone, snoop_lsu_req_done_i |-> snoop_lsu_req_i )
+  `ASSERT(snoopLsuReqDone, snoop_lsu_req_done_i |-> snoop_lsu_req_i)
 
   // looking for collision case
   logic fcov_tbre_fifo_hazard, fcov_tbre_fifo_head_hazard;
@@ -472,6 +596,40 @@ module cheri_tbre_dv_ext (
 
   end
 
+  // protocol check for CPU-generated lsu requests
+  // note lsu_req_o and lsu_req_done_i are for CPU request only
+  logic        outstanding_lsu_req;
+  logic [7:0]  tbre_lsu_ctrls;
+  logic [31:0] tbre_lsu_start_addr;
+  logic        lsu_cur_req_is_tbre;
+
+  assign tbre_lsu_ctrls = {tbre_lsu_is_cap_o, tbre_lsu_we_o};  
+  assign tbre_lsu_start_addr = tbre_lsu_we_o? tbre_lsu_addr_o : 
+                               (tbre_lsu_addr_o - {lsu_tbre_addr_incr_i, 2'b00}); 
+  assign  lsu_tbre_sel = cheri_tbre_wrapper_i.lsu_tbre_sel_i;
+
+  
+  // note in the fcov_tbre_fifo_head_hazard case, TBRE may cancel a store request.
+  // therefore we need lsu_cur_req_is_tbre to help make decision
+  always @(posedge clk_i, negedge rst_ni) begin
+    if (~rst_ni) begin
+      outstanding_lsu_req <= 1'b0;
+    end else begin
+      if (lsu_tbre_req_done_i)
+        outstanding_lsu_req <= 1'b0;
+      else if (tbre_lsu_req_o && lsu_tbre_sel  && ~lsu_tbre_req_done_i)
+        outstanding_lsu_req <= 1'b1;
+    end
+  end
+
+  // -- once asserted, req can't go low until req_done
+  // -- no change in address/control signals within the same request
+  `ASSERT(TbreLsuReqStable1, (lsu_tbre_req_done_i |-> tbre_lsu_req_o));
+  `ASSERT(TbreLsuReqStable2, (outstanding_lsu_req |-> tbre_lsu_req_o));
+  `ASSERT(TbreLsuCtrlStable, (outstanding_lsu_req |-> $stable(tbre_lsu_ctrls))); 
+  `ASSERT(TbreLsuWdataStable, (outstanding_lsu_req & tbre_lsu_we_o |-> $stable(tbre_lsu_wdata_o))); 
+  `ASSERT(TbreLsuAddrStable, (outstanding_lsu_req |-> $stable(tbre_lsu_start_addr)));
+
 endmodule
 
 ////////////////////////////////////////////////////////////////
@@ -501,7 +659,6 @@ module cheri_stkz_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
     else 
       fcov_ztop_wr_type = 2'h3;
   end
-
 
 endmodule
 
