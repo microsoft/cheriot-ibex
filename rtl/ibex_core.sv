@@ -431,7 +431,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic          cheri_ex_err;
   logic [11:0]   cheri_ex_err_info;
   logic          cheri_wb_err;
-  logic [11:0]   cheri_wb_err_info;
+  logic [15:0]   cheri_wb_err_info;
   logic [OPDW-1:0] cheri_operator;
 
   logic          rv32_lsu_req;
@@ -1004,7 +1004,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     assign cheri_ex_err           = 1'b0;
     assign cheri_ex_err_info      = 11'h0;
     assign cheri_wb_err           = 1'b0;
-    assign cheri_wb_err_info      = 11'h0;
+    assign cheri_wb_err_info      = 16'h0;
 
     assign lsu_req                = rv32_lsu_req;
     assign lsu_is_cap             = 1'b0;

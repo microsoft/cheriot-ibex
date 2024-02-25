@@ -125,7 +125,7 @@ module ibex_controller #(
   input  logic                  cheri_ex_err_i,
   input  logic                  cheri_wb_err_i,
   input  logic  [11:0]          cheri_ex_err_info_i,
-  input  logic  [11:0]          cheri_wb_err_info_i,
+  input  logic  [15:0]          cheri_wb_err_info_i,
   input  logic                  cheri_branch_req_i,
   input  logic [31:0]           cheri_branch_target_i
 );
@@ -809,8 +809,13 @@ module ibex_controller #(
             end
             cheri_wb_err_prio: begin
               if (cheri_pmode_i) begin
-                exc_cause_o = EXC_CAUSE_CHERI_FAULT;
-                csr_mtval_o = cheri_wb_err_info_i[10:0];
+                if (cheri_wb_err_info_i[12]) begin  // illegal SCR addr 
+                  exc_cause_o = EXC_CAUSE_ILLEGAL_INSN;
+                  csr_mtval_o = cheri_wb_err_info_i[10:0];
+                end else begin
+                  exc_cause_o = EXC_CAUSE_CHERI_FAULT;
+                  csr_mtval_o = cheri_wb_err_info_i[10:0];
+                end
               end
             end
 
