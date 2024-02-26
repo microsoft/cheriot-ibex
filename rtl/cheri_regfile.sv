@@ -148,15 +148,6 @@ module cheri_regfile import cheri_pkg::*; #(
 
   if (CheriPPLBC) begin : g_regrdy
 
-// QQQ_09112023 (contention when TRVKBypass=1)
-//   Note, when 33-bit memory bus is used, trsv and trvk should NEVER point to the same register
-//   -- trsv_en and trvk_en could active in the same cycle but should be pointing to different registers
-//   -- since trsv_en can only be asserted by CLC&lsu_req_done. Even in trvk_bypass case, trsv can only 
-//   -- happen 1 cycle later than trvk_en (to the same register)
-//   However when 65-bit memory is used, trsv and trvk can point to the same register at the same time
-//   -- here lsu_req/req_done happens at the same time as the bypassed TRVK uninstall the instruction.
-//   -- to resolve the contention we need to prioritize trsv over trvk when updating the flopped reg_rdy_vec
-    
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni)
         reg_rdy_vec[0] <= 1'b1;
@@ -168,7 +159,7 @@ module cheri_regfile import cheri_pkg::*; #(
           reg_rdy_vec[i] <= 1'b1;
         else if (i >= NCAPS) 
           reg_rdy_vec[i] <= 1'b1;
-        else if (trsv_dec[i] & trsv_en_i)   // prioritize trsv to address the corner case in the QQQ_09112023
+        else if (trsv_dec[i] & trsv_en_i)   // prioritize trsv t
           reg_rdy_vec[i] <= 1'b0;
         else if (trvk_dec[i] & trvk_en_i)
           reg_rdy_vec[i] <= 1'b1;

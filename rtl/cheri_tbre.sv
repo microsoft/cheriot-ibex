@@ -94,7 +94,7 @@ module cheri_tbre #(
   assign tbre_ctrl.end_addr   = tbre_ctrl_vec_i[63:32];
   assign tbre_stat_o          = (tbre_fsm_q != TBRE_IDLE);
 
-  // QQQ note having resp_valid here improves performance but making timing a bit worse 
+  //  note having resp_valid here improves performance but making timing a bit worse 
   //     (data_rvalid --> tbre_lsu_req --> core/tbre mux select --> data_wdata_o
   assign tbre_lsu_req_o    = ((tbre_sch_q == SCH_LOAD) | ((tbre_sch_q == SCH_STORE) && store_req_valid)) & (~wait_resp_q |  (lsu_tbre_resp_valid_i & ~tbre_ctrl.add1wait));
   assign tbre_lsu_is_cap_o = (tbre_sch_q == SCH_LOAD);

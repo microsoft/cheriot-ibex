@@ -286,7 +286,7 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
       addr_last_q <= '0;
-    end else if (addr_update) begin
+    end else if (addr_update & ~cur_req_is_tbre) begin
       addr_last_q <= addr_last_d;
     end
   end

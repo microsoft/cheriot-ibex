@@ -1892,9 +1892,6 @@ module ibex_cs_registers import cheri_pkg::*;  #(
     // mepc extended capability
     assign mepc_en_cheri = cheri_csr_op_en_i && (cheri_csr_addr_i == CHERI_SCR_MEPCC) && (cheri_csr_op_i == CHERI_CSR_RW);
 
-    // let's not worry about non-stanard recoverable NMI/mstack for now QQQ
-    //   note we need to do set_address (representability check) when saving pcc_cap to mepc
-    //   otherwise an out-of-bound pcc_cap may cause mepc corruption 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni)
         mepc_cap <= MEPC_RESET_CAP;

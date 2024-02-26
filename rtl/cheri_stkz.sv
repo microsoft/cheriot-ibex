@@ -74,7 +74,6 @@ module cheri_stkz import cheri_pkg::*; (
 
   assign ztop_wtop33  = ztop_wfcap_i.top33;
 
-  // QQQ  do we need to check permission as well?
   assign cmd_new       = ztop_wr_i & (cmd_cap_good | cmd_is_null_d);
   assign cmd_avail     = cmd_new || cmd_pending;
   assign cmd_go_null   = cmd_avail & cmd_is_null && (((stkz_fsm_q == STKZ_ACTIVE) && lsu_stkz_req_done_i) || 
@@ -87,7 +86,8 @@ module cheri_stkz import cheri_pkg::*; (
   assign cmd_wcap      = cmd_new ? full2regcap(ztop_wfcap_i) : cmd_wcap_q;
   assign cmd_wbase32   = cmd_new ? ztop_wbase32 : cmd_wbase32_q;
 
-  assign cmd_cap_good  = ztop_wfcap_i.valid && (ztop_wtop33[32:2] >= ztop_wdata_i[31:2]);
+  assign cmd_cap_good  = ztop_wfcap_i.valid && (ztop_wtop33[32:2] >= ztop_wdata_i[31:2]) &&
+                         ztop_wfcap_i.perms[PERM_SD];
   assign cmd_is_null_d = (ztop_wfcap_i == NULL_FULL_CAP) && (ztop_wdata_i == 32'h0);
   assign cmd_n2z       = cmd_wcap.valid & (cmd_wdata[31:2] == cmd_wbase32[31:2]);
 
@@ -116,8 +116,8 @@ module cheri_stkz import cheri_pkg::*; (
     cmd_wcap_untagged = cmd_wcap;
     cmd_wcap_untagged.valid = 1'b0;
 
-    // QQQ we are doing this in lieu of a full set_address.
-    //   note we only start an zeroization if tag is valid (which means addr >= base)
+    // we are doing this in lieu of a full set_address.
+    //   note we only start an zeroization if addr > base32 so no need for representability check
     ztop_rcap_nxt = ztop_rcap;
     addrmi9 = {stkz_ptrw_nxt, 2'b00} >> ztop_rcap.exp;
     tmp4    = update_temp_fields(ztop_rcap.top, ztop_rcap.base, addrmi9);

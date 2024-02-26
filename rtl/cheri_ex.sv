@@ -244,7 +244,7 @@ module cheri_ex import cheri_pkg::*; #(
   // 1st level of operand gating (power-saving)
   //  - gate off the input to reg2full conversion logic
   //  - note rv32 lsu req only use cs1
-  //  - may need to use dont_tounch gates QQQ
+  //  - may need to use dont_tounch gates 
   assign rf_rcap_a   = (instr_is_cheri_i | instr_is_rv32lsu_i) ? rf_rcap_ng_a : NULL_REG_CAP;
   assign rf_rdata_a  = (instr_is_cheri_i | instr_is_rv32lsu_i) ? rf_rdata_ng_a : 32'h0;
 

@@ -1064,7 +1064,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
       .CheriTBRE        (CheriTBRE)
     ) u_ibex_lockstep (
       .clk_i                  (clk),
-      .rst_ni                 (rst_ni),   // should use a different reset tree ?? QQQ kliu
+      .rst_ni                 (rst_ni),   // should use a different reset tree 
 
       .hart_id_i              (hart_id_local),
       .boot_addr_i            (boot_addr_local),
