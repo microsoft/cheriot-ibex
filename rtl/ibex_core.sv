@@ -874,6 +874,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   if (CHERIoTEn) begin : g_cheri_ex
     cheri_ex #(
       .WritebackStage       (WritebackStage),
+      .MemCapFmt            (MemCapFmt),
       .HeapBase             (HeapBase),
       .TSMapBase            (TSMapBase),
       .TSMapSize            (TSMapSize),

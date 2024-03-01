@@ -69,6 +69,7 @@ module cheri_decoder import cheri_pkg::*; # (
     cheri_operator_o[CGET_PERM]       = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h7f) && (imm5_op==5'h00);
     cheri_operator_o[CGET_TYPE]       = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h7f) && (imm5_op==5'h01);
     cheri_operator_o[CGET_BASE]       = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h7f) && (imm5_op==5'h02);
+    cheri_operator_o[CGET_HIGH]        = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h7f) && (imm5_op==5'h17);
     cheri_operator_o[CGET_TOP]        = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h7f) && (imm5_op==5'h18);
     cheri_operator_o[CGET_LEN]        = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h7f) && (imm5_op==5'h03);
     cheri_operator_o[CGET_TAG]        = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h7f) && (imm5_op==5'h04);

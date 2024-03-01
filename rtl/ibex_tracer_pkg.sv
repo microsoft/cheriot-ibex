@@ -344,6 +344,7 @@ package ibex_tracer_pkg;
   parameter logic [31:0] INSN_CHGETPERM    = {7'h7f, 5'h0, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHGETTYPE    = {7'h7f, 5'h1, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHGETBASE    = {7'h7f, 5'h2, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
+  parameter logic [31:0] INSN_CHGETHIGH    = {7'h7f, 5'h17, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHGETTOP     = {7'h7f, 5'h18, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHGETLEN     = {7'h7f, 5'h3, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHGETTAG     = {7'h7f, 5'h4, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };

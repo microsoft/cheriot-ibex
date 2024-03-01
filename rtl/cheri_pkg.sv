@@ -808,7 +808,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     CGET_LEN        = 6'h03,
     CGET_TAG        = 6'h04,
     CGET_TOP        = 6'h05,
-//    CGET_OFFSET     = 6'h06,
+    CGET_HIGH       = 6'h06,
     CGET_ADDR       = 6'h07,
     CSEAL           = 6'h08,
     CUNSEAL         = 6'h09,

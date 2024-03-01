@@ -4,6 +4,7 @@
 
 module cheri_ex import cheri_pkg::*; #(
   parameter bit          WritebackStage = 1'b0,
+  parameter bit          MemCapFmt = 1'b0,
   parameter int unsigned HeapBase,
   parameter int unsigned TSMapBase,
   parameter int unsigned TSMapSize,
@@ -361,6 +362,16 @@ module cheri_ex import cheri_pkg::*; #(
       cheri_operator_i[CGET_ADDR]:
         begin
           result_data_o       = rf_rdata_a;
+          result_cap_o        = NULL_REG_CAP;
+          cheri_rf_we_raw     = 1'b1;
+          cheri_ex_valid_raw  = 1'b1;
+        end
+      cheri_operator_i[CGET_HIGH]:
+        begin
+          logic [65:0] tmp66;
+          tmp66 = MemCapFmt ? reg2mem_fmt1(rf_rcap_a, rf_rdata_a) : 
+                              {reg2memcap_fmt0(rf_rcap_a), rf_rdata_a};
+          result_data_o       = tmp66[64:33];
           result_cap_o        = NULL_REG_CAP;
           cheri_rf_we_raw     = 1'b1;
           cheri_ex_valid_raw  = 1'b1;

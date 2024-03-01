@@ -1352,7 +1352,7 @@ module ibex_tracer import cheri_pkg::*; # (
         INSN_CHGETTAG:     decode_cheri_rd_cs1_insn("CH.cgettag");
         INSN_CHGETSEALED:  decode_cheri_rd_cs1_insn("CH.cgetseald");
         INSN_CHGETADDR:    decode_cheri_rd_cs1_insn("CH.cgetaddr");
-        INSN_CHGETTOP:     decode_cheri_rd_cs1_insn("CH.cgettop");
+        INSN_CHGETHIGH:     decode_cheri_rd_cs1_insn("CH.cgethigh");
 
         INSN_CHSEAL:       decode_cheri_cd_cs1_cs2_insn("CH.cseal");
         INSN_CHUNSEAL:     decode_cheri_cd_cs1_cs2_insn("CH.cunseal");
