@@ -370,7 +370,7 @@ module cheri_ex import cheri_pkg::*; #(
         begin
           logic [65:0] tmp66;
           tmp66 = MemCapFmt ? reg2mem_fmt1(rf_rcap_a, rf_rdata_a) : 
-                              {reg2memcap_fmt0(rf_rcap_a), rf_rdata_a};
+                              {reg2memcap_fmt0(rf_rcap_a), 1'b0, rf_rdata_a[31:0]};
           result_data_o       = tmp66[64:33];
           result_cap_o        = NULL_REG_CAP;
           cheri_rf_we_raw     = 1'b1;
