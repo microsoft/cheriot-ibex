@@ -185,14 +185,14 @@ module cheri_ex import cheri_pkg::*; #(
   logic  [31:0]  addr_result;
 
   logic          intl_lsu_req;
-  logic          intl_lsu_we;
+  logic          unused_intl_lsu_we;
   logic [31:0]   intl_lsu_addr;
   logic [32:0]   intl_lsu_wdata;
   reg_cap_t      intl_lsu_wcap;
   logic          intl_lsu_is_cap;
 
   logic          clbc_done;
-  logic          clbc_err, clbc_err_q;
+  logic          clbc_err;
   logic  [31:0]  clbc_data_q;
   reg_cap_t      clbc_cap_q;
   logic          clbc_revoked;
@@ -319,7 +319,7 @@ module cheri_ex import cheri_pkg::*; #(
     unique case (1'b1)
       cheri_operator_i[CGET_PERM]:
         begin
-          result_data_o       = rf_fullcap_a.perms;
+          result_data_o       = {19'h0, rf_fullcap_a.perms};
           result_cap_o        = NULL_REG_CAP;   // zerout the cap msw
           cheri_rf_we_raw     = 1'b1;
           cheri_ex_valid_raw  = 1'b1;
@@ -340,7 +340,7 @@ module cheri_ex import cheri_pkg::*; #(
         end
       cheri_operator_i[CGET_TOP]:
         begin
-          result_data_o       = rf_fullcap_a.top33[32]? 32'hffff_ffff : rf_fullcap_a.top33;
+          result_data_o       = rf_fullcap_a.top33[32] ? 32'hffff_ffff : rf_fullcap_a.top33[31:0];
           result_cap_o        = NULL_REG_CAP;
           cheri_rf_we_raw     = 1'b1;
           cheri_ex_valid_raw  = 1'b1;
@@ -354,7 +354,7 @@ module cheri_ex import cheri_pkg::*; #(
         end
       cheri_operator_i[CGET_TAG]:
         begin
-          result_data_o       = rf_fullcap_a.valid;
+          result_data_o       = {31'h0, rf_fullcap_a.valid};
           result_cap_o        = NULL_REG_CAP;
           cheri_rf_we_raw     = 1'b1;
           cheri_ex_valid_raw  = 1'b1;
@@ -381,7 +381,7 @@ module cheri_ex import cheri_pkg::*; #(
           result_data_o        = rf_rdata_a;
 
           if (cheri_operator_i[CSEAL])
-            result_cap_o       = full2regcap(seal_cap(rf_fullcap_a, rf_rdata_b[3:0]));
+            result_cap_o       = full2regcap(seal_cap(rf_fullcap_a, rf_rdata_b[OTYPE_W-1:0]));
           else begin
             tfcap                = unseal_cap(rf_fullcap_a);
             tfcap.perms[PERM_GL] = rf_fullcap_a.perms[PERM_GL] & rf_fullcap_b.perms[PERM_GL];
@@ -397,7 +397,7 @@ module cheri_ex import cheri_pkg::*; #(
         begin
           result_data_o      = rf_rdata_a;
           tfcap              = rf_fullcap_a;
-          tfcap.perms        = tfcap.perms & rf_rdata_b;
+          tfcap.perms        = tfcap.perms & rf_rdata_b[PERMS_W-1:0];
           tfcap.cperms       = compress_perms(tfcap.perms, tfcap.cperms[5:4]);
           tfcap.valid        = tfcap.valid & ~is_cap_sealed(rf_fullcap_a);
           result_cap_o       = full2regcap(tfcap);
@@ -462,15 +462,15 @@ module cheri_ex import cheri_pkg::*; #(
         end
       cheri_operator_i[CIS_SUBSET]:      // rd <-- (cs1.tag == cs2.tag) && (cs2 is_subset_of cs1)
         begin
-          result_data_o       = (rf_fullcap_a.valid  == rf_fullcap_b.valid) &&
-                                 ~addr_bound_vio && (&(rf_fullcap_a.perms | ~rf_fullcap_b.perms));
+          result_data_o       = 32'((rf_fullcap_a.valid  == rf_fullcap_b.valid) &&
+                                 ~addr_bound_vio && (&(rf_fullcap_a.perms | ~rf_fullcap_b.perms)));
           result_cap_o        = NULL_REG_CAP;
           cheri_rf_we_raw     = 1'b1;
           cheri_ex_valid_raw  = 1'b1;
         end
       cheri_operator_i[CIS_EQUAL]:       // rd <-- (cs1 == cs2)
         begin
-          result_data_o       = is_equal(rf_fullcap_a, rf_fullcap_b, rf_rdata_a, rf_rdata_b);
+          result_data_o       = 32'(is_equal(rf_fullcap_a, rf_fullcap_b, rf_rdata_a, rf_rdata_b));
           result_cap_o        = NULL_REG_CAP;
           cheri_rf_we_raw     = 1'b1;
           cheri_ex_valid_raw  = 1'b1;
@@ -636,7 +636,7 @@ module cheri_ex import cheri_pkg::*; #(
   end
 
   assign cheri_lsu_we       = is_intl ? 1'b0 : is_store_cap;
-  assign cheri_lsu_addr     = (is_intl ? intl_lsu_addr : cs1_addr_plusimm) + {addr_incr_req_i, 2'b00};
+  assign cheri_lsu_addr     = (is_intl ? intl_lsu_addr : cs1_addr_plusimm) + {29'h0, addr_incr_req_i, 2'b00};
   assign cheri_lsu_is_cap   = is_intl ? intl_lsu_is_cap : is_cap;
   assign cheri_lsu_is_intl  = is_intl;
 
@@ -730,7 +730,7 @@ module cheri_ex import cheri_pkg::*; #(
       tfcap3 = rf_fullcap_a;
       tmp_addr  = rf_rdata_a;
     end else if (cheri_operator_i[CSET_BOUNDS_IMM]) begin
-      newlen    = cheri_imm12_i;  // unsigned imm
+      newlen    = 32'(cheri_imm12_i);  // unsigned imm
       req_exact = 1'b0;
       tfcap3 = rf_fullcap_a;
       tmp_addr  = rf_rdata_a;
@@ -791,9 +791,9 @@ module cheri_ex import cheri_pkg::*; #(
   always_comb begin : check_rv32
     logic [31:0] top_offset;
     logic [32:0] top_bound;
-    logic [31:0] base_bound;
+    logic [31:0] base_bound, base_chkaddr;
     logic        top_vio, base_vio;
-    logic [32:0] top_chkaddr, base_chkaddr;
+    logic [32:0] top_chkaddr;
     logic        top_size_ok;
 
     // generate the address used to check top bound violation
@@ -811,7 +811,7 @@ module cheri_ex import cheri_pkg::*; #(
     end
 
     //top_chkaddr = base_chkaddr + top_offset;
-    top_chkaddr = base_chkaddr;
+    top_chkaddr = {1'b0, base_chkaddr};
 
     // top_bound  = rf_fullcap_a.top33;
     top_bound  = rf_fullcap_a.top33 - top_offset;
@@ -850,8 +850,8 @@ module cheri_ex import cheri_pkg::*; #(
   always_comb begin : check_cheri
     logic [31:0] top_offset;
     logic [32:0] top_bound;
-    logic [31:0] base_bound;
-    logic [32:0] top_chkaddr, base_chkaddr;
+    logic [31:0] base_bound, base_chkaddr;
+    logic [32:0] top_chkaddr;
     logic        top_vio, base_vio, top_equal;
     logic        cs2_bad_type;
 
@@ -866,9 +866,9 @@ module cheri_ex import cheri_pkg::*; #(
     if (cheri_operator_i[CIS_SUBSET])
       top_chkaddr = rf_fullcap_b.top33;
     else if (is_cap)  // CLC/CSC
-      top_chkaddr = {base_chkaddr[31:3], 3'b000};
+      top_chkaddr = {1'b0, base_chkaddr[31:3], 3'b000};
     else 
-      top_chkaddr = base_chkaddr;
+      top_chkaddr = {1'b0, base_chkaddr};
 
     if (cheri_operator_i[CSEAL] | cheri_operator_i[CUNSEAL]) begin
       top_bound  = rf_fullcap_b.top33;
@@ -927,7 +927,7 @@ module cheri_ex import cheri_pkg::*; #(
     end else if (cheri_operator_i[CUNSEAL]) begin
       perm_vio_vec[PVIO_TAG]   = ~rf_fullcap_a.valid || ~rf_fullcap_b.valid; 
       perm_vio_vec[PVIO_SEAL]  = (~is_cap_sealed(rf_fullcap_a)) || is_cap_sealed(rf_fullcap_b) ||
-                                   (rf_rdata_b != decode_otype(rf_fullcap_a.otype, rf_fullcap_a.perms[PERM_EX])) ||
+                                   (rf_rdata_b != {28'h0, decode_otype(rf_fullcap_a.otype, rf_fullcap_a.perms[PERM_EX])}) ||
                                    (~rf_fullcap_b.perms[PERM_US]);
     end else if (cheri_operator_i[CJALR]) begin
       perm_vio_vec[PVIO_TAG]   = (~rf_fullcap_a.valid);
@@ -1037,9 +1037,10 @@ module cheri_ex import cheri_pkg::*; #(
     logic  [4:0] ts_map_bitpos;    // bit index in a 32-bit word
     logic        clbc_map_ok;
     logic [31:0] clbc_map_q;
+    logic        clbc_err_q;
 
     assign clbc_revoked    = clbc_map_ok && clbc_map_q[ts_map_bitpos] & cheri_tsafe_en_i;
-    assign intl_lsu_we    = 1'b0;
+    assign unused_intl_lsu_we    = 1'b0;
     assign intl_lsu_wdata = 33'h0;
     assign intl_lsu_wcap  = NULL_REG_CAP;
 
@@ -1122,9 +1123,17 @@ module cheri_ex import cheri_pkg::*; #(
     assign intl_lsu_req    = 1'b0;
     assign intl_lsu_is_cap = 1'b0;
     assign intl_lsu_addr   = 32'h0;
-    assign intl_lsu_we     = 1'b0;
+    assign unused_intl_lsu_we = 1'b0;
     assign intl_lsu_wdata  = 33'h0;
     assign intl_lsu_wcap   = NULL_REG_CAP;
+    assign clbc_done = 1'b0;
+    assign clbc_err = 1'b0;
+    assign clbc_revoked = 1'b1;
+
+    always_ff @(posedge clk_i) begin
+      clbc_data_q <= 32'h0;
+      clbc_cap_q <= NULL_REG_CAP;
+    end
   end
 
   //
@@ -1245,29 +1254,29 @@ end
   // debug signal for FPGA only
   //
   logic [15:0] dbg_status;
-  logic [68:0] dbg_cs1_vec, dbg_cs2_vec, dbg_cd_vec;
+  logic [67:0] dbg_cs1_vec, dbg_cs2_vec, dbg_cd_vec;
 
   assign dbg_status = {4'h0,
                        instr_is_rv32lsu_i, rv32_lsu_req_i, rv32_lsu_we_i,  rv32_lsu_err,
                        cheri_exec_id_i, cheri_lsu_err, rf_fullcap_a.valid, result_cap_o.valid,
                        addr_bound_vio, perm_vio, addr_bound_vio_rv32, perm_vio_rv32};
 
-  assign dbg_cs1_vec = {rf_fullcap_a.top_cor, rf_fullcap_a.base_cor, // 68:65
-                        rf_fullcap_a.exp,                            // 64:60
-                        rf_fullcap_a.top, rf_fullcap_a.base,         // 59:42
-                        rf_fullcap_a.otype, rf_fullcap_a.cperms,     // 41:32
+  assign dbg_cs1_vec = {rf_fullcap_a.top_cor, rf_fullcap_a.base_cor, // 67:64
+                        rf_fullcap_a.exp,                            // 63:59
+                        rf_fullcap_a.top, rf_fullcap_a.base,         // 58:41
+                        rf_fullcap_a.otype, rf_fullcap_a.cperms,     // 40:32
                         rf_rdata_a};                                 // 31:0
 
-  assign dbg_cs2_vec = {rf_fullcap_b.top_cor, rf_fullcap_b.base_cor, // 68:65
-                        rf_fullcap_b.exp,                            // 64:60
-                        rf_fullcap_b.top, rf_fullcap_b.base,         // 59:42
-                        rf_fullcap_b.otype, rf_fullcap_b.cperms,     // 41:32
+  assign dbg_cs2_vec = {rf_fullcap_b.top_cor, rf_fullcap_b.base_cor, // 67:64
+                        rf_fullcap_b.exp,                            // 63:59
+                        rf_fullcap_b.top, rf_fullcap_b.base,         // 58:41
+                        rf_fullcap_b.otype, rf_fullcap_b.cperms,     // 40:32
                         rf_rdata_b};                                 // 31:0
 
-  assign dbg_cd_vec = {result_cap_o.top_cor, result_cap_o.base_cor,  // 68:65
-                        result_cap_o.exp,                            // 64:60
-                        result_cap_o.top, result_cap_o.base,         // 59:42
-                        result_cap_o.otype, result_cap_o.cperms,     // 41:32
+  assign dbg_cd_vec = {result_cap_o.top_cor, result_cap_o.base_cor,  // 67:64
+                        result_cap_o.exp,                            // 63:59
+                        result_cap_o.top, result_cap_o.base,         // 58:41
+                        result_cap_o.otype, result_cap_o.cperms,     // 40:32
                         result_data_o};                              // 31:0
 
 
