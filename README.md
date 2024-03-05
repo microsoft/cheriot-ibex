@@ -88,7 +88,7 @@ Note that the main CPU pipeline, TBRE and STKZ all use the load-store unit to ac
 
 ## Backward compatibility
 
-cheriot-ibex provides a backward-compatibility mode which is enabled by setting the input cheri_pmode_i = 1. In this mode, all CheirIoT features are disabled. The cheriot-ibex core is logically equivalent to the non-CHERIoT ibex core and runs  unmodified RV32IMC binaries.
+cheriot-ibex provides a backward-compatibility mode which is enabled by setting the input cheri_pmode_i = 0. In this mode, all CHERIoT features are disabled. The cheriot-ibex core is logically equivalent to the non-CHERIoT ibex core and runs unmodified RV32IMC binaries.
 
 ## Design configuration parameters
 
