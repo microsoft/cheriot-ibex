@@ -930,12 +930,10 @@ module cheri_ex import cheri_pkg::*; #(
                                    (rf_rdata_b != {28'h0, decode_otype(rf_fullcap_a.otype, rf_fullcap_a.perms[PERM_EX])}) ||
                                    (~rf_fullcap_b.perms[PERM_US]);
     end else if (cheri_operator_i[CJALR]) begin
-      perm_vio_vec[PVIO_TAG]   = (~rf_fullcap_a.valid);
-      perm_vio_vec[PVIO_SEAL]  = (is_cap_sealed(rf_fullcap_a) && (~is_cap_sentry(rf_fullcap_a))); 
+      perm_vio_vec[PVIO_TAG]   = ~rf_fullcap_a.valid;
+      perm_vio_vec[PVIO_SEAL]  = is_cap_sealed(rf_fullcap_a) && 
+                                  (~is_cap_sentry(rf_fullcap_a) || (cheri_imm12_i != 0));
       perm_vio_vec[PVIO_EX]    = ~rf_fullcap_a.perms[PERM_EX]; 
-      perm_vio_vec[PVIO_ALIGN] = (is_cap_sentry(rf_fullcap_a) && (cheri_imm12_i != 0)) || (addr_result[0]);
-    end else if (cheri_operator_i[CJAL]) begin
-      perm_vio_vec[PVIO_ALIGN] = addr_result[0]; 
     end else if (cheri_operator_i[CCSR_RW]) begin
       perm_vio_vec[PVIO_ASR]   = ~pcc_cap_i.perms[PERM_SR];
       illegal_scr_addr         = ~debug_mode_i & (csr_addr_o < 27);
