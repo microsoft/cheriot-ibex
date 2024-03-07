@@ -196,20 +196,21 @@ package cheri_pkg;
   function automatic logic [CPERMS_W-1:0] mask_clcperms (logic [CPERMS_W-1:0] cperms_in, logic [3:0] clrperm,
                                                    logic valid_in, logic sealed);
     logic [CPERMS_W-1:0] cperms_out;
-    logic                clr_glg, clr_sdlm;
+    logic                clr_gl, clr_lg, clr_sdlm;
 
-    clr_glg   = clrperm[0] & valid_in;
+    clr_gl    = clrperm[0] & valid_in;
+    clr_lg    = clrperm[0] & valid_in & ~sealed;
     clr_sdlm  = clrperm[1] & valid_in & ~sealed;  // only clear SD/LM if not sealed
 
     cperms_out    = cperms_in;
-    cperms_out[5] = cperms_in[5] & ~clr_glg;         // GL
+    cperms_out[5] = cperms_in[5] & ~clr_gl;         // GL
 
     if (cperms_in[4:3] == 2'b11) begin
-      cperms_out[0] = cperms_in[0] & ~clr_glg;       // LG
+      cperms_out[0] = cperms_in[0] & ~clr_lg;       // LG
       cperms_out[1] = cperms_in[1] & ~clr_sdlm;      // LM
       cperms_out[4:2] = clr_sdlm ? 3'b101 : cperms_in[4:2];
     end else if (cperms_in[4:2] == 3'b101) begin
-      cperms_out[0] = cperms_in[0] & ~clr_glg;       // LG
+      cperms_out[0] = cperms_in[0] & ~clr_lg;       // LG
       cperms_out[1] = cperms_in[1] & ~clr_sdlm;      // LM
     end else if (cperms_in[4:0] == 5'b10000) begin
       cperms_out[4:0] = clr_sdlm? 5'h0 : cperms_in[4:0];   // clear SD will results in NULL permission
@@ -217,7 +218,7 @@ package cheri_pkg;
       cperms_out[4] = ~(clr_sdlm & ~cperms_in[1]);    // must decode to 5'h0 if both ld/sd are 0.
       cperms_out[0] = cperms_in[0] & ~clr_sdlm;
     end else if (cperms_in[4:3] == 2'b01) begin
-      cperms_out[0] = cperms_in[0] & ~clr_glg;       // LG
+      cperms_out[0] = cperms_in[0] & ~clr_lg;       // LG
       cperms_out[1] = cperms_in[1] & ~clr_sdlm;      // LM
     end
 
@@ -631,7 +632,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
     sealed = (regcap.otype != OTYPE_UNSEALED);
     cperms_mem      = msw[CPERMS_LO+:CPERMS_W];
-    regcap.cperms   = mask_clcperms(cperms_mem, clrperm, valid_in, sealed);
+    regcap.cperms   = mask_clcperms(cperms_mem, clrperm, regcap.valid, sealed);
     addrmi9         = BOT_W'({1'b0, addr33[31:0]} >> regcap.exp); // ignore the tag valid bit
     tmp4            = update_temp_fields(regcap.top, regcap.base, addrmi9);
     regcap.top_cor  = tmp4[3:2];
@@ -686,7 +687,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
     // cperms_mem = {lsw[31], msw[31:26]};
     cperms_mem    = msw[31:26];
-    regcap.cperms = mask_clcperms(cperms_mem, clrperm, valid_in, sealed);
+    regcap.cperms = mask_clcperms(cperms_mem, clrperm, regcap.valid, sealed);
     regcap.rsvd   = lsw[31];
 
     tmp4 = update_temp_fields(regcap.top, regcap.base, addrmi9);
