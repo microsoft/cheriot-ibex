@@ -96,7 +96,7 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   input  logic                         scan_rst_ni
 );
 
-
+`ifdef RVFI
   logic        rvfi_valid;
   logic [63:0] rvfi_order;
   logic [31:0] rvfi_insn;
@@ -142,6 +142,7 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   assign unused_rvfi_ext_nmi = rvfi_ext_nmi;
   assign unused_rvfi_ext_debug_req = rvfi_ext_debug_req;
   assign unused_rvfi_ext_mcycle = rvfi_ext_mcycle;
+`endif
 
   ibex_top #(
     .DmHaltAddr       (DmHaltAddr       ),
@@ -265,10 +266,6 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
 
 // ibex_tracer relies on the signals from the RISC-V Formal Interface
 // synthesis translate_off
-`ifndef RVFI
-   $fatal("Fatal error: RVFI needs to be defined globally.");
-`endif
-
 `ifdef RVFI
   ibex_tracer #(
     .DataWidth        (DataWidth)
