@@ -599,7 +599,7 @@ module cheri_ex import cheri_pkg::*; #(
 
           cheri_rf_we_raw      = ~instr_fault;    // err -> wb exception
           branch_req_raw       = ~instr_fault & cheri_operator_i[CJALR];    // update PCC in CSR
-          branch_req_spec_raw  = 1'b1;
+          branch_req_spec_raw  = ~instr_fault;
 
           cheri_wb_err_raw     = instr_fault;
           cheri_ex_err_raw     = 1'b0;
