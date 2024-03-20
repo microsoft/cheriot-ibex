@@ -18,7 +18,6 @@ parameters:
   RVFI:
     datatype: bool
     paramtype: vlogdefine
-    default: true
 
   SYNTHESIS:
     datatype: bool
@@ -111,8 +110,6 @@ targets:
   default: &default_target
     filesets:
       - files_rtl
-    parameters:
-      - RVFI=true
     toplevel: ibex_top_tracing
 
   lint:
