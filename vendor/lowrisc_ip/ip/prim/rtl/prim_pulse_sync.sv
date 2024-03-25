@@ -32,6 +32,36 @@ module prim_pulse_sync (
     end
   end
 
+
+  // source active must come far enough such that the destination domain has time
+  // to create a valid pulse.
+`ifdef INC_ASSERT
+  //VCS coverage off
+  // pragma coverage off
+
+  // source active flag tracks whether there is an ongoing "toggle" event.
+  // Until this toggle event is accepted by the destination domain (negative edge of
+  // of the pulse output), the source side cannot toggle again.
+  logic effective_rst_n;
+  assign effective_rst_n = rst_src_ni && dst_pulse_o;
+
+  logic src_active_flag_d, src_active_flag_q;
+  assign src_active_flag_d = src_pulse_i || src_active_flag_q;
+
+  always_ff @(posedge clk_src_i or negedge effective_rst_n) begin
+    if (!effective_rst_n) begin
+      src_active_flag_q <= '0;
+    end else begin
+      src_active_flag_q <= src_active_flag_d;
+    end
+  end
+
+  //VCS coverage on
+  // pragma coverage on
+
+  `ASSERT(SrcPulseCheck_M, src_pulse_i |-> !src_active_flag_q, clk_src_i, !rst_src_ni)
+`endif
+
   //////////////////////////////////////////////////////////
   // synchronize level signal to destination clock domain //
   //////////////////////////////////////////////////////////
@@ -62,5 +92,7 @@ module prim_pulse_sync (
 
   // edge detection
   assign dst_pulse_o = dst_level_q ^ dst_level;
+
+  `ASSERT(DstPulseCheck_A, dst_pulse_o |=> !dst_pulse_o, clk_dst_i, !rst_dst_ni)
 
 endmodule

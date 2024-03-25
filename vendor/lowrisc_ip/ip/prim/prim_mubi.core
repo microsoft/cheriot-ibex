@@ -30,9 +30,53 @@ filesets:
       - rtl/prim_mubi16_sender.sv
       - rtl/prim_mubi16_sync.sv
       - rtl/prim_mubi16_dec.sv
+      - rtl/prim_mubi20_sender.sv
+      - rtl/prim_mubi20_sync.sv
+      - rtl/prim_mubi20_dec.sv
+      - rtl/prim_mubi24_sender.sv
+      - rtl/prim_mubi24_sync.sv
+      - rtl/prim_mubi24_dec.sv
+      - rtl/prim_mubi28_sender.sv
+      - rtl/prim_mubi28_sync.sv
+      - rtl/prim_mubi28_dec.sv
+      - rtl/prim_mubi32_sender.sv
+      - rtl/prim_mubi32_sync.sv
+      - rtl/prim_mubi32_dec.sv
     file_type: systemVerilogSource
 
+  files_verilator_waiver:
+    depend:
+      # common waivers
+      - lowrisc:lint:common
+
+  files_ascentlint_waiver:
+    depend:
+      # common waivers
+      - lowrisc:lint:common
+    files:
+      - lint/prim_mubi.waiver
+    file_type: waiver
+
+  files_veriblelint_waiver:
+    depend:
+      # common waivers
+      - lowrisc:lint:common
+
 targets:
-  default:
+  default: &default_target
     filesets:
+      - tool_verilator   ? (files_verilator_waiver)
+      - tool_ascentlint  ? (files_ascentlint_waiver)
+      - tool_veriblelint ? (files_veriblelint_waiver)
       - files_rtl
+
+  lint:
+    <<: *default_target
+    default_tool: verilator
+    parameters:
+      - SYNTHESIS=true
+    tools:
+      verilator:
+        mode: lint-only
+        verilator_options:
+          - "-Wall"

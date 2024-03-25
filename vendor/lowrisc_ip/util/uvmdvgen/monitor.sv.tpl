@@ -24,8 +24,8 @@ class ${name}_monitor extends dv_base_monitor #(
     super.run_phase(phase);
   endtask
 
-  // collect transactions forever - already forked in dv_base_moditor::run_phase
-  virtual protected task collect_trans(uvm_phase phase);
+  // collect transactions forever - already forked in dv_base_monitor::run_phase
+  virtual protected task collect_trans();
     forever begin
       // TODO: detect event
 

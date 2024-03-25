@@ -32,21 +32,30 @@ module prim_generic_pad_wrapper
   // analog pads cannot have a scan role.
   `ASSERT_INIT(AnalogNoScan_A, PadType != AnalogIn0 || ScanRole == NoScan)
 
+  //VCS coverage off
+  // pragma coverage off
   // not all signals are used here.
   logic unused_sigs;
   assign unused_sigs = ^{attr_i.slew_rate,
                          attr_i.drive_strength[3:1],
                          attr_i.od_en,
                          attr_i.schmitt_en,
+                         attr_i.keep_en,
                          scanmode_i,
                          pok_i};
+  //VCS coverage on
+  // pragma coverage on
 
   if (PadType == InputStd) begin : gen_input_only
+    //VCS coverage off
+    // pragma coverage off
     logic unused_in_sigs;
     assign unused_in_sigs = ^{out_i,
                               oe_i,
                               attr_i.virt_od_en,
                               attr_i.drive_strength};
+    //VCS coverage on
+    // pragma coverage on
 
     assign in_raw_o = (ie_i) ? inout_io  : 1'bz;
     // input inversion
@@ -58,6 +67,7 @@ module prim_generic_pad_wrapper
     assign (weak0, weak1) inout_io = attr_i.pull_en ? attr_i.pull_select : 1'bz;
   `endif
   end else if (PadType == BidirTol ||
+               PadType == DualBidirTol ||
                PadType == BidirOd ||
                PadType == BidirStd) begin : gen_bidir
 
@@ -79,14 +89,17 @@ module prim_generic_pad_wrapper
     assign (pull0, pull1)     inout_io = (oe && !attr_i.drive_strength[0]) ? out : 1'bz;
     // pullup / pulldown termination
     assign (weak0, weak1)     inout_io = attr_i.pull_en ? attr_i.pull_select : 1'bz;
-    // fake trireg emulation
-    assign (weak0, weak1)     inout_io = (attr_i.keep_en) ? inout_io : 1'bz;
   `endif
   end else if (PadType == AnalogIn0 || PadType == AnalogIn1) begin : gen_analog
 
+    //VCS coverage off
+    // pragma coverage off
     logic unused_ana_sigs;
     assign unused_ana_sigs = ^{attr_i, out_i, oe_i, ie_i};
+    //VCS coverage on
+    // pragma coverage on
 
+    assign inout_io = 1'bz; // explicitly make this tristate to avoid lint errors.
     assign in_o = inout_io;
     assign in_raw_o = inout_io;
 

@@ -9,6 +9,7 @@ filesets:
   files_rtl:
     depend:
       - lowrisc:prim:assert
+      - lowrisc:dv:dv_macros
     files:
       - rtl/prim_cdc_rand_delay.sv
     file_type: systemVerilogSource
@@ -18,6 +19,7 @@ filesets:
       # common waivers
       - lowrisc:lint:common
     files:
+      - lint/prim_cdc_rand_delay.vlt
     file_type: vlt
 
   files_ascentlint_waiver:
@@ -35,6 +37,10 @@ filesets:
 
 targets:
   default:
+    tools:
+      verilator:
+        verilator_options:
+          - '-DDISABLE_PRIM_CDC_RAND_DELAY'
     filesets:
       - files_rtl
       - tool_verilator    ? (files_verilator_waiver)

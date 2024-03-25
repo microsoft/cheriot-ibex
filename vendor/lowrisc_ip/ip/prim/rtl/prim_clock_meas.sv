@@ -42,6 +42,7 @@ module prim_clock_meas #(
   output logic ref_timeout_clk_o
 );
 
+
   //////////////////////////
   // Reference clock logic
   //////////////////////////
@@ -56,54 +57,123 @@ module prim_clock_meas #(
     .q_o(ref_en)
   );
 
-  logic ref_valid;
-  logic [RefCntWidth-1:0] ref_cnt;
-  always_ff @(posedge clk_ref_i or negedge rst_ref_ni) begin
-    if (!rst_ref_ni) begin
-      ref_cnt <= '0;
-      ref_valid <= '0;
-    end else if (!ref_en && |ref_cnt) begin
-      ref_cnt <= '0;
-      ref_valid <= '0;
-    end else if (ref_en && (ref_cnt == RefCnt - 1)) begin
-      // restart count and measure
-      ref_cnt <= '0;
-      ref_valid <= 1'b1;
-    end else if (ref_en) begin
-      ref_cnt <= ref_cnt + 1'b1;
-      ref_valid <= 1'b0;
+  //////////////////////////
+  // Domain sequencing
+  //////////////////////////
+
+  // the enable comes in on the clk_i domain, however, to ensure the
+  // clk and clk_ref domains remain in sync, the following sequencing is
+  // done to enable/disable the measurement feature
+
+  typedef enum logic [1:0] {
+    StDisable,
+    StEnabling,
+    StEnable,
+    StDisabling
+  } meas_chk_fsm_e;
+
+  // sync reference clock view of enable back into the source domain
+  logic en_ref_sync;
+  prim_flop_2sync #(
+    .Width(1)
+  ) ack_sync (
+    .clk_i,
+    .rst_ni,
+    .d_i(ref_en),
+    .q_o(en_ref_sync)
+  );
+
+  meas_chk_fsm_e state_d, state_q;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      state_q <= StDisable;
+    end else begin
+      state_q <= state_d;
     end
   end
 
+  // The following fsm sequence ensures that even if the source
+  // side changes the enable too quickly, the measurement controls
+  // remain consistent.
+  logic cnt_en;
+  always_comb begin
+    state_d = state_q;
+    cnt_en = '0;
+
+    unique case (state_q)
+
+      StDisable: begin
+        if (en_i) begin
+          state_d = StEnabling;
+        end
+      end
+
+      StEnabling: begin
+        if (en_ref_sync) begin
+          state_d = StEnable;
+        end
+      end
+
+      StEnable: begin
+        cnt_en = 1'b1;
+        if (!en_i) begin
+          state_d = StDisabling;
+        end
+      end
+
+      StDisabling: begin
+        if (!en_ref_sync) begin
+          state_d = StDisable;
+        end
+      end
+
+      //VCS coverage off
+      // pragma coverage off
+      default:;
+      //VCS coverage on
+      // pragma coverage on
+
+    endcase // unique case (state_q)
+  end
 
   //////////////////////////
   // Input Clock Logic
   //////////////////////////
 
-
+  logic valid_ref;
   logic valid;
-
   // The valid pulse causes the count to reset and start counting again
   // for each reference cycle.
-  // The count obtained during the the last refernece cycle is then used
+  // The count obtained during the last reference cycle is used
   // to measure how fast/slow the input clock is.
   prim_pulse_sync u_sync_ref (
     .clk_src_i(clk_ref_i),
     .rst_src_ni(rst_ref_ni),
-    .src_pulse_i(ref_valid),
+    .src_pulse_i(ref_en),
     .clk_dst_i(clk_i),
     .rst_dst_ni(rst_ni),
-    .dst_pulse_o(valid)
+    .dst_pulse_o(valid_ref)
   );
 
-  logic cnt_en;
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      cnt_en <= '0;
-    end else if (!en_i) begin
-      cnt_en <= '0;
-    end else if (en_i && valid) begin
-      cnt_en <= 1'b1;
+
+  if (RefCnt == 1) begin : gen_degenerate_case
+    // if reference count is one, cnt_ref is always 0.
+    // So there is no need to maintain a counter, and
+    // valid just becomes valid_ref
+    assign valid = valid_ref;
+  end else begin : gen_normal_case
+    logic [RefCntWidth-1:0] cnt_ref;
+    assign valid = valid_ref & (int'(cnt_ref) == RefCnt - 1);
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        cnt_ref <= '0;
+      end else if (!cnt_en && |cnt_ref) begin
+        cnt_ref <= '0;
+      end else if (cnt_en && valid) begin
+        cnt_ref <= '0;
+      end else if (cnt_en && valid_ref) begin
+        cnt_ref <= cnt_ref + 1'b1;
+      end
     end
   end
 
@@ -119,14 +189,14 @@ module prim_clock_meas #(
     end else if (valid_o) begin
       cnt <= '0;
       cnt_ovfl <= '0;
-    end else if (cnt_en && cnt_ovfl) begin
+    end else if (cnt_ovfl) begin
       cnt <= '{default: '1};
     end else if (cnt_en) begin
       {cnt_ovfl, cnt} <= cnt + 1'b1;
     end
   end
 
-  assign valid_o = en_i & valid & |cnt;
+  assign valid_o = valid & |cnt;
   assign fast_o = valid_o & ((cnt > max_cnt) | cnt_ovfl);
   assign slow_o = valid_o & (cnt < min_cnt);
 
@@ -149,10 +219,10 @@ module prim_clock_meas #(
 
   // maximum cdc latency from the perspective of the reference clock
   // 1 ref cycle to output request
-  // 2 cycles to sync + 1 cycle to ack is less than 1 cycle of ref based on assertion requirement
+  // 2 cycles to sync + 1 cycle to ack are less than 1 cycle of ref based on assertion requirement
   // 2 ref cycles to sync ack
-  // Double for margin
-  localparam int MaxRefCdcLatency = (1 + 1 + 2)*2;
+  // 2 extra ref cycles for margin
+  localparam int MaxRefCdcLatency = 1 + 1 + 2 + 2;
 
   if (RefTimeOutChkEn) begin : gen_ref_timeout_chk
     // check whether reference clock has timed out

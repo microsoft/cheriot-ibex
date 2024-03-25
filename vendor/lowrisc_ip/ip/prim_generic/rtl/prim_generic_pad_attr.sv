@@ -24,7 +24,6 @@ module prim_generic_pad_attr
   //
   // - inversion
   // - virtual open drain
-  // - keeper
   // - pullup / pulldown
   // - 1 driving strength bit
   //
@@ -33,24 +32,21 @@ module prim_generic_pad_attr
     always_comb begin : p_attr
       attr_warl_o = '0;
       attr_warl_o.invert = 1'b1;
-  // Driving strength and pulls are not supported by Verilator
-  `ifndef VERILATOR
       attr_warl_o.pull_en = 1'b1;
       attr_warl_o.pull_select = 1'b1;
-  `endif
     end
   end else if (PadType == BidirStd ||
                PadType == BidirTol ||
+               PadType == DualBidirTol ||
                PadType == BidirOd) begin : gen_bidir_warl
     always_comb begin : p_attr
       attr_warl_o = '0;
       attr_warl_o.invert = 1'b1;
       attr_warl_o.virt_od_en = 1'b1;
-      attr_warl_o.keep_en = 1'b1;
-  // Driving strength and pulls are not supported by Verilator
-  `ifndef VERILATOR
       attr_warl_o.pull_en = 1'b1;
       attr_warl_o.pull_select = 1'b1;
+  // Driving strength is not supported by Verilator
+  `ifndef VERILATOR
       // Only one driving strength bit is supported.
       attr_warl_o.drive_strength[0] = 1'b1;
   `endif

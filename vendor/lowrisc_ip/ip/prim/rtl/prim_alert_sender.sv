@@ -304,27 +304,31 @@ module prim_alert_sender
     sequence AckSigInt_S;
       alert_rx_i.ping_p == alert_rx_i.ping_n [*2];
     endsequence
-    // check propagation of sigint issues to output within three cycles
+
+  `ifndef FPV_ALERT_NO_SIGINT_ERR
+    // check propagation of sigint issues to output within three cycles, or four due to CDC
     // shift sequence to the right to avoid reset effects.
     `ASSERT(SigIntPing_A, ##1 PingSigInt_S |->
-        ##3 alert_tx_o.alert_p == alert_tx_o.alert_n)
+        ##[3:4] alert_tx_o.alert_p == alert_tx_o.alert_n)
     `ASSERT(SigIntAck_A, ##1 AckSigInt_S |->
-        ##3 alert_tx_o.alert_p == alert_tx_o.alert_n)
+        ##[3:4] alert_tx_o.alert_p == alert_tx_o.alert_n)
+  `endif
+
     // Test in-band FSM reset request (via signal integrity error)
-    `ASSERT(InBandInitFsm_A, PingSigInt_S or AckSigInt_S |-> ##3 state_q == Idle)
-    `ASSERT(InBandInitPing_A, PingSigInt_S or AckSigInt_S |-> ##3 !ping_set_q)
+    `ASSERT(InBandInitFsm_A, PingSigInt_S or AckSigInt_S |-> ##[3:4] state_q == Idle)
+    `ASSERT(InBandInitPing_A, PingSigInt_S or AckSigInt_S |-> ##[3:4] !ping_set_q)
     // output must be driven diff unless sigint issue detected
     `ASSERT(DiffEncoding_A, (alert_rx_i.ack_p ^ alert_rx_i.ack_n) &&
         (alert_rx_i.ping_p ^ alert_rx_i.ping_n) |->
-        ##3 alert_tx_o.alert_p ^ alert_tx_o.alert_n)
+        ##[3:5] alert_tx_o.alert_p ^ alert_tx_o.alert_n)
 
     // handshakes can take indefinite time if blocked due to sigint on outgoing
     // lines (which is not visible here). thus, we only check whether the
     // handshake is correctly initiated and defer the full handshake checking to the testbench.
-    // TODO: add the staggered cases as well
     `ASSERT(PingHs_A, ##1 $changed(alert_rx_i.ping_p) &&
         (alert_rx_i.ping_p ^ alert_rx_i.ping_n) ##2 state_q == Idle |=>
-        $rose(alert_tx_o.alert_p), clk_i, !rst_ni || (alert_tx_o.alert_p == alert_tx_o.alert_n))
+        ##[0:1] $rose(alert_tx_o.alert_p), clk_i,
+        !rst_ni || (alert_tx_o.alert_p == alert_tx_o.alert_n))
   end else begin : gen_sync_assert
     sequence PingSigInt_S;
       alert_rx_i.ping_p == alert_rx_i.ping_n;
@@ -332,11 +336,15 @@ module prim_alert_sender
     sequence AckSigInt_S;
       alert_rx_i.ping_p == alert_rx_i.ping_n;
     endsequence
+
+  `ifndef FPV_ALERT_NO_SIGINT_ERR
     // check propagation of sigint issues to output within one cycle
     `ASSERT(SigIntPing_A, PingSigInt_S |=>
         alert_tx_o.alert_p == alert_tx_o.alert_n)
     `ASSERT(SigIntAck_A,  AckSigInt_S |=>
         alert_tx_o.alert_p == alert_tx_o.alert_n)
+  `endif
+
     // Test in-band FSM reset request (via signal integrity error)
     `ASSERT(InBandInitFsm_A, PingSigInt_S or AckSigInt_S |=> state_q == Idle)
     `ASSERT(InBandInitPing_A, PingSigInt_S or AckSigInt_S |=> !ping_set_q)
@@ -374,4 +382,11 @@ module prim_alert_sender
       clk_i, !rst_ni || (alert_tx_o.alert_p == alert_tx_o.alert_n))
 `endif
 
+`ifdef FPV_ALERT_NO_SIGINT_ERR
+  // Assumptions for FPV security countermeasures to ensure the alert protocol functions collectly.
+  `ASSUME_FPV(AckPFollowsAlertP_S, alert_rx_i.ack_p == $past(alert_tx_o.alert_p))
+  `ASSUME_FPV(AckNFollowsAlertN_S, alert_rx_i.ack_n == $past(alert_tx_o.alert_n))
+  `ASSUME_FPV(TriggerAlertInit_S, $stable(rst_ni) == 0 |=> alert_rx_i.ping_p == alert_rx_i.ping_n)
+  `ASSUME_FPV(PingDiffPair_S, ##2 alert_rx_i.ping_p != alert_rx_i.ping_n)
+`endif
 endmodule : prim_alert_sender

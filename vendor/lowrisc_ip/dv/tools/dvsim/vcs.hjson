@@ -6,11 +6,20 @@
   build_ex:   "{build_dir}/simv"
   run_cmd:    "{job_prefix} {build_ex}"
 
+  // This option enables the following: (needed for uvm_hdl_*)
+  //  - Read capability on registers, variables, and nets
+  //  - Write (deposit) capability on registers and variables
+  //  - Force capability on registers, variables, and nets
+  // TODO Trim this flag since +f hurts performance.
+  vcs_build_opt_debug_access: "-debug_access+f"
+  vcs_build_opt_debug_region: "-debug_region=cell+lib"
+  post_flist_opts: ""
   build_opts: ["-sverilog -full64 -licqueue -ntb_opts uvm-1.2",
-               "-timescale=1ns/1ps",
+               "-timescale={timescale}",
                "-Mdir={build_ex}.csrc",
                "-o {build_ex}",
                "-f {sv_flist}",
+               "{post_flist_opts}",
                // Enable LCA features. It does not require separate licenses.
                "-lca",
                // List multiple tops for the simulation. Prepend each top level with `-top`.
@@ -21,6 +30,8 @@
                "+warn=noUII-L",
                // Disable unnecessary LCA warning.
                "+warn=noLCA_FEATURES_ENABLED",
+               // Disable warnings about bind directive not being applied.
+               "+warn=noBNA",
                // Below option required for $error/$fatal system calls
                "-assert svaext",
                // Force unique and priority to evaluate compliance checking only on the stable
@@ -44,14 +55,9 @@
                // .../libvcsnew.so: undefined reference to `snpsCheckStrdupFunc'
                // .../libvcsnew.so: undefined reference to `snpsGetMemBytes'
                "-LDFLAGS -Wl,--no-as-needed",
-               // This option enables the following: (needed for uvm_hdl_*)
-               //  - Read capability on registers, variables, and nets
-               //  - Write (deposit) capability on registers and variables
-               //  - Force capability on registers, variables, and nets
-               // TODO Trim this flag since +f hurts performance.
-               "-debug_access+f",
                // This option is needed for uvm_hdl_*, when it accesses the array under `celldefine
-               "-debug_region=cell+lib",
+               "{vcs_build_opt_debug_region}",
+               "{vcs_build_opt_debug_access}",
                // Use this to conditionally compile for VCS (example: LRM interpretations differ
                // across tools).
                "+define+VCS",
@@ -94,11 +100,20 @@
                "-error=TMPO",
                // Class objects must not hide other class members due to same name
                "-error=SV-OHCM",
+               // ENUMASSIGN issues can cause LEC warnings later down the road (see #10083
+               // and #10952 for context). The warning is therefore promoted to an error
+               // in simulations in order to catch this as early as possible.
+               "-error=ENUMASSIGN",
+               // Tasks must not be enabled in functions. Other tools do not allow this.
+               "-error=TEIF"
+               // This helps avoid races in flops per Synopsys CASE 01552811.
+               // It causes flops to always use the sampled data value.
+               "-deraceclockdata"
                ]
 
   run_opts:   ["-licqueue",
                "-ucli -do {run_script}",
-               "+ntb_random_seed={seed}",
+               "+ntb_random_seed={svseed}",
                // Disable the display of the SystemVerilog assert and cover statement summary
                // at the end of simulation. This summary is list of assertions that started but
                // did not finish because the simulation terminated, or assertions that did not
@@ -119,7 +134,7 @@
 
   // Individual test specific coverage data - this will be deleted if the test fails
   // so that coverage from failiing tests is not included in the final report.
-  cov_db_test_dir_name: "{run_dir_name}.{seed}"
+  cov_db_test_dir_name: "{run_dir_name}.{svseed}"
   cov_db_test_dir: "{cov_db_dir}/snps/coverage/db/testdata/{cov_db_test_dir_name}"
 
   // Merging coverage.
@@ -132,10 +147,14 @@
                      "-full64",
                      // No need of generating report when merging coverage.
                      "-noreport",
+                     // Parallel merge is slower than serial merge for most
+                     // small blocks, and the corresponding flags are commented
+                     // out. If this becomes problematic and you have a powerful
+                     // machine available, uncomment the three flags below.
                      // Merge results from tests in parallel.
-                     "-parallel",
-                     "-parallel_split 20",
-                     "-parallel_temproot {cov_merge_dir}",
+                     // "-parallel",
+                     // "-parallel_split 20",
+                     // "-parallel_temproot {cov_merge_dir}",
                      "+urg+lic+wait",
                      // Merge same assert instances found in different VDBs.
                      "-merge_across_libs",
@@ -161,6 +180,8 @@
                      "-grade index testfile",
                      // Use simple ratio of total covered bins over total bins across cps & crs,
                      "-group ratio",
+                     // Follow LRM naming conventions for array bins.
+                     "-group lrm_bin_name",
                      // Compute overall coverage for per-instance covergroups individually rather
                      // than cumulatively.
                      "-group instcov_for_score",
@@ -179,7 +200,7 @@
   cov_unr_dir:     "{scratch_path}/cov_unr"
 
   cov_unr_common_build_opts: ["-sverilog -full64 -licqueue -ntb_opts uvm-1.2",
-                              "-timescale=1ns/1ps"]
+                              "-timescale={timescale}"]
 
   // Use recommended UUM (Unified usage model) 3 steps flow. The other flow defines macro
   // "SYNTHESIS", which we have used in design
@@ -232,6 +253,9 @@
   // Include hierarchies for both code coverage and assertions.
   vcs_cov_cfg_file: ""
 
+  // Supply cov configuration file for -cm_fsmresetfilter.
+  vcs_fsm_reset_cov_cfg_file: ""
+
   // Supply the cov exclusion files.
   vcs_cov_excl_files: []
 
@@ -254,6 +278,12 @@
                    "-debug_access"]
     }
     {
+      name: vcs_waves_off
+      is_sim_mode: 1
+      build_opts: [// disable dumping assertion failures to improve runtime performance
+                   "-assert novpi+dbgopt"]
+    }
+    {
       name: vcs_cov
       is_sim_mode: 1
       build_opts: [// Enable the required cov metrics
@@ -265,16 +295,26 @@
                    "-cm_line contassign",
                    // Dump toggle coverage on mdas, array of structs and on ports only
                    "-cm_tgl mda+structarr+portsonly",
+                   // Report condition coverage within tasks, functions and for loops.
+                   "-cm_cond for+tf",
                    // Ignore initial blocks for coverage
                    "-cm_report noinitial",
-                   // Filter unreachable/statically constant blocks
-                   "-cm_noconst",
+                   // Filter unreachable/statically constant blocks. seqnoconst does a more
+                   // sophisticated analysis including NBA / assignment with delays.
+                   "-cm_seqnoconst",
+                   // Creates a constfile.txt indicating a list of detected constants.
+                   "-diag noconst"
                    // Don't count coverage that's coming from zero-time glitches
                    "-cm_glitch 0",
                    // Ignore warnings about not applying cm_glitch to path and FSM
                    "+warn=noVCM-OPTIGN",
                    // Coverage database output location
-                   "-cm_dir {cov_db_dir}"]
+                   "-cm_dir {cov_db_dir}",
+                   // The following option is to improve runtime performance
+                   "-Xkeyopt=rtopt",
+                   // Exclude FSM transitions that can only happen on reset
+                   "-cm_fsmresetfilter {vcs_fsm_reset_cov_cfg_file}",
+                   ]
 
       run_opts:   [// Enable the required cov metrics
                    "-cm {cov_metrics}",
@@ -288,7 +328,9 @@
     {
       name: vcs_xprop
       is_sim_mode: 1
-      build_opts: ["-xprop={dv_root}/tools/vcs/xprop.cfg"]
+      build_opts: ["-xprop={vcs_xprop_cfg_file}",
+                   // Enable xmerge mode specific performance optimization
+                   "-xprop=mmsopt"]
     }
     {
       name: vcs_profile

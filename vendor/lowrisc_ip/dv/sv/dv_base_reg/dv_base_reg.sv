@@ -19,6 +19,11 @@ class dv_base_reg extends uvm_reg;
   local string         update_err_alert_name;
   local string         storage_err_alert_name;
 
+  // This is used for get_alias_name
+  string alias_name = "";
+  // Lookup table for alias fields (used for get_field_by_name)
+  string field_alias_lookup[string];
+
   // atomic_en_shadow_wr: semaphore to guarantee setting or resetting en_shadow_wr is unchanged
   // through the 1st/2nd (or both) writes
   semaphore            atomic_en_shadow_wr;
@@ -29,6 +34,29 @@ class dv_base_reg extends uvm_reg;
     super.new(name, n_bits, has_coverage);
     atomic_en_shadow_wr = new(1);
   endfunction : new
+
+  // Create this register and its fields' IP-specific functional coverage.
+  function void create_cov();
+    dv_base_reg_field fields[$];
+    get_dv_base_reg_fields(fields);
+    foreach(fields[i]) fields[i].create_cov();
+    // Create register-specific covergroups here.
+  endfunction
+
+  // this is similar to get_name, but it gets the
+  // simple name of the aliased register instead.
+  function string get_alias_name ();
+    return this.alias_name;
+  endfunction: get_alias_name
+
+  // this is similar to set_name, but it sets the
+  // simple name of the aliased register instead.
+  function void set_alias_name (string alias_name);
+    dv_base_reg_block reg_block;
+    `downcast(reg_block, get_parent())
+    reg_block.register_alias_lookup[alias_name] = this.get_name();
+    this.alias_name = alias_name;
+  endfunction: set_alias_name
 
   function void get_dv_base_reg_fields(ref dv_base_reg_field dv_fields[$]);
     foreach (m_fields[i]) `downcast(dv_fields[i], m_fields[i])
@@ -71,6 +99,15 @@ class dv_base_reg extends uvm_reg;
     this.get_dv_base_reg_fields(flds);
     foreach (flds[i]) begin
       get_reg_mask |= flds[i].get_field_mask();
+    end
+  endfunction
+
+  // Return a mask of read-only bits in the register.
+  virtual function uvm_reg_data_t get_ro_mask();
+    dv_base_reg_field flds[$];
+    this.get_dv_base_reg_fields(flds);
+    foreach (flds[i]) begin
+      get_ro_mask |= flds[i].get_ro_mask();
     end
   endfunction
 
@@ -180,8 +217,6 @@ class dv_base_reg extends uvm_reg;
   // update local variables used for the special regs.
   // - shadow register: shadow reg won't be updated until the second write has no error
   // - lock register: if wen_fld is set to 0, change access policy to all the lockable_flds
-  // TODO: create an `enable_field_access_policy` variable and set the template code during
-  // automation.
   virtual function void pre_do_predict(uvm_reg_item rw, uvm_predict_e kind);
 
     // Skip updating shadow value or access type if:
@@ -215,6 +250,7 @@ class dv_base_reg extends uvm_reg;
              flds[i].update_shadowed_val(~wr_data);
           end else begin
             shadow_update_err = 1;
+            flds[i].sample_shadow_field_cov(.update_err(1));
           end
         end
       end
@@ -258,7 +294,7 @@ class dv_base_reg extends uvm_reg;
         return;
       end else begin
         `uvm_info(`gfn, $sformatf(
-            "Shadow reg %0s has update error, update rw.value from %0h to %0h",
+            "Update shadow reg %0s rw.value from %0h to %0h",
             get_name(), rw.value[0], get_committed_val()), UVM_HIGH)
         rw.value[0] = get_committed_val();
       end
@@ -278,14 +314,15 @@ class dv_base_reg extends uvm_reg;
       end
       do_update_shadow_vals = 0;
     end
-    lock_lockable_flds(rw.value[0]);
+    lock_lockable_flds(rw.value[0], kind);
   endfunction
 
   // This function is used for wen_reg to lock its lockable flds by changing the lockable flds'
   // access policy. For register write via csr_wr(), this function is included in post_write().
   // For register write via tl_access(), user will need to call this function manually.
-  virtual function void lock_lockable_flds(uvm_reg_data_t val);
+  virtual function void lock_lockable_flds(uvm_reg_data_t val, uvm_predict_e kind);
     if (is_wen_reg()) begin
+      `uvm_info(`gfn, $sformatf("lock_lockable_flds %d val", val), UVM_LOW);
       foreach (m_fields[i]) begin
         dv_base_reg_field fld;
         `downcast(fld, m_fields[i])
@@ -295,7 +332,17 @@ class dv_base_reg extends uvm_reg;
           case (field_access)
             // discussed in issue #1922: enable register is standarized to W0C or RO (if HW has
             // write access).
-            "W0C": if (field_val == 1'b0) fld.set_lockable_flds_access(1);
+            "W0C": begin
+              // This is the regular behavior with W0C access policy enabled (i.e., only
+              // clearing is possible).
+              if (kind == UVM_PREDICT_WRITE && field_val == 1'b0) begin
+                fld.set_lockable_flds_access(1);
+              // In this case we are using direct prediction where the access policy is not
+              // applied. I.e., a regwen bit that has been set to 0 can be set to 1 again.
+              end else if (kind == UVM_PREDICT_DIRECT) begin
+                fld.set_lockable_flds_access((~field_val) & fld.get_field_mask());
+              end
+            end
             "RO": ; // if RO, it's updated by design, need to predict in scb
             default:`uvm_fatal(`gfn, $sformatf("lock register invalid access %s", field_access))
           endcase
@@ -379,6 +426,17 @@ class dv_base_reg extends uvm_reg;
 
     // top-level alert name is ${ip_name} + alert name from hjson
     return ($sformatf("%0s_%0s", get_dv_base_reg_block().get_ip_name(), storage_err_alert_name));
+  endfunction
+
+  // this overrides the get_field_by_name function
+  function dv_base_reg_field get_field_by_name(string name);
+    dv_base_reg_field retval;
+    if (field_alias_lookup.exists(name)) begin
+      `downcast(retval, super.get_field_by_name(field_alias_lookup[name]))
+    end else begin
+      `downcast(retval, super.get_field_by_name(name))
+    end
+    return retval;
   endfunction
 
 endclass
