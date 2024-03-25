@@ -23,6 +23,7 @@ import argparse
 import datetime
 import logging as log
 import os
+import random
 import shlex
 import subprocess
 import sys
@@ -32,6 +33,7 @@ from pathlib import Path
 import Launcher
 import LauncherFactory
 import LocalLauncher
+import SgeLauncher
 from CfgFactory import make_cfg
 from Deploy import RunTest
 from Timer import Timer
@@ -259,20 +261,28 @@ def parse_reseed_multiplier(as_str: str) -> float:
         ret = float(as_str)
     except ValueError:
         raise argparse.ArgumentTypeError('Invalid reseed multiplier: {!r}. '
-                                         'Must be a float.'
-                                         .format(as_str))
+                                         'Must be a float.'.format(as_str))
     if ret <= 0:
         raise argparse.ArgumentTypeError('Reseed multiplier must be positive.')
     return ret
 
 
 def parse_args():
+    cfg_metavar = "<cfg-hjson-file>"
     parser = argparse.ArgumentParser(
         description=wrapped_docstring(),
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        # #12377 [dvsim] prints invalid usage when constructed by argparse
+        # Disable it pending more verbose and automatic solution and document in
+        # help message
+        usage='%(prog)s {} [-h] [options]'.format(cfg_metavar),
+        epilog="Either place the positional argument ahead of the optional args:\n" \
+               "eg. `dvsim.py {} -i ITEM ITEM` \n" \
+               "or end a sequence of optional args with `--`:\n" \
+               "eg. `dvsim.py -i ITEM ITEM -- {}`\n".format(cfg_metavar, cfg_metavar))
 
     parser.add_argument("cfg",
-                        metavar="<cfg-hjson-file>",
+                        metavar=cfg_metavar,
                         help="""Configuration hjson file.""")
 
     parser.add_argument("--version",
@@ -285,15 +295,16 @@ def parse_args():
         help=("Explicitly set the tool to use. This is "
               "optional for running simulations (where it can "
               "be set in an .hjson file), but is required for "
-              "other flows. Possible tools include: vcs, "
-              "xcelium, ascentlint, verixcdc, veriblelint, verilator, dc."))
+              "other flows. Possible tools include: vcs, questa,"
+              "xcelium, ascentlint, verixcdc, mrdc, veriblelint,"
+              "verilator, dc."))
 
     parser.add_argument("--list",
                         "-l",
                         nargs="*",
                         metavar='CAT',
                         choices=_LIST_CATEGORIES,
-                        help=('Parse the the given .hjson config file, list '
+                        help=('Parse the given .hjson config file, list '
                               'the things that can be run, then exit. The '
                               'list can be filtered with a space-separated '
                               'of categories from: {}.'.format(
@@ -416,10 +427,24 @@ def parse_args():
                         help=('The options for each build_mode in this list '
                               'are applied to all build and run targets.'))
 
+    buildg.add_argument("--build-timeout-mins",
+                        type=int,
+                        metavar="MINUTES",
+                        help=('Wall-clock timeout for builds in minutes: if '
+                              'the build takes longer it will be killed. If '
+                              'GUI mode is enabled, this timeout mechanism will '
+                              'be disabled.'))
+
     disg.add_argument("--gui",
                       action='store_true',
-                      help=('Run the flow in interactive mode instead of the '
-                            'batch mode.'))
+                      help=('Run the flow in GUI mode instead of the batch '
+                            'mode.'))
+
+    disg.add_argument("--interactive",
+                      action='store_true',
+                      help=('Run the job in non-GUI interactive mode '
+                            'accepting manual user inputs and displaying the '
+                            'tool outputs transparently.'))
 
     rung = parser.add_argument_group('Options for running')
 
@@ -464,6 +489,22 @@ def parse_args():
                             "tests are automatically rerun with waves "
                             "enabled."))
 
+    rung.add_argument("--run-timeout-mins",
+                      type=int,
+                      metavar="MINUTES",
+                      help=('Wall-clock timeout for runs in minutes: if '
+                            'the run takes longer it will be killed. If '
+                            'GUI mode is enabled, this timeout mechanism will '
+                            'be disabled.'))
+
+    rung.add_argument("--run-timeout-multiplier",
+                      type=float,
+                      metavar="MULTIPLIER",
+                      help=('Multiplier for wall-clock run timeout as a '
+                            'floating point number: typical use is to '
+                            'uniformly magnify timeout when running '
+                            'gate-level or foundry tests.'))
+
     rung.add_argument("--verbosity",
                       "-v",
                       choices=['n', 'l', 'm', 'h', 'f', 'd'],
@@ -472,7 +513,16 @@ def parse_args():
                             '(l), medium (m), high (h), full (f) or debug (d).'
                             ' The default value is set in config files.'))
 
-    seedg = parser.add_argument_group('Test seeds')
+    seedg = parser.add_argument_group('Build / test seeds')
+
+    seedg.add_argument("--build-seed",
+                       nargs="?",
+                       type=int,
+                       const=random.getrandbits(256),
+                       metavar="S",
+                       help=('Randomize the build. Uses the seed value passed '
+                             'an additional argument, else it randomly picks '
+                             'a 256-bit unsigned integer.'))
 
     seedg.add_argument("--seeds",
                        "-s",
@@ -510,17 +560,12 @@ def parse_args():
 
     waveg = parser.add_argument_group('Dumping waves')
 
-    waveg.add_argument(
-        "--waves",
-        "-w",
-        nargs="?",
-        choices=["default", "fsdb", "shm", "vpd", "vcd", "evcd", "fst"],
-        const="default",
-        help=("Enable dumping of waves. It takes an optional "
-              "argument to pick the desired wave format. If "
-              "the optional argument is not supplied, it picks "
-              "whatever is the default for the chosen tool. "
-              "By default, dumping waves is not enabled."))
+    waveg.add_argument("--waves",
+                       "-w",
+                       choices=["fsdb", "shm", "vpd", "vcd", "evcd", "fst"],
+                       help=("Enable dumping of waves. It takes an "
+                             "argument to pick the desired wave format."
+                             "By default, dumping waves is not enabled."))
 
     waveg.add_argument("--max-waves",
                        "-mw",
@@ -530,6 +575,12 @@ def parse_args():
                        help=('Only dump waves for the first N tests run. This '
                              'includes both tests scheduled for run and those '
                              'that are automatically rerun.'))
+
+    waveg.add_argument("--dump-script",
+                       "-ds",
+                       help=('Use user define custom dump script file'
+                             'The custom file should be located in {proj_root}'
+                             'Default file is {proj_root}/hw/dv/tools/sim.tcl'))
 
     covg = parser.add_argument_group('Generating simulation coverage')
 
@@ -595,6 +646,14 @@ def parse_args():
         print(version)
         sys.exit()
 
+    # Check conflicts
+    # interactive and remote, r
+    if args.interactive and args.remote:
+        log.error("--interactive and --remote cannot be set together")
+        sys.exit()
+    if args.interactive and args.reseed != 1:
+        args.reseed = 1
+
     # We want the --list argument to default to "all categories", but allow
     # filtering. If args.list is None, then --list wasn't supplied. If it is
     # [], then --list was supplied with no further arguments and we want to
@@ -652,8 +711,9 @@ def main():
     setattr(args, "timestamp_long", curr_ts.strftime(TS_FORMAT_LONG))
     setattr(args, "timestamp", curr_ts.strftime(TS_FORMAT))
 
-    # Register the seeds from command line with RunTest class.
+    # Register the seeds from command line with the RunTest class.
     RunTest.seeds = args.seeds
+
     # If we are fixing a seed value, no point in tests having multiple reseeds.
     if args.fixed_seed:
         args.reseed = 1
@@ -662,6 +722,7 @@ def main():
     # Register the common deploy settings.
     Timer.print_interval = args.print_interval
     LocalLauncher.LocalLauncher.max_parallel = args.max_parallel
+    SgeLauncher.SgeLauncher.max_parallel = args.max_parallel
     Launcher.Launcher.max_odirs = args.max_odirs
     LauncherFactory.set_launcher_type(args.local)
 

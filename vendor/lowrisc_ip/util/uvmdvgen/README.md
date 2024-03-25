@@ -1,6 +1,4 @@
----
-title: "Uvmdvgen: Initial testbench auto-generation tool"
----
+# Uvmdvgen: Initial testbench auto-generation tool
 
 `uvmdvgen` is a Python based tool to generate the boilerplate code for a UVM
 agent as well as the complete UVM testbench for a given DUT. The tool generates
@@ -13,7 +11,7 @@ When starting with a new DV effort, the user typically goes through a copy-paste
 exercise to replicate an existing UVM testbench code to the current one and has
 to go through several debug cycles to get it working. This tool aims to
 eliminate that. Also, as a part of our
-[DV methodology]({{< relref "doc/ug/dv_methodology#code-reuse" >}}),
+[DV methodology](../../doc/contributing/dv/methodology/README.md#code-reuse),
 we provide utilities and base class structures that contain several
 pieces of common code which can be reused when setting up a new DV environment.
 
@@ -78,7 +76,7 @@ optional arguments:
 ### Generating UVM agent
 The boilerplate code for a UVM agent for an interface can be generated using the
 `-a` switch. This results in the generation of complete agent with classes that
-extend from the [DV library]({{< relref "hw/dv/sv/dv_lib/README.md" >}}). Please see
+extend from the [DV library](../../hw/dv/sv/dv_lib/README.md). Please see
 that description for more details.
 
 The tool generates an interface, item, cfg, cov, monitor, driver and sequence
@@ -106,7 +104,7 @@ IP. The following describes their contents in each source generated:
     This is the monitor component extended from `dv_base_monitor`. It provides
     the following items:
 
-    * `virtual protected task collect_trans(uvm_phase phase)`
+    * `virtual protected task collect_trans()`
 
         This is a shell task within which user is required to add logic to detect
         an event, sample the interface and create a transaction object and write
@@ -160,16 +158,16 @@ more is typically needed.
 ### Generating UVM environment & testbench
 The boilerplate code for a UVM environment and the testbench for a DUT can be
 generated using the `-e` switch. This results in the generation of classes that
-extend from [DV base library]({{< relref "hw/dv/sv/dv_lib/README.md" >}}).
+extend from [DV base library](../../hw/dv/sv/dv_lib/README.md).
 If the `-c` switch is passed, it extends from
-[CIP base library]({{< relref "hw/dv/sv/cip_lib/doc" >}}). With `-ea` switch,
+[CIP base library](../../hw/dv/sv/cip_lib/README.md). With `-ea` switch,
 user can provide a list of downstream agents to create within the environment.
 Please see description for more details.
 
 The tool generates not only the UVM environment, but also the base test,
 testbench, top level fusesoc core file with sim target, Makefile that already
 includes the smoke and CSR test suite and more. With just a few tweaks, this
-enables the user to reach the V1 milestone much quicker.  Let's take `i2c_host`
+enables the user to reach the V1 stage much quicker.  Let's take `i2c_host`
 as the argument passed for the name of the IP. The following is the list of
 files generated with a brief description of their contents:
 
@@ -196,7 +194,7 @@ provided by `-hi` and `-ha` respectively. By default, these are set to 'False'
 
     This is the UVM reg based RAL model. This is created for completeness. The
     actual RAL model needs to be generated prior to running simulations using the
-    [regtool]({{< relref "util/reggen/README.md" >}}).
+    [regtool](../reggen/doc/setup_and_use.md).
 
 * `env/i2c_host_scoreboard`
 
@@ -239,7 +237,7 @@ provided by `-hi` and `-ha` respectively. By default, these are set to 'False'
 * `env/i2c_host_env`
 
     This is the env class that creates the downstream agents passed via `-ea`
-    switch. It sets their correspodnding cfg objects (which are members of env cfg
+    switch. It sets their corresponding cfg objects (which are members of env cfg
     object) into the `uvm_config_db`. It also makes the analysis port connections
     in the `connect_phase` and sets the sequencer handles in the virtual
     sequencer.
@@ -279,7 +277,7 @@ provided by `-hi` and `-ha` respectively. By default, these are set to 'False'
 
     This is the top level testbench module that instantiates the DUT along with
     some of the interfaces that are required to be instantiated and connected and
-    passed on the the `uvm_config_db` since the base DV/CIP library classes
+    passed on the `uvm_config_db` since the base DV/CIP library classes
     retrieve them. The user needs to look through the RTL and make additional
     connections as needed.
 
@@ -292,9 +290,9 @@ provided by `-hi` and `-ha` respectively. By default, these are set to 'False'
 * `i2c_host_dv_doc.md`
 
   This is the initial DV document that will describe the entire testbench. This
-  is equivalent to the template available [here](https://github.com/lowRISC/opentitan/blob/master/hw/dv/doc/dv_template.md).
+  is equivalent to the template available [here](https://github.com/lowRISC/opentitan/blob/master/hw/dv/doc/dv_doc_template.md).
 
-The [VLNV](https://fusesoc.readthedocs.io/en/master/user/overview.html#core-naming-rules)
+The [VLNV](https://fusesoc.readthedocs.io/en/stable/user/build_system/core_files.html#naming-the-core-file)
 name in the generated FuseSoC core files is set using the `--vendor` switch for
 the 'vendor' field. By default, it is set to "lowrisc". It can be overridden
 by supplying the `--vendor <vendor-name>` switch on the command line.

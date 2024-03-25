@@ -7,9 +7,12 @@ import pprint
 import random
 import shlex
 from pathlib import Path
+from typing import List
 
+from JobTime import JobTime
 from LauncherFactory import get_launcher
-from sim_utils import get_cov_summary_table
+from sim_utils import (get_cov_summary_table, get_job_runtime,
+                       get_simulated_time)
 from tabulate import tabulate
 from utils import (VERBOSE, clean_odirs, find_and_substitute_wildcards,
                    rm_path, subst_wildcards)
@@ -21,7 +24,7 @@ class Deploy():
     """
 
     # Indicate the target for each sub-class.
-    target = None
+    target = "none"
 
     # List of variable names that are to be treated as "list of commands".
     # This tells '_construct_cmd' that these vars are lists that need to
@@ -76,6 +79,9 @@ class Deploy():
         # Launcher instance created later using create_launcher() method.
         self.launcher = None
 
+        # Job's wall clock time (a.k.a CPU time, or runtime).
+        self.job_runtime = JobTime()
+
     def _define_attrs(self):
         """Defines the attributes this instance needs to have.
 
@@ -94,11 +100,11 @@ class Deploy():
         # command (through substitution vars) or other things such as pass /
         # fail patterns.
         self.mandatory_misc_attrs = {
-            "name": False,
             "build_mode": False,
-            "flow_makefile": False,
+            "dry_run": False,
             "exports": False,
-            "dry_run": False
+            "flow_makefile": False,
+            "name": False,
         }
 
     # Function to parse a dict and extract the mandatory cmd and misc attrs.
@@ -156,7 +162,7 @@ class Deploy():
         self.input_dirs = []
 
         # Directories touched by this job. These directories are marked
-        # becuase they are used by dependent jobs as input.
+        # because they are used by dependent jobs as input.
         self.output_dirs = [self.odir]
 
         # Pass and fail patterns.
@@ -222,8 +228,8 @@ class Deploy():
             if type(value) is bool:
                 value = int(value)
             if type(value) is str:
-                value = value.strip()
-            cmd += " {}={}".format(attr, shlex.quote(value))
+                value = shlex.quote(value.strip())
+            cmd += " {}={}".format(attr, value)
         return cmd
 
     def is_equivalent_job(self, item):
@@ -279,6 +285,33 @@ class Deploy():
 
         return "{}/{}.log".format(self.odir, self.target)
 
+    def get_timeout_mins(self):
+        """Returns the timeout in minutes."""
+        return None
+
+    def extract_info_from_log(self, log_text: List):
+        """Extracts information pertaining to the job from its log.
+
+        This method parses the log text after the job has completed, for the
+        extraction of information pertaining to the job's performance. This
+        base class method extracts the job's runtime (i.e. the wall clock time)
+        as reported by the tool. The tool reported runtime is the most accurate
+        since it is devoid of the delays incurred due to infrastructure and
+        setup overhead.
+
+        The extended classes may override this method to extract other pieces
+        of information from the log.
+
+        `log_text` is the job's log file contents as a list of lines.
+        """
+        try:
+            time, unit = get_job_runtime(log_text, self.sim_cfg.tool)
+            self.job_runtime.set(time, unit)
+        except RuntimeError as e:
+            log.warning(f"{self.full_name}: {e} Using dvsim-maintained "
+                        "job_runtime instead.")
+            self.job_runtime.set(self.launcher.job_runtime_secs, "s")
+
     def create_launcher(self):
         """Creates the launcher instance.
 
@@ -298,6 +331,7 @@ class CompileSim(Deploy):
 
     def __init__(self, build_mode, sim_cfg):
         self.build_mode_obj = build_mode
+        self.seed = sim_cfg.build_seed
         super().__init__(sim_cfg)
 
     def _define_attrs(self):
@@ -312,17 +346,18 @@ class CompileSim(Deploy):
             "sv_flist_gen_opts": False,
 
             # Build
-            "build_dir": False,
             "pre_build_cmds": False,
             "build_cmd": False,
+            "build_dir": False,
             "build_opts": False,
             "post_build_cmds": False,
         })
 
         self.mandatory_misc_attrs.update({
-            "cov_db_dir": False,
+            "build_fail_patterns": False,
             "build_pass_patterns": False,
-            "build_fail_patterns": False
+            "build_timeout_mins": False,
+            "cov_db_dir": False,
         })
 
     def _set_attrs(self):
@@ -340,10 +375,24 @@ class CompileSim(Deploy):
         self.pass_patterns = self.build_pass_patterns
         self.fail_patterns = self.build_fail_patterns
 
+        if self.sim_cfg.args.build_timeout_mins is not None:
+            self.build_timeout_mins = self.sim_cfg.args.build_timeout_mins
+
+        if self.build_timeout_mins:
+            log.debug("Timeout for job \"%s\" is %d minutes.", self.name,
+                      self.build_timeout_mins)
+
     def pre_launch(self):
         # Delete old coverage database directories before building again. We
         # need to do this because the build directory is not 'renewed'.
         rm_path(self.cov_db_dir)
+
+    def get_timeout_mins(self):
+        """Returns the timeout in minutes.
+
+        Limit build jobs to 60 minutes if the timeout is not set.
+        """
+        return self.build_timeout_mins if self.build_timeout_mins is not None else 60
 
 
 class CompileOneShot(Deploy):
@@ -368,18 +417,22 @@ class CompileOneShot(Deploy):
 
             # Build
             "build_dir": False,
-            "pre_build_cmds": False,
             "build_cmd": False,
             "build_opts": False,
-            "post_build_cmds": False,
             "build_log": False,
+            "build_timeout_mins": False,
+            "post_build_cmds": False,
+            "pre_build_cmds": False,
 
             # Report processing
             "report_cmd": False,
             "report_opts": False
         })
 
-        self.mandatory_misc_attrs.update({"build_fail_patterns": False})
+        self.mandatory_misc_attrs.update({
+            "build_fail_patterns": False,
+            "build_pass_patterns": False
+        })
 
     def _set_attrs(self):
         super()._extract_attrs(self.build_mode_obj.__dict__)
@@ -389,6 +442,21 @@ class CompileOneShot(Deploy):
         self.build_mode = self.name
         self.job_name += f"_{self.build_mode}"
         self.fail_patterns = self.build_fail_patterns
+        self.pass_patterns = self.build_pass_patterns
+
+        if self.sim_cfg.args.build_timeout_mins is not None:
+            self.build_timeout_mins = self.sim_cfg.args.build_timeout_mins
+
+        if self.build_timeout_mins:
+            log.debug("Timeout for job \"%s\" is %d minutes.", self.name,
+                      self.build_timeout_mins)
+
+    def get_timeout_mins(self):
+        """Returns the timeout in minutes.
+
+        Limit build jobs to 60 minutes if the timeout is not set.
+        """
+        return self.build_timeout_mins if self.build_timeout_mins is not None else 60
 
 
 class RunTest(Deploy):
@@ -403,7 +471,11 @@ class RunTest(Deploy):
     def __init__(self, index, test, build_job, sim_cfg):
         self.test_obj = test
         self.index = index
+        self.build_seed = sim_cfg.build_seed
         self.seed = RunTest.get_seed()
+        # Systemverilog accepts seeds with a maximum size of 32 bits.
+        self.svseed = int(self.seed) & 0xFFFFFFFF
+        self.simulated_time = JobTime()
         super().__init__(sim_cfg)
 
         if build_job is not None:
@@ -422,20 +494,25 @@ class RunTest(Deploy):
             "uvm_test_seq": False,
             "sw_images": False,
             "sw_build_device": False,
-            "sw_build_dir": False,
+            "sw_build_cmd": False,
+            "sw_build_opts": False,
             "run_dir": False,
             "pre_run_cmds": False,
             "run_cmd": False,
             "run_opts": False,
             "post_run_cmds": False,
+            "build_seed": True,  # Already set in the constructor.
+            "seed": True,  # Already set in the constructor.
         })
 
         self.mandatory_misc_attrs.update({
-            "run_dir_name": False,
             "cov_db_dir": False,
             "cov_db_test_dir": False,
+            "run_dir_name": False,
+            "run_fail_patterns": False,
             "run_pass_patterns": False,
-            "run_fail_patterns": False
+            "run_timeout_mins": False,
+            "run_timeout_multiplier": False,
         })
 
     def _set_attrs(self):
@@ -456,6 +533,25 @@ class RunTest(Deploy):
             self.pass_patterns = self.run_pass_patterns
             self.fail_patterns = self.run_fail_patterns
 
+        if self.sim_cfg.args.run_timeout_mins is not None:
+            self.run_timeout_mins = self.sim_cfg.args.run_timeout_mins
+
+        if self.sim_cfg.args.run_timeout_multiplier is not None:
+            self.run_timeout_multiplier = (
+                self.sim_cfg.args.run_timeout_multiplier)
+
+        if self.run_timeout_mins and self.run_timeout_multiplier:
+            self.run_timeout_mins = int(self.run_timeout_mins *
+                                        self.run_timeout_multiplier)
+
+        if self.run_timeout_multiplier:
+            log.debug("Timeout multiplier for job \"%s\" is %f.",
+                      self.full_name, self.run_timeout_multiplier)
+
+        if self.run_timeout_mins:
+            log.debug("Timeout for job \"%s\" is %d minutes.", self.full_name,
+                      self.run_timeout_mins)
+
     def pre_launch(self):
         self.launcher.renew_odir = True
 
@@ -473,9 +569,25 @@ class RunTest(Deploy):
             if RunTest.fixed_seed:
                 return RunTest.fixed_seed
             for i in range(1000):
-                seed = random.getrandbits(32)
+                seed = random.getrandbits(256)
                 RunTest.seeds.append(seed)
         return RunTest.seeds.pop(0)
+
+    def get_timeout_mins(self):
+        """Returns the timeout in minutes.
+
+        Limit run jobs to 60 minutes if the timeout is not set.
+        """
+        return self.run_timeout_mins if self.run_timeout_mins is not None else 60
+
+    def extract_info_from_log(self, log_text: List):
+        """Extracts the time the design was simulated for, from the log."""
+        super().extract_info_from_log(log_text)
+        try:
+            time, unit = get_simulated_time(log_text, self.sim_cfg.tool)
+            self.simulated_time.set(time, unit)
+        except RuntimeError as e:
+            log.debug(f"{self.full_name}: {e}")
 
 
 class CovUnr(Deploy):
@@ -527,11 +639,15 @@ class CovMerge(Deploy):
 
     def __init__(self, run_items, sim_cfg):
         # Construct the cov_db_dirs right away from the run_items. This is a
-        # special variable used in the HJson.
+        # special variable used in the HJson. The coverage associated with
+        # the primary build mode needs to be first in the list.
         self.cov_db_dirs = []
         for run in run_items:
             if run.cov_db_dir not in self.cov_db_dirs:
-                self.cov_db_dirs.append(run.cov_db_dir)
+                if sim_cfg.primary_build_mode == run.build_mode:
+                    self.cov_db_dirs.insert(0, run.cov_db_dir)
+                else:
+                    self.cov_db_dirs.append(run.cov_db_dir)
 
         # Early lookup the cov_merge_db_dir, which is a mandatory misc
         # attribute anyway. We need it to compute additional cov db dirs.
@@ -608,6 +724,7 @@ class CovReport(Deploy):
         # Keep track of coverage results, once the job is finished.
         self.cov_total = ""
         self.cov_results = ""
+        self.cov_results_dict = dict()
 
     def post_finish(self, status):
         """Extract the coverage results summary for the dashboard.
@@ -627,6 +744,8 @@ class CovReport(Deploy):
                                     headers="firstrow",
                                     tablefmt="pipe",
                                     colalign=colalign)
+        for tup in zip(*results):
+            self.cov_results_dict[tup[0]] = tup[1]
 
 
 class CovAnalyze(Deploy):

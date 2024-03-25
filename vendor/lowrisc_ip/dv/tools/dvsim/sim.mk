@@ -2,10 +2,10 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
-export SHELL	:= /bin/bash
+export SHELL  := /bin/bash
 .DEFAULT_GOAL := all
 
-LOCK_SW_BUILD_DIR  ?= flock --timeout 3600 ${sw_build_dir} --command
+LOCK_ROOT_DIR ?= flock --timeout 3600 ${proj_root} --command
 
 all: build run
 
@@ -18,7 +18,11 @@ pre_build:
 	@echo "[make]: pre_build"
 	mkdir -p ${build_dir}
 ifneq (${pre_build_cmds},)
-	cd ${build_dir} && ${pre_build_cmds}
+	# pre_build_cmds are likely changing the in-tree sources. We hence use FLOCK
+	# utility to prevent multiple builds that may be running in parallel from
+	# stepping on each other. TODO: Enforce the list of pre_build_cmds is
+	# identical across all build modes.
+	${LOCK_ROOT_DIR} "cd ${build_dir} && ${pre_build_cmds}"
 endif
 
 gen_sv_flist: pre_build
@@ -52,39 +56,116 @@ endif
 sw_build: pre_run
 	@echo "[make]: sw_build"
 ifneq (${sw_images},)
-	# Initialize meson build system.
-	#
-	# Loop through the list of sw_images and invoke meson on each item.
+	# Loop through the list of sw_images and invoke Bazel on each.
 	# `sw_images` is a space-separated list of tests to be built into an image.
 	# Optionally, each item in the list can have additional metadata / flags using
 	# the delimiter ':'. The format is as follows:
-	# <path-to-sw-test>:<index>:<flag1>:<flag2>
+	# <Bazel label>:<index>:<flag1>:<flag2>
 	#
-	# If no delimiter is detected, then the full string is considered to be the
-	# <path-to-sw-test>. If 1 delimiter is detected, then it must be <path-to-sw-
-	# test> followed by <index>. The <flag> is considered optional.
+	# If one delimiter is detected, then the full string is considered to be the
+	# <Bazel label>. If two delimiters are detected, then it must be <Bazel label>
+	# followed by <index>. The <flag> is considered optional.
+	#
+	# After the images are built, we use `bazel cquery ...` to locate the built
+	# software artifacts so they can be copied to the test bench run directory.
+	# We only copy device SW images, and do not copy host-side artifacts (like
+	# opentitantool) that are also dependencies of the Bazel test target that
+	# encode the software image targets.
 	set -e; \
-	mkdir -p ${sw_build_dir}; \
-	${LOCK_SW_BUILD_DIR} "cd ${proj_root} && \
-		env BUILD_ROOT=${sw_build_dir} ${proj_root}/meson_init.sh"; \
 	for sw_image in ${sw_images}; do \
-		image=`echo $$sw_image | cut -d: -f 1`;  \
-		index=`echo $$sw_image | cut -d: -f 2`; \
-		flags=(`echo $$sw_image | cut -d: -f 3- --output-delimiter " "`); \
-		if [[ -z $$image ]]; then \
+		if [[ -z $$sw_image ]]; then \
 			echo "ERROR: SW image \"$$sw_image\" is malformed."; \
-			echo "Expected format: path-to-sw-test:index:optional-flags."; \
+			echo "Expected format: <Bazel label>:<index>:<optional-flags>."; \
 			exit 1; \
 		fi; \
-		if [[ $${flags[@]} =~ "prebuilt" ]]; then \
-			echo "SW image \"$$image\" is prebuilt - copying sources."; \
-			target_dir=`dirname ${sw_build_dir}/build-bin/$$image`; \
-			mkdir -p $$target_dir; \
-			cp ${proj_root}/$$image* $$target_dir/.; \
+		prebuilt_path=`echo $$sw_image | cut -d: -f 1`; \
+		bazel_target=`echo $$sw_image | cut -d: -f 2`; \
+		index=`echo $$sw_image | cut -d: -f 3`; \
+		flags=(`echo $$sw_image | cut -d: -f 4- --output-delimiter " "`); \
+		bazel_label="`echo $$sw_image | cut -d: -f 1-2`"; \
+		if [[ $${index} != 4 && $${index} != 5 ]]; then \
+			bazel_label="$${bazel_label}_$${sw_build_device}"; \
+			bazel_cquery="labels(data, $${bazel_label}) union labels(srcs, $${bazel_label})"; \
 		else \
-			echo "Building SW image \"$$image\"."; \
-			target="$$image""_export_${sw_build_device}"; \
-			${LOCK_SW_BUILD_DIR} "ninja -C ${sw_build_dir}/build-out $$target"; \
+			bazel_cquery="$${bazel_label}"; \
+		fi; \
+		cd ${proj_root}; \
+		if [[ $${flags[@]} =~ "prebuilt" ]]; then \
+			echo "SW image \"$$bazel_label\" is prebuilt - copying sources."; \
+			cp ${proj_root}/$${prebuilt_path} $${run_dir}/`basename $${prebuilt_path}`; \
+		else \
+			echo "Building SW image \"$${bazel_label}\"."; \
+			bazel_airgapped_opts=""; \
+			bazel_opts="${sw_build_opts} --define DISABLE_VERILATOR_BUILD=true"; \
+			bazel_opts+=" --//hw/ip/otp_ctrl/data:img_seed=${seed}"; \
+			if [[ "${build_seed}" != "None" ]]; then \
+				bazel_opts+=" --//hw/ip/otp_ctrl/data:lc_seed=${build_seed}"; \
+				bazel_opts+=" --//hw/ip/otp_ctrl/data:otp_seed=${build_seed}"; \
+			fi; \
+			if [[ -n $${BAZEL_OTP_DATA_PERM_FLAG} ]]; then \
+				bazel_opts+=" --//hw/ip/otp_ctrl/data:data_perm=$${BAZEL_OTP_DATA_PERM_FLAG}"; \
+			fi; \
+			if [[ -z $${BAZEL_PYTHON_WHEELS_REPO} ]]; then \
+				echo "Building \"$${bazel_label}\" on network connected machine."; \
+				bazel_cmd="./bazelisk.sh"; \
+			else \
+				echo "Building \"$${bazel_label}\" on air-gapped machine."; \
+				bazel_airgapped_opts+=" --define SPECIFY_BINDGEN_LIBSTDCXX=true"; \
+				bazel_airgapped_opts+=" --distdir=$${BAZEL_DISTDIR}"; \
+				bazel_airgapped_opts+=" --repository_cache=$${BAZEL_CACHE}"; \
+				bazel_cmd="bazel"; \
+			fi; \
+			echo "Building with command: $${bazel_cmd} build $${bazel_opts} $${bazel_label}"; \
+			$${bazel_cmd} build $${bazel_airgapped_opts} $${bazel_opts} $${bazel_label}; \
+			kind=$$($${bazel_cmd} cquery $${bazel_airgapped_opts} \
+				$${bazel_label} \
+				--ui_event_filters=-info \
+				--noshow_progress \
+				--output=label_kind | cut -f1 -d' '); \
+			if [[ $${kind} == "opentitan_test" \
+					|| $${bazel_label} == "//sw/device/lib/testing/test_rom:test_rom_sim_dv" \
+					|| $${bazel_label} == "//sw/device/silicon_creator/rom:rom_with_real_keys_sim_dv" \
+					|| $${bazel_label} == "//sw/device/silicon_creator/rom:rom_with_fake_keys_sim_dv" ]]; then \
+				for artifact in $$($${bazel_cmd} cquery $${bazel_airgapped_opts} \
+					$${bazel_label} \
+					--ui_event_filters=-info \
+					--noshow_progress \
+					--output=starlark \
+					`# An opentitan_test rule has all of its needed files in its runfiles.` \
+					--starlark:expr='"\n".join([f.path for f in target.data_runfiles.files.to_list()])'); do \
+						cp -f $${artifact} $${run_dir}/$$(basename $${artifact}); \
+						if [[ $$artifact == *.bin && \
+							-f "$$(echo $${artifact} | cut -d. -f 1).elf" ]]; then \
+							cp -f "$$(echo $${artifact} | cut -d. -f 1).elf" \
+								$${run_dir}/$$(basename -s .bin $${artifact}).elf; \
+						fi; \
+				done; \
+			else \
+				for dep in $$($${bazel_cmd} cquery $${bazel_airgapped_opts} \
+					$${bazel_cquery} \
+					--ui_event_filters=-info \
+					--noshow_progress \
+					--output=starlark \
+					`# Bazel 6 cquery outputs repository targets in canonical format (@//blabla) whereas bazel 5 does not, ` \
+					`# so we use a custom starlark printer to remove in leading @ when needed.` \
+					--starlark:expr='str(target.label)[1:] if str(target.label).startswith("@//") else target.label'); do \
+					if [[ $$dep == //hw/ip/otp_ctrl/data* ]] || \
+					  ([[ $$dep != //hw* ]] && [[ $$dep != //util* ]] && [[ $$dep != //sw/host* ]]); then \
+						for artifact in $$($${bazel_cmd} cquery $${bazel_airgapped_opts} $${dep} \
+							--ui_event_filters=-info \
+							--noshow_progress \
+							--output=starlark \
+							--starlark:expr="\"\\n\".join([f.path for f in target.files.to_list()])"); do \
+							cp -f $${artifact} $${run_dir}/$$(basename $${artifact}); \
+							if [[ $$artifact == *.bin && \
+								-f "$$(echo $${artifact} | cut -d. -f 1).elf" ]]; then \
+								cp -f "$$(echo $${artifact} | cut -d. -f 1).elf" \
+									$${run_dir}/$$(basename -s .bin $${artifact}).elf; \
+							fi; \
+						done; \
+					fi; \
+				done; \
+			fi; \
 		fi; \
 	done;
 endif
@@ -115,14 +196,28 @@ cov_unr_build: gen_sv_flist
 	@echo "[make]: cov_unr_build"
 	cd ${sv_flist_gen_dir} && ${cov_unr_build_cmd} ${cov_unr_build_opts}
 
-cov_unr: cov_unr_build
+cov_unr_vcs: cov_unr_build
 	@echo "[make]: cov_unr"
 	cd ${sv_flist_gen_dir} && ${cov_unr_run_cmd} ${cov_unr_run_opts}
+
+cov_unr_xcelium:
+	@echo "[make]: cov_unr"
+	mkdir -p ${cov_unr_dir}
+	cd ${cov_unr_dir} && ${cov_unr_run_cmd} ${cov_unr_run_opts}
+
+cov_unr_merge:
+	cd ${cov_unr_dir} && ${job_prefix} ${cov_merge_cmd} -init ${cov_unr_dir}/jgproject/sessionLogs/session_0/unr_imc_coverage_merge.cmd
+
+ifeq (${SIMULATOR}, xcelium)
+  cov_unr: cov_unr_xcelium cov_unr_merge
+else
+  cov_unr: cov_unr_vcs
+endif
 
 # Merge coverage if there are multiple builds.
 cov_merge:
 	@echo "[make]: cov_merge"
-	${cov_merge_cmd} ${cov_merge_opts}
+	${job_prefix} ${cov_merge_cmd} ${cov_merge_opts}
 
 # Generate coverage reports.
 cov_report:
@@ -135,18 +230,18 @@ cov_analyze:
 	${cov_analyze_cmd} ${cov_analyze_opts}
 
 .PHONY: build \
-        pre_build \
-        gen_sv_flist \
-        do_build \
-        post_build \
-        build_result \
-        run \
-        pre_run \
-        sw_build \
-        simulate \
-        post_run \
-        run_result \
-        debug_waves \
-        cov_merge \
-        cov_analyze \
-        cov_report
+	pre_build \
+	gen_sv_flist \
+	do_build \
+	post_build \
+	build_result \
+	run \
+	pre_run \
+	sw_build \
+	simulate \
+	post_run \
+	run_result \
+	debug_waves \
+	cov_merge \
+	cov_analyze \
+	cov_report

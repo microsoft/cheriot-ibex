@@ -8,10 +8,18 @@ class dv_base_env_cfg #(type RAL_T = dv_base_reg_block) extends uvm_object;
   bit en_scb            = 1; // can be changed at run-time
   bit en_scb_tl_err_chk = 1;
   bit en_scb_mem_chk    = 1;
+  bit en_scb_ping_chk   = 1;
   bit en_cov            = 0; // Enable via plusarg, only if coverage collection is turned on.
+  bit en_dv_cdc         = 0; // Enable via plusarg.
 
+  local bit will_reset  = 0;
   bit under_reset       = 0;
   bit is_initialized;        // Indicates that the initialize() method has been called.
+
+  // JTAG DMI knob
+  // this has to be set test.build
+  // before cfg.initialize
+  bit use_jtag_dmi = 0;
 
   // The scope and runtime of a existing test can be reduced by setting this variable. This is
   // useful to keep the runtime down especially in time-sensitive runs such as CI, which is meant
@@ -28,8 +36,9 @@ class dv_base_env_cfg #(type RAL_T = dv_base_reg_block) extends uvm_object;
   }
 
   // reg model & q of valid csr addresses
-  RAL_T                             ral;
-  dv_base_reg_block                 ral_models[string];
+  RAL_T             ral;
+  dv_base_reg_block ral_models[string];
+
   // A queue of the names of RAL models that should be created in the `initialize` function
   // Related agents, adapters will be created in env as well as connecting them with scb
   // For example, if the IP has an additional RAL model named `ral1`, add it into the list as below
@@ -99,8 +108,22 @@ class dv_base_env_cfg #(type RAL_T = dv_base_reg_block) extends uvm_object;
   protected virtual function void post_build_ral_settings(dv_base_reg_block ral);
   endfunction
 
+  // This can be used to stop transaction generators either upon reset or in preparation to
+  // issue a random reset.
+  virtual function bit stop_transaction_generators();
+    return this.will_reset || this.under_reset;
+  endfunction
+
+  // This can be used to announce the intention to generate a random reset soon, to allow
+  // transaction generators to stop, and fire a reset with no outstanding transactions.
+  virtual function void set_intention_to_reset();
+    `uvm_info(`gfn, "Setting intention to reset", UVM_MEDIUM)
+    this.will_reset = 1'b1;
+  endfunction
+
   virtual function void reset_asserted();
     this.under_reset = 1;
+    this.will_reset = 0;
     csr_utils_pkg::reset_asserted();
   endfunction
 
@@ -109,11 +132,15 @@ class dv_base_env_cfg #(type RAL_T = dv_base_reg_block) extends uvm_object;
     csr_utils_pkg::reset_deasserted();
   endfunction
 
+  // Creates RAL models and sets their base address based on the supplied arg.
+  //
+  // csr_base_addr is the base address to set to the RAL models. If it is all 1s, then we treat that
+  // as an indication to randomize the base address internally instead.
   virtual function void create_ral_models(bit [bus_params_pkg::BUS_AW-1:0] csr_base_addr = '1);
 
     foreach (ral_model_names[i]) begin
       string ral_name = ral_model_names[i];
-      uvm_reg_addr_t base_addr;
+      bit randomize_base_addr = &csr_base_addr;
       dv_base_reg_block reg_blk = create_ral_by_name(ral_name);
 
       if (reg_blk.get_name() == RAL_T::type_name) `downcast(ral, reg_blk)
@@ -122,31 +149,19 @@ class dv_base_env_cfg #(type RAL_T = dv_base_reg_block) extends uvm_object;
       // later.
       pre_build_ral_settings(reg_blk);
       reg_blk.build(.base_addr(0), .csr_excl(null));
+      reg_blk.addr_width = bus_params_pkg::BUS_AW;
+      reg_blk.data_width = bus_params_pkg::BUS_DW;
+      reg_blk.be_width = bus_params_pkg::BUS_DBW;
       post_build_ral_settings(reg_blk);
       reg_blk.lock_model();
 
       // Now the model is locked, we know its layout. Set the base address for the register block.
-      // The function internally picks a random one if we pass '1 to it, and performs an integrity
-      // check on the set address.
-      //
-      // The definition of base_addr explicitly casts from a bus address to a uvm_reg_addr_t (to
-      // correctly handle the case where a bus address is narrower than a uvm_reg_addr_t).
-      base_addr = (&csr_base_addr ?
-                   {`UVM_REG_ADDR_WIDTH{1'b1}} :
-                   {{(`UVM_REG_ADDR_WIDTH - bus_params_pkg::BUS_AW){1'b0}}, csr_base_addr});
-      reg_blk.set_base_addr(base_addr);
+      reg_blk.set_base_addr(.base_addr(`UVM_REG_ADDR_WIDTH'(csr_base_addr)),
+                            .randomize_base_addr(randomize_base_addr));
 
       // Get list of valid csr addresses (useful in seq to randomize addr as well as in scb checks)
       reg_blk.compute_mapped_addr_ranges();
       reg_blk.compute_unmapped_addr_ranges();
-      `uvm_info(msg_id,
-                $sformatf("RAL[%0s] mapped addresses: %0p",
-                          ral_name, reg_blk.mapped_addr_ranges),
-                UVM_HIGH)
-      `uvm_info(msg_id,
-                $sformatf("RAL[%0s] unmapped addresses: %0p",
-                          ral_name, reg_blk.unmapped_addr_ranges),
-                UVM_HIGH)
       ral_models[ral_name] = reg_blk;
     end
 

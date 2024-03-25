@@ -20,7 +20,10 @@ module prim_double_lfsr #(
   parameter bit                MaxLenSVA    = 1'b1,
   parameter bit                LockupSVA    = 1'b1,
   parameter bit                ExtSeedSVA   = 1'b1,
-  parameter bit                NonLinearOut = 1'b0
+  parameter bit                NonLinearOut = 1'b0,
+  // This should only be disabled in special circumstances, for example
+  // in non-comportable IPs where an error does not trigger an alert.
+  parameter bit                EnableAlertTriggerSVA = 1
 ) (
   input                         clk_i,
   input                         rst_ni,
@@ -81,8 +84,30 @@ module prim_double_lfsr #(
     );
   end
 
+`ifdef SIMULATION
+`ifndef VERILATOR
+  // Ensure both LFSRs start off with the same default seed. if randomized in simulations.
+  initial begin : p_sync_lfsr_default_seed
+    wait (!$isunknown(gen_double_lfsr[0].u_prim_lfsr.DefaultSeedLocal));
+    wait (!$isunknown(gen_double_lfsr[1].u_prim_lfsr.DefaultSeedLocal));
+    gen_double_lfsr[1].u_prim_lfsr.DefaultSeedLocal =
+        gen_double_lfsr[0].u_prim_lfsr.DefaultSeedLocal;
+    $display("%m: Updated gen_double_lfsr[1].u_prim_lfsr.DefaultSeedLocal = 0x%0h",
+        gen_double_lfsr[1].u_prim_lfsr.DefaultSeedLocal);
+  end
+`endif
+`endif
+
   // Output the state from the first LFSR
   assign state_o = lfsr_state[0][StateOutDw-1:0];
   assign err_o = lfsr_state[0] != lfsr_state[1];
 
+  // This logic that will be assign to one, when user adds macro
+  // ASSERT_PRIM_DOUBLE_LFSR_ERROR_TRIGGER_ALERT to check the error with alert, in case that
+  // prim_double_lfsr is used in design without adding this assertion check.
+  `ifdef INC_ASSERT
+  logic unused_assert_connected;
+
+  `ASSERT_INIT_NET(AssertConnected_A, unused_assert_connected === 1'b1 || !EnableAlertTriggerSVA)
+  `endif
 endmodule : prim_double_lfsr

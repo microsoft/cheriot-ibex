@@ -36,6 +36,7 @@ class dv_base_test #(type CFG_T = dv_base_env_cfg,
 
     env = ENV_T::type_id::create("env", this);
     cfg = CFG_T::type_id::create("cfg", this);
+    void'($value$plusargs("use_jtag_dmi=%0b", cfg.use_jtag_dmi));
     cfg.initialize();
     `DV_CHECK_RANDOMIZE_FATAL(cfg)
     uvm_config_db#(CFG_T)::set(this, "env", "cfg", cfg);
@@ -44,7 +45,6 @@ class dv_base_test #(type CFG_T = dv_base_env_cfg,
     void'($value$plusargs("en_scb=%0b", cfg.en_scb));
     void'($value$plusargs("en_scb_tl_err_chk=%0b", cfg.en_scb_tl_err_chk));
     void'($value$plusargs("en_scb_mem_chk=%0b", cfg.en_scb_mem_chk));
-
     // Enable fastest design performance by configuring zero delays in all agents.
     void'($value$plusargs("zero_delays=%0b", cfg.zero_delays));
 
@@ -57,6 +57,8 @@ class dv_base_test #(type CFG_T = dv_base_env_cfg,
     // Enable print_topology
     void'($value$plusargs("print_topology=%0b", print_topology));
     uvm_top.enable_print_topology = print_topology;
+
+    void'($value$plusargs("cdc_instrumentation_enabled=%d", cfg.en_dv_cdc));
   endfunction : build_phase
 
   virtual function void end_of_elaboration_phase(uvm_phase phase);
@@ -77,7 +79,6 @@ class dv_base_test #(type CFG_T = dv_base_env_cfg,
     if (run_test_seq) begin
       run_seq(test_seq_s, phase);
     end
-    // TODO: add hook for end of test checking.
   endtask : run_phase
 
   // Add message demotes here - hook to use by extended tests
@@ -99,9 +100,4 @@ class dv_base_test #(type CFG_T = dv_base_env_cfg,
     phase.drop_objection(this, $sformatf("%s objection dropped", `gn));
     `uvm_info(`gfn, {"Finished test sequence ", test_seq_s}, UVM_MEDIUM)
   endtask
-
-  // TODO: Add default report_phase implementation.
-
 endclass : dv_base_test
-
-

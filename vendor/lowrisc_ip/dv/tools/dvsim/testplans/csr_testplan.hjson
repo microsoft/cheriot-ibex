@@ -16,7 +16,7 @@
               CSRs are accessible from.
             - Shuffle the list of CSRs first to remove the effect of ordering.
             '''
-      milestone: V1
+      stage: V1
       tests: ["{name}{intf}_csr_hw_reset"]
     }
     {
@@ -30,7 +30,7 @@
               CSRs are accessible from.
             - Shuffle the list of CSRs first to remove the effect of ordering.
             '''
-      milestone: V1
+      stage: V1
       tests: ["{name}{intf}_csr_rw"]
     }
     {
@@ -46,7 +46,7 @@
               CSRs are accessible from.
             - Shuffle the list of CSRs first to remove the effect of ordering.
             '''
-      milestone: V1
+      stage: V1
       tests: ["{name}{intf}_csr_bit_bash"]
     }
     {
@@ -63,7 +63,7 @@
               CSRs are accessible from.
             - Shuffle the list of CSRs first to remove the effect of ordering.
             '''
-      milestone: V1
+      stage: V1
       tests: ["{name}{intf}_csr_aliasing"]
     }
     {
@@ -77,9 +77,40 @@
             - It is mandatory to run this test for all available interfaces the
               CSRs are accessible from.
             '''
-      milestone: V1
+      stage: V1
       tests: ["{name}{intf}_csr_mem_rw_with_rand_reset"]
+    }
+    {
+      name: regwen_csr_and_corresponding_lockable_csr
+      desc: '''
+            Verify regwen CSR and its corresponding lockable CSRs.
+            - Randomly access all CSRs
+            - Test when regwen CSR is set, its corresponding lockable CSRs become
+              read-only registers
+
+            Note:
+            - If regwen CSR is HW read-only, this feature can be fully tested by common
+              CSR tests - csr_rw and csr_aliasing.
+            - If regwen CSR is HW updated, a separate test should be created to test it.
+
+            This is only applicable if the block contains regwen and locakable CSRs.
+            '''
+      stage: V1
+      tests: ["{name}{intf}_csr_rw", "{name}{intf}_csr_aliasing"]
+    }
+  ]
+  covergroups: [
+    {
+      name: regwen_val_when_new_value_written_cg
+      desc: '''
+            Cover each lockable reg field with these 2 cases:
+            - When regwen = 1, a different value is written to the lockable CSR field, and a read
+              occurs after that.
+            - When regwen = 0, a different value is written to the lockable CSR field, and a read
+              occurs after that.
+
+            This is only applicable if the block contains regwen and locakable CSRs.
+            '''
     }
   ]
 }
-

@@ -5,47 +5,47 @@
 // Include our common coverage CCF.
 include_ccf ${dv_root}/tools/xcelium/common.ccf
 
+// enable coverage on dut and below
+
+select_coverage -befts -module ${DUT_TOP}...
+
 // Black-box pre-verified IPs from coverage collection.
 deselect_coverage -betfs -module pins_if
 deselect_coverage -betfs -module clk_rst_if
 deselect_coverage -betfs -module prim_alert_sender...
 deselect_coverage -betfs -module prim_alert_receiver...
+deselect_coverage -betfs -module prim_count...
 deselect_coverage -betfs -module prim_esc_sender...
 deselect_coverage -betfs -module prim_esc_receiver...
+deselect_coverage -betfs -module prim_onehot_check...
 deselect_coverage -betfs -module prim_prince...
 deselect_coverage -betfs -module prim_lfsr...
+deselect_coverage -betfs -module prim_secded_inv_64_57_dec...
+deselect_coverage -betfs -module prim_secded_inv_39_32_dec...
+
+// Black-box DV CDC module.
+deselect_coverage -betfs -module prim_cdc_rand_delay
+
+// csr_assert_fpv is an auto-generated csr read assertion module. So only assertion coverage is
+// meaningful to collect.
+deselect_coverage -betf -module *csr_assert_fpv...
+select_coverage -assert -module *csr_assert_fpv
+
+// Only enable assertion coverage
+deselect_coverage -betf -module *tlul_assert...
+select_coverage -assert -module *tlul_assert
 
 // Only collect toggle coverage on the DUT and the black-boxed IP (above) ports.
 deselect_coverage -toggle -module ${DUT_TOP}...
 select_coverage -toggle -module ${DUT_TOP}
+
 select_coverage -toggle -module prim_alert_sender
 select_coverage -toggle -module prim_alert_receiver
+select_coverage -toggle -module prim_count
 select_coverage -toggle -module prim_esc_sender
 select_coverage -toggle -module prim_esc_receiver
+select_coverage -toggle -module prim_onehot_check
 select_coverage -toggle -module prim_prince
 select_coverage -toggle -module prim_lfsr
-
-// These three assertions in prim_lc_sync and prim_mubi* check when `lc_ctrl_pkg::lc_tx_t` or
-// `mubi*_t` input are neither `On` or `Off`, it is interrupted to the correct `On` or `Off`
-// after one clock cycle. This behavior is implemented outside of IP level design thus these
-// assertions are not covered in IP level testbenchs.
-// TODO: check these assertions in top-level or FPV.
-deselect_coverage -assertion *.PrimLcSyncCheckTransients_A
-deselect_coverage -assertion *.PrimLcSyncCheckTransients0_A
-deselect_coverage -assertion *.PrimLcSyncCheckTransients1_A
-
-deselect_coverage -assertion *.PrimMubi4SyncCheckTransients_A
-deselect_coverage -assertion *.PrimMubi4SyncCheckTransients0_A
-deselect_coverage -assertion *.PrimMubi4SyncCheckTransients1_A
-
-deselect_coverage -assertion PrimMubi8SyncCheckTransients_A
-deselect_coverage -assertion PrimMubi8SyncCheckTransients0_A
-deselect_coverage -assertion PrimMubi8SyncCheckTransients1_A
-
-deselect_coverage -assertion PrimMubi12SyncCheckTransients_A
-deselect_coverage -assertion PrimMubi12SyncCheckTransients0_A
-deselect_coverage -assertion PrimMubi12SyncCheckTransients1_A
-
-deselect_coverage -assertion PrimMubi16SyncCheckTransients_A
-deselect_coverage -assertion PrimMubi16SyncCheckTransients0_A
-deselect_coverage -assertion PrimMubi16SyncCheckTransients1_A
+select_coverage -toggle -module prim_secded_inv_64_57_dec
+select_coverage -toggle -module prim_secded_inv_39_32_dec

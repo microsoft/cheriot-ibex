@@ -36,7 +36,7 @@ TS_FORMAT_LONG = "%A %B %d %Y %H:%M:%S UTC"
 def run_cmd(cmd):
     (status, output) = subprocess.getstatusoutput(cmd)
     if status:
-        sys.stderr.write("cmd " + cmd + " returned with status " + str(status))
+        print(f'cmd {cmd} returned with status {status}', file=sys.stderr)
         sys.exit(status)
     return output
 
@@ -83,7 +83,7 @@ def parse_hjson(hjson_file):
     hjson_cfg_dict = None
     try:
         log.debug("Parsing %s", hjson_file)
-        f = open(hjson_file, 'rU')
+        f = open(hjson_file, 'r')
         text = f.read()
         hjson_cfg_dict = hjson.loads(text, use_decimal=True)
         f.close()
@@ -568,7 +568,7 @@ def mk_path(path):
     try:
         Path(path).mkdir(parents=True, exist_ok=True)
     except PermissionError as e:
-        log.fatal("Failed to create dirctory {}:\n{}.".format(path, e))
+        log.fatal("Failed to create directory {}:\n{}.".format(path, e))
         sys.exit(1)
 
 
@@ -597,17 +597,24 @@ def clean_odirs(odir, max_odirs, ts_format=TS_FORMAT):
     remain after deletion.
     """
 
+    odir = Path(odir)
+
     if os.path.exists(odir):
         # If output directory exists, back it up.
         ts = datetime.fromtimestamp(os.stat(odir).st_ctime).strftime(ts_format)
-        shutil.move(odir, "{}_{}".format(odir, ts))
+        # Prior to Python 3.9, shutil may run into an error when passing in
+        # Path objects (see https://bugs.python.org/issue32689). While this
+        # has been fixed in Python 3.9, string casts are added so that this
+        # also works with older versions.
+        shutil.move(str(odir), str(odir.with_name(ts)))
 
     # Get list of past output directories sorted by creation time.
-    pdir = Path(odir).resolve().parent
+    pdir = odir.resolve().parent
     if not pdir.exists():
         return []
 
-    dirs = sorted([old for old in pdir.iterdir() if old.is_dir()],
+    dirs = sorted([old for old in pdir.iterdir() if (old.is_dir() and
+                                                     old != 'summary')],
                   key=os.path.getctime,
                   reverse=True)
 

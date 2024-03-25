@@ -13,6 +13,30 @@ except ImportError:
 
 
 class StatusPrinter:
+    """Dummy Status Printer class for interactive mode.
+
+    When interactive mode is set, dvsim does not print the status. By
+    instantiating this dummy class (printing nothing), outer interface stays
+    same.
+    """
+
+    def __init__(self):
+        pass
+
+    def print_header(self, msg):
+        pass
+
+    def init_target(self, target, msg):
+        pass
+
+    def update_target(self, target, hms, msg, perc, running):
+        pass
+
+    def exit(self):
+        pass
+
+
+class TtyStatusPrinter(StatusPrinter):
     '''Abstraction for printing the current target status onto the console.
 
     Targets are ASIC tool flow steps such as build, run, cov etc. These steps
@@ -23,22 +47,24 @@ class StatusPrinter:
     computations of how the jobs are progressing need to be handled externally.
 
     The following are the 'fields' accepted by this class:
-      hms:    Elapsed time in hh:mm:ss.
-      target: The tool flow step.
-      msg:    The completion status message (set externally).
-      perc:   Percentage of completion.
+      hms:      Elapsed time in hh:mm:ss.
+      target:   The tool flow step.
+      msg:      The completion status message (set externally).
+      perc:     Percentage of completion.
+      running:  What jobs are currently still running.
     '''
 
     # Print elapsed time in bold.
     hms_fmt = ''.join(['\033[1m', u'{hms:9s}', '\033[0m'])
     header_fmt = hms_fmt + u' [{target:^13s}]: [{msg}]'
-    status_fmt = header_fmt + u' {perc:3.0f}%'
+    status_fmt = header_fmt + u' {perc:3.0f}%  {running}'
 
     def __init__(self):
         # Once a target is complete, we no longer need to update it - we can
         # just skip it. Maintaining this here provides a way to print the status
         # one last time when it reaches 100%. It is much easier to do that here
         # than in the Scheduler class.
+        super().__init__()
         self.target_done = {}
 
     def print_header(self, msg):
@@ -54,14 +80,22 @@ class StatusPrinter:
 
         self.target_done[target] = False
 
-    def update_target(self, target, hms, msg, perc):
+    def _trunc_running(self, running: str) -> str:
+        """Truncates the list of running items to 30 character string."""
+        return running[:28] + (running[28:] and "..")
+
+    def update_target(self, target, hms, msg, perc, running):
         '''Periodically update the status bar for each target.'''
 
         if self.target_done[target]:
             return
 
         log.info(
-            self.status_fmt.format(hms=hms, target=target, msg=msg, perc=perc))
+            self.status_fmt.format(hms=hms,
+                                   target=target,
+                                   msg=msg,
+                                   perc=perc,
+                                   running=self._trunc_running(running)))
         if perc == 100:
             self.target_done[target] = True
 
@@ -71,7 +105,7 @@ class StatusPrinter:
         pass
 
 
-class EnlightenStatusPrinter(StatusPrinter):
+class EnlightenStatusPrinter(TtyStatusPrinter):
     '''Abstraction for printing status using Enlighten.
 
     Enlighten is a third party progress bar tool. Documentation:
@@ -86,6 +120,7 @@ class EnlightenStatusPrinter(StatusPrinter):
     Enlighten does not work if the output of dvsim is redirected to a file, for
     example - it needs to be attached to a TTY enabled stream.
     '''
+
     def __init__(self):
         super().__init__()
 
@@ -110,13 +145,17 @@ class EnlightenStatusPrinter(StatusPrinter):
             hms="",
             target=target,
             msg=msg,
-            perc=0.0)
+            perc=0.0,
+            running="")
 
-    def update_target(self, target, hms, msg, perc):
+    def update_target(self, target, hms, msg, perc, running):
         if self.target_done[target]:
             return
 
-        self.status_target[target].update(hms=hms, msg=msg, perc=perc)
+        self.status_target[target].update(hms=hms,
+                                          msg=msg,
+                                          perc=perc,
+                                          running=self._trunc_running(running))
         if perc == 100:
             self.target_done[target] = True
 
@@ -126,14 +165,17 @@ class EnlightenStatusPrinter(StatusPrinter):
             self.status_target[target].close()
 
 
-def get_status_printer():
+def get_status_printer(interactive):
     """Factory method that returns a status printer instance.
 
     If ENLIGHTEN_EXISTS (enlighten is installed) and stdout is a TTY, then
     return an instance of EnlightenStatusPrinter, else return an instance of
     StatusPrinter.
     """
+    if interactive:
+        return StatusPrinter()
+
     if ENLIGHTEN_EXISTS and sys.stdout.isatty():
         return EnlightenStatusPrinter()
-    else:
-        return StatusPrinter()
+
+    return TtyStatusPrinter()

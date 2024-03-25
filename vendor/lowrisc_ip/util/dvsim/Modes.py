@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0, see LICENSE for details.
 # SPDX-License-Identifier: Apache-2.0
 
+from copy import deepcopy
 import logging as log
 import pprint
 import sys
@@ -14,6 +15,7 @@ class Modes():
     Abstraction for specifying collection of options called as 'modes'. This is
     the base class which is extended for run_modes, build_modes, tests and regressions.
     """
+
     def self_str(self):
         '''
         This is used to construct the string representation of the entire class object.
@@ -52,7 +54,8 @@ class Modes():
 
         for key in keys:
             if key not in attrs:
-                log.error("Key %s in %s is invalid", key, mdict)
+                log.error(f"Key {key} in {mdict} is invalid. Supported "
+                          f"attributes in {self.mname} are {attrs}")
                 sys.exit(1)
             setattr(self, key, mdict[key])
 
@@ -151,6 +154,7 @@ class Modes():
         Process dependencies.
         Return a list of modes objects.
         '''
+
         def merge_sub_modes(mode, parent, objs):
             # Check if there are modes available to merge
             sub_modes = mode.get_sub_modes()
@@ -266,10 +270,12 @@ class BuildModes(Modes):
         self.post_build_cmds = []
         self.en_build_modes = []
         self.build_opts = []
+        self.build_timeout_mins = None
         self.pre_run_cmds = []
         self.post_run_cmds = []
         self.run_opts = []
         self.sw_images = []
+        self.sw_build_opts = []
 
         super().__init__(bdict)
         self.en_build_modes = list(set(self.en_build_modes))
@@ -300,8 +306,11 @@ class RunModes(Modes):
         self.uvm_test = ""
         self.uvm_test_seq = ""
         self.build_mode = ""
+        self.run_timeout_mins = None
+        self.run_timeout_multiplier = None
         self.sw_images = []
         self.sw_build_device = ""
+        self.sw_build_opts = []
 
         super().__init__(rdict)
         self.en_run_modes = list(set(self.en_run_modes))
@@ -328,6 +337,9 @@ class Tests(RunModes):
         "build_mode": "",
         "sw_images": [],
         "sw_build_device": "",
+        "sw_build_opts": [],
+        "run_timeout_mins": None,
+        "run_timeout_multiplier": None
     }
 
     def __init__(self, tdict):
@@ -343,6 +355,7 @@ class Tests(RunModes):
         Process enabled run modes and the set build mode.
         Return a list of test objects.
         '''
+
         def get_pruned_en_run_modes(test_en_run_modes, global_en_run_modes):
             pruned_en_run_modes = []
             for test_en_run_mode in test_en_run_modes:
@@ -392,13 +405,16 @@ class Tests(RunModes):
                 val = getattr(test_obj, attr)
                 default_val = attrs[attr]
                 if val == default_val:
-                    global_val = None
-                    # Check if we can find a default in sim_cfg
-                    if hasattr(sim_cfg, attr):
-                        global_val = getattr(sim_cfg, attr)
-
+                    # If sim_cfg specifies a value for this attribute and this
+                    # value isn't equal to default_val, then copy the sim_cfg
+                    # value across to the test object.
+                    global_val = getattr(sim_cfg, attr, None)
                     if global_val is not None and global_val != default_val:
-                        setattr(test_obj, attr, global_val)
+
+                        # TODO: This is a workaround for a memory usage bug
+                        # that triggered issue #20550. It's a pretty hacky
+                        # solution! We should probably tidy this up properly.
+                        setattr(test_obj, attr, deepcopy(global_val))
 
             # Unpack the build mode for this test
             build_mode_objs = Modes.find_and_merge_modes(test_obj,
@@ -419,6 +435,7 @@ class Tests(RunModes):
             test_obj.post_run_cmds.extend(test_obj.build_mode.post_run_cmds)
             test_obj.run_opts.extend(test_obj.build_mode.run_opts)
             test_obj.sw_images.extend(test_obj.build_mode.sw_images)
+            test_obj.sw_build_opts.extend(test_obj.build_mode.sw_build_opts)
 
         # Return the list of tests
         return tests_objs
@@ -426,18 +443,20 @@ class Tests(RunModes):
     @staticmethod
     def merge_global_opts(tests, global_pre_build_cmds, global_post_build_cmds,
                           global_build_opts, global_pre_run_cmds,
-                          global_post_run_cmds, global_run_opts, global_sw_images):
-        processed_build_modes = []
+                          global_post_run_cmds, global_run_opts,
+                          global_sw_images, global_sw_build_opts):
+        processed_build_modes = set()
         for test in tests:
             if test.build_mode.name not in processed_build_modes:
                 test.build_mode.pre_build_cmds.extend(global_pre_build_cmds)
                 test.build_mode.post_build_cmds.extend(global_post_build_cmds)
                 test.build_mode.build_opts.extend(global_build_opts)
-                processed_build_modes.append(test.build_mode.name)
+                processed_build_modes.add(test.build_mode.name)
             test.pre_run_cmds.extend(global_pre_run_cmds)
             test.post_run_cmds.extend(global_post_run_cmds)
             test.run_opts.extend(global_run_opts)
             test.sw_images.extend(global_sw_images)
+            test.sw_build_opts.extend(global_sw_build_opts)
 
 
 class Regressions(Modes):
@@ -589,7 +608,7 @@ class Regressions(Modes):
                 regression_obj.test_names = Tests.item_names
 
             else:
-                tests_objs = []
+                tests_objs = set()
                 regression_obj.test_names = regression_obj.tests
                 for test in regression_obj.tests:
                     test_obj = Modes.find_mode(test, sim_cfg.tests)
@@ -598,8 +617,8 @@ class Regressions(Modes):
                             "Test \"%s\" added to regression \"%s\" not found!",
                             test, regression_obj.name)
                         continue
-                    tests_objs.append(test_obj)
-                regression_obj.tests = tests_objs
+                    tests_objs.add(test_obj)
+                regression_obj.tests = list(tests_objs)
 
         # Return the list of tests
         return regressions_objs

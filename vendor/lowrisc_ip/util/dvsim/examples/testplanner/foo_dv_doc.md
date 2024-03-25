@@ -1,6 +1,6 @@
----
-title: "FOO DV document"
----
+# FOO DV document
+
+<!-- TODO: Remove "draft: true" from header before submitting -->
 
 # testplan
 

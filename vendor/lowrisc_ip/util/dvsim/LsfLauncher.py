@@ -201,6 +201,8 @@ class LsfLauncher(Launcher):
             "-eo",
             "{}.%I.out".format(job_script)
         ]
+        if self.deploy.get_timeout_mins():
+            cmd += ["-c", self.deploy.get_timeout_mins()]
 
         if job_rusage:
             cmd += ["-R", job_rusage]
@@ -264,7 +266,7 @@ class LsfLauncher(Launcher):
                         line_number=None,
                         message="ERROR: Failed to open {}\n{}.".format(
                             self.bsub_out, e),
-                        context=[]))
+                        context=[e]))
                 return "F"
 
         # Now that the job has completed, we need to determine its status.
@@ -301,7 +303,7 @@ class LsfLauncher(Launcher):
             if self.bsub_out_err_msg:
                 err_msg = ErrorMessage(line_number=None,
                                        message=self.bsub_out_err_msg,
-                                       context=[])
+                                       context=[self.bsub_out_err_msg])
             self._post_finish(status, err_msg)
             return status
 
@@ -397,6 +399,7 @@ class LsfLauncher(Launcher):
         err_msg is the error message indicating the cause of failure.'''
 
         for job in LsfLauncher.jobs[cfg][job_name]:
-            job._post_finish("F", ErrorMessage(line_number=None,
-                                               message=err_msg,
-                                               context=[]))
+            job._post_finish(
+                'F', ErrorMessage(line_number=None,
+                                  message=err_msg,
+                                  context=[err_msg]))

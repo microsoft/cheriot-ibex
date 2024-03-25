@@ -8,13 +8,15 @@
   build_db_dir: "{build_dir}/xcelium.d"
 
   build_opts: ["-elaborate -64bit -sv",
+               // Wait to acquire a license.
                "-licqueue",
                // TODO: duplicate primitives between OT and Ibex #1231
                "-ALLOWREDEFINITION",
                "-messages -errormax 50",
-               "-timescale 1ns/1ps",
+               "-timescale {timescale}",
                "-f {sv_flist}",
                "-uvmhome CDNS-1.2",
+               // Specify the library name for the run step to use.
                "-xmlibdirname {build_db_dir}",
                // List multiple tops for the simulation. Prepend each top level with `-top`.
                "{eval_cmd} echo {sim_tops} | sed -E 's/(\\S+)/-top \\1/g'",
@@ -29,22 +31,46 @@
                // Use this to conditionally compile for Xcelium (example: LRM interpretations differ
                // across tools).
                "+define+XCELIUM",
+               // Suppress printing of the copyright banner.
+               "-nocopyright",
                // Ignore "timescale is not specified for the package" warning
                "-nowarn TSNSPK",
                // Ignore "IEEE 1800-2009 SystemVerilog simulation semantics" warning
                "-nowarn DSEMEL",
                // Ignore hierarchial ref warnings in interfaces
                "-nowarn CUVIHR",
+               // Ignore warning "Potentially reversed dist range may cause it to be treated as
+               // empty". This is thrown when and expression like `var - 1` is added to a
+               // randomization distribution, which can potentially be a negative value.
+               "-nowarn REVRNG",
+               // Ignore warning "Include directory <path> given but not used". This is benign.
+               "-nowarn SPDUSD",
+               // Needed for including "secded_enc.h".
+               "-I{build_dir}/src/lowrisc_dv_secded_enc_0",
+               // This warning is thrown when a scalar enum variable is assigned to an enum array.
+               // Other tools (e.g., FPV) treat such assignments as an error, hence we bump it to
+               // an error in simulation so that this can be caught early in CI.
+               "-xmerror ENUMERR"
                ]
 
+  // We want to allow the possibility of passing no test or no test sequence. Unfortunately,
+  // Xcelium generates an error (*E,OPTP2ND) if you pass an empty plusarg. To avoid doing so, these
+  // two variables expand to e.g. "+UVM_TESTNAME=foo" if we have a test and the empty string if
+  // not.
+  uvm_testname_plusarg: "{eval_cmd} echo {uvm_test} | sed -E 's/(.+)/+UVM_TESTNAME=\\1/'"
+  uvm_testseq_plusarg: "{eval_cmd} echo {uvm_test_seq} | sed -E 's/(.+)/+UVM_TEST_SEQ=\\1/'"
+
   run_opts:   ["-input {run_script}",
+               // Suppress printing of the copyright banner.
+               "-nocopyright",
+               // Wait to acquire a license.
                "-licqueue",
                "-64bit -xmlibdirname {build_db_dir}",
                // Use the same snapshot name set during the build step.
                "-r {tb}",
-               "+SVSEED={seed}",
-               "+UVM_TESTNAME={uvm_test}",
-               "+UVM_TEST_SEQ={uvm_test_seq}",
+               "+SVSEED={svseed}",
+               "{uvm_testname_plusarg}",
+               "{uvm_testseq_plusarg}",
                // Ignore "IEEE 1800-2009 SystemVerilog simulation semantics" warning
                "-nowarn DSEM2009",
                ]
@@ -65,6 +91,16 @@
     // Export the cov_report path so that the tcl file can read these as env vars.
     { cov_merge_db_dir: "{cov_merge_db_dir}" },
     { cov_report_dir: "{cov_report_dir}" }
+
+    // Export unr related paths for make
+    {cov_unr_dir:     "{cov_unr_dir}" }
+    // Add an additional single quotation because `cov_merge_cmd` has an empty space, it will cause
+    // trouble when exporting the entire command in the environment.
+    {cov_merge_cmd: "{cov_merge_cmd}"}
+
+    // job prefix
+    {job_prefix: "{job_prefix}"}
+
   ]
 
   // Supported wave dumping formats (in order of preference).
@@ -93,14 +129,14 @@
 
   // Individual test specific coverage data - this will be deleted if the test fails
   // so that coverage from failiing tests is not included in the final report.
-  cov_db_test_dir_name: "{run_dir_name}.{seed}"
+  cov_db_test_dir_name: "{run_dir_name}.{svseed}"
   cov_db_test_dir:      "{cov_db_dir}/{cov_db_test_dir_name}"
 
   // Merging coverage.
   // It is constructed by the tool itself.
   cov_merge_dir:    "{scratch_path}/cov_merge"
   cov_merge_db_dir: "{cov_merge_dir}/merged"
-  cov_merge_cmd:    "{job_prefix} imc"
+  cov_merge_cmd:    "imc"
   cov_merge_opts:   ["-64bit",
                      "-licqueue",
                      "-exec {dv_root}/tools/xcelium/cov_merge.tcl"]
@@ -172,6 +208,11 @@
       build_opts: ["-access +c"]
     }
     {
+      name: xcelium_waves_off
+      is_sim_mode: 1
+      build_opts: []
+    }
+    {
       name: xcelium_cov
       is_sim_mode: 1
       build_opts: [// Enable the required cov metrics.
@@ -198,8 +239,8 @@
     {
       name: xcelium_profile
       is_sim_mode: 1
-      build_opts: []
-      run_opts:   []
+      build_opts: ["-perfstat"]
+      run_opts:   ["-perfstat", "-perflog perfstat.log"]
     }
     {
       name: xcelium_xprop
