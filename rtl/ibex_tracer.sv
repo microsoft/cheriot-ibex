@@ -1372,6 +1372,7 @@ module ibex_tracer import cheri_pkg::*; # (
         INSN_CHMOVE:       decode_cheri_cd_cs1_insn("CH.cmove");
         INSN_CHTESTSUB:    decode_cheri_rd_cs1_cs2_insn("CH.ctestsubset");
         INSN_CHSETEQUAL:   decode_cheri_rd_cs1_cs2_insn("CH.csetequalexact");
+        INSN_CHSETHIGH:    decode_cheri_cd_cs1_rs2_insn("CH.csethigh");
         //INSN_CHJALR:       decode_cheri_cd_cs1_insn("CH.jalr");
         INSN_CHCSRRW:      decode_cheri_scrrw_insn();
         INSN_AUIPC:        decode_cheri_auipcc_insn();

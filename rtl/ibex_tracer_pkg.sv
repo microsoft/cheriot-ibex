@@ -368,6 +368,7 @@ package ibex_tracer_pkg;
   parameter logic [31:0] INSN_CHMOVE     = {7'h7f, 5'ha, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHTESTSUB  = {7'h20, 5'h?, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHSETEQUAL = {7'h21, 5'h?, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
+  parameter logic [31:0] INSN_CHSETHIGH  = {7'h16, 5'h?, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
 
   parameter logic [31:0] INSN_CHJALR   = {7'h7f, 5'hc, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
 

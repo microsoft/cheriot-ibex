@@ -828,7 +828,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     CSUB_CAP        = 6'h14,
     CCLEAR_TAG      = 6'h15,
     CLOAD_CAP       = 6'h16,
-    //CLBC            = 6'h17,
+    CSET_HIGH       = 6'h17,
     CSTORE_CAP      = 6'h18,
     CCSR_RW         = 6'h19,
     CJALR           = 6'h1a,

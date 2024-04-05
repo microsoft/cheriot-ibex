@@ -404,6 +404,14 @@ module cheri_ex import cheri_pkg::*; #(
           cheri_rf_we_raw    = 1'b1;
           cheri_ex_valid_raw = 1'b1;
         end
+      cheri_operator_i[CSET_HIGH]:         // cd <-- cs1; cd.high <-- convert(rs2)
+        begin
+          // this only works for memcap_fmt0 for now QQQ
+          result_data_o      = rf_rdata_a;
+          result_cap_o       = mem2regcap_fmt0({1'b0, rf_rdata_b}, {1'b0, rf_rdata_a}, 4'h0);
+          cheri_rf_we_raw    = 1'b1;
+          cheri_ex_valid_raw = 1'b1;
+        end
 
       // setaddr/incoffset: cd <-- cs1; cd.offset <-- rs2, or cs1.addr + rs2, or cs1.addr + imm12
       // auipcc: cd <-- pcc, cd.address <-- pcc.address + (imm20 << 12)
