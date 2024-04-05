@@ -76,6 +76,9 @@ module data_mem_model import cheriot_dv_pkg::*; (
   logic                   mmreg_sel, mmreg_cs;
   logic [7:0]             mmreg_addr32;
 
+  logic                   uart_cs0, uart_cs1;
+  logic [7:0]             uart_addr32;
+
   logic [7:0]             mem_flag;
 
   mem_obi_if #(
@@ -232,7 +235,6 @@ module data_mem_model import cheriot_dv_pkg::*; (
   // 0x8380_0000: TBRE control
   // 0x8380_0080: scratch register 0,1
   // 0x8380_0100: TB error_enable, Intr_ack
-  // 0x8380_0200: UART
   // 
   //
   logic [64:0] tbre_ctrl_vec;
@@ -316,6 +318,13 @@ module data_mem_model import cheriot_dv_pkg::*; (
     end
   end 
 
+  //
+  // 0x8380_0200: UART (also aliased to 0x1000_0000)
+  //
+  assign uart_addr32  = mem_addr32[7:0];
+  assign uart_cs0      = mem_cs && (mem_addr32[29:22] == 8'h83) && (mem_addr32[21:8] == 14'h2000);
+  assign uart_cs1      = mem_cs && (mem_addr32[29:22] == 8'h10) && (mem_addr32[21:8] == 14'h0000);
+
   // UART printout
   initial begin
     uart_stop_sim = 1'b0;
@@ -323,7 +332,8 @@ module data_mem_model import cheriot_dv_pkg::*; (
 
     while (1) begin
       @(posedge clk);
-      if (mmreg_cs && mem_we && (mmreg_addr32 == 'h80))  // 0x8380_0200
+      if ((uart_cs0 && mem_we && (uart_addr32 == 'h80)) || 
+          (uart_cs1 && mem_we && (uart_addr32 == 'h00)))  
         if (mem_wdata[7]) 
           uart_stop_sim = 1'b1;
        else 

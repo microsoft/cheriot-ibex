@@ -11,7 +11,7 @@
 
 _start: 
         cspecialr c3, mtdc  # read MTDC address 'd29 (the SL root should be in MTCC which is 28, but how the roots work will change, so probably not worth fixing)
-        li x11, 0x8003ff00       # setup sp
+        li x11, 0x8001fff0       # setup sp
         csetaddr csp, c3, x11
 
         
@@ -70,11 +70,32 @@ cont1:  nop
 w3:    j w3 
 
 .align 4
+
+#
+# default exception handler
+#
 mtvec:  
-        cincoffset csp, csp, -8    # SP-16
-        csc cra, 0(csp)
+        cincoffset csp, csp, -16    # SP-16
+        csc ct0, 0(csp)
+        csc ct1, 8(csp)
+
         #ccall cheri_fault_handler
-        clc cra, 0(csp)
-        cincoffset csp, csp, 8    # SP-16
+
+        csrr t0, mcause         // is this an interrupt or exception
+        li t1, 0x80000000
+        and t0, t0, t1
+        beq t0, x0, mtvec_done
+
+        li t1, 0x83800104       // acknowledge interrupts
+        cspecialr ct0, mtdc
+        csetaddr ct0, ct0, t1
+        li t1, 0x3
+        csw t1, (ct0)
+
+mtvec_done:
+        clc ct0, 0(csp)
+        clc ct1, 8(csp)
+        cincoffset csp, csp, 16    # SP-16
+
         mret
 

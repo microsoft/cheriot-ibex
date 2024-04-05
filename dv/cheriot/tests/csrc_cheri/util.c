@@ -10,6 +10,15 @@ void send_char(unsigned char dts) {
     *uartReg = dts;
 }
 
+static unsigned int mcycle = 0;
+unsigned int get_tmrval(void) {
+  // volatile unsigned int mcycle;
+
+  // __asm__ __volatile__("csrr %0, mcycle": "=r" (mcycle));
+  mcycle += 100000;
+
+  return (mcycle);
+}
 
 void stop_sim(void) {
   tohost[0] = 0x1;
@@ -21,7 +30,7 @@ void prints(char *buf) {
   int i;
 
   i = 0;
-  while ((i<32) && (buf[i]!='\0')) {
+  while ((i<100) && (buf[i]!='\0')) {
     send_char(buf[i]);
     i++;
   }

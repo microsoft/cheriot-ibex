@@ -14,7 +14,7 @@ SECTIONS
     HIDDEN(__pcc_end = .);
   }
 
-  . = 0x80010000;
+  . = 0x80004000;
   .cgp : ALIGN(0x8)
   {
     HIDDEN(__cgp_start = .);

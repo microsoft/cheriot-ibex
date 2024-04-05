@@ -98,13 +98,14 @@ module tbre_bg_gen (
       tsmap_offset = tsmap_offset[7:3];
       if ((u_tb_top.u_data_mem.tsram[tsmap_addr][tsmap_offset] && dw0[32]) ||
           (~u_tb_top.u_data_mem.tsram[tsmap_addr][tsmap_offset] && (dw0[32]!=dw1[32])))
-        $error("TB> tbre_bg_gen: check_result tag ERROR, %x, %x/%x, %x, %x, %x", 
-                i, dw0, dw1, tsmap_addr, tsmap_offset, u_tb_top.u_data_mem.tsram[tsmap_addr]);
+        $error("TB> tbre_bg_gen: check_result tag ERROR, %x, %x/%x, %x, %x, %x @ %x", 
+                i, dw0, dw1, tsmap_addr, tsmap_offset, u_tb_top.u_data_mem.tsram[tsmap_addr],
+                base+2*i);
 
       // check dw1 to make sure we didn't overwrite the wrong location       
       if ((dw1[32] != dw1[31]) || (dw1[30:22] != 9'h15a) || (dw1[21:18] != 0) ||
           (dw1[17:9] != dw1[8:0]) || (dw0[8:0] != dw1[8:0]))
-        $error("TB> tbre_bg_gen: check_result dw1 ERROR, %x, %x", dw0, dw1);
+        $error("TB> tbre_bg_gen: check_result dw1 ERROR, %x, %x @%x", dw0, dw1, base+2*i);
     end
   end
   endtask
@@ -219,6 +220,7 @@ module tbre_bg_gen (
 
           //$display("stkz start = %8x, end = %8x", stkz_start_addr, stkz_end_addr);
           ztop_wfcap.valid = 1'b1;
+          ztop_wfcap.perms = 1'b1 << PERM_SD;
           ztop_wfcap.top33 = stkz_start_addr;
           ztop_wfcap.base32 = stkz_end_addr;
 

@@ -1,12 +1,18 @@
 #include <util.h>
 
+#ifdef COREMARK
+extern int cheri_atest(int);
+extern void core_main(void);
+#else
 extern int mymain(int, int);
+#endif
 
 volatile unsigned int* ramBase;
 volatile unsigned int* romBase;
 volatile unsigned int* uartReg;
 
 void* globalRoot;
+
 
 // Ideally we also set the bounds and permissions when deriving from root, but I don't have enough
 // information now.
@@ -47,9 +53,15 @@ void cstart(void* gRoot, CapReloc* caprelocs, unsigned int nCaprelocs) {
   romBase = from_root(0x00004000U);
   ramBase = from_root(0x80000000U);
 
-  uartReg = from_root(0x80040200U);
+  uartReg = from_root(0x83800200U);
 
+#ifdef COREMARK
+  cheri_atest(0);
+  core_main();
+#else
   mymain(0, 0);
+#endif
+
   stop_sim();
 
   while (1) {;}

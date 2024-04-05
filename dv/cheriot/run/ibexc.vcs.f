@@ -39,12 +39,15 @@ $rtlRoot/ibex_pmp.sv
 $rtlRoot/ibexc_top.sv
 $rtlRoot/ibex_tracer.sv
 $rtlRoot/ibexc_top_tracing.sv
+$verifRoot/tb/cheriot_dv_pkg.sv
 $verifRoot/tb/mem_obi_if.sv
 $verifRoot/tb/instr_mem_model.sv
 $verifRoot/tb/data_mem_model.sv
+$verifRoot/tb/mem_monitor.sv
 $verifRoot/tb/dii_if.sv
 $verifRoot/tb/intr_gen.sv
 $verifRoot/tb/cap_err_gen.sv
+$verifRoot/tb/tbre_bg_gen.sv
 $verifRoot/tb/tb_cheriot_top.sv
 $verifRoot/tb/module_dv_ext.sv
 $verifRoot/tb/core_ibex_fcov_if.sv

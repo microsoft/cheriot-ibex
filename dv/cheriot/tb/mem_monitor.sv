@@ -48,6 +48,16 @@ module mem_monitor import cheri_pkg::*; import cheriot_dv_pkg::*; # (
   
   function automatic mem_2cmd_t lsu2mem_cmd (lsu_cmd_t lsu_cmd);
     mem_2cmd_t result;
+
+    logic [65:0] cap_data66;
+
+`ifdef MEMCAPFMT1
+      cap_data66 = reg2mem_fmt1(lsu_cmd.wcap, lsu_cmd.wdata);
+`else
+      cap_data66[65:33]  = reg2memcap_fmt0(lsu_cmd.wcap);  
+      cap_data66[32:0]   = {lsu_cmd.wcap.valid, lsu_cmd.wdata};
+`endif
+
     result.valid = 2'b00;
 
     if (lsu_cmd.is_cap) begin
@@ -58,13 +68,14 @@ module mem_monitor import cheri_pkg::*; import cheriot_dv_pkg::*; # (
       result.cmd0.we      = lsu_cmd.we;
       result.cmd0.be      = 4'hf;
       result.cmd0.addr32  = lsu_cmd.addr[31:2] - {31'h0, 1'b1}; // we capture at lsu_req_done (after addr_incr)
-      result.cmd0.wdata   = {lsu_cmd.wcap.valid, lsu_cmd.wdata};
+
+      result.cmd0.wdata   = cap_data66[32:0];
       result.cmd1.flag    = 8'h0;
       result.cmd1.is_cap  = 1'b1; 
       result.cmd1.we      = lsu_cmd.we;
       result.cmd1.be      = 4'hf;
       result.cmd1.addr32  = lsu_cmd.addr[31:2];
-      result.cmd1.wdata   = reg2memcap_fmt0(lsu_cmd.wcap);  // QQQ add fmt1 support later
+      result.cmd1.wdata   = cap_data66[65:33];
 
     end else if (lsu_cmd.rv32_type == 2'b00) begin          // full word
       logic [63:0] tmp64;
@@ -152,11 +163,28 @@ module mem_monitor import cheri_pkg::*; import cheriot_dv_pkg::*; # (
                                                     mem_cmd_t mem_resp0, mem_cmd_t mem_resp1);
     logic [7:0] result;
     reg_cap_t mcap;
+    logic [31:0] mdata;
+    logic [65:0] cap_wdata66;
+
+`ifdef MEMCAPFMT1
+    cap_wdata66 = reg2mem_fmt1(req.wcap, req.wdata);
+    mcap  = mem2regcap_fmt1(mem_resp1.rdata, mem_resp0.rdata, 0);
+    mdata = mem2regaddr_fmt1(mem_resp1.rdata, mem_resp0.rdata, mcap);
+`else
+    cap_wdata66[65:33] = reg2memcap_fmt0(req.wcap);
+    cap_wdata66[32:0]  = {req.wcap.valid, req.wdata};
+    mcap  = mem2regcap_fmt0(mem_resp1.rdata, mem_resp0.rdata, 0);
+    mdata = mem_resp0.rdata[31:0];
+`endif
    
     result = 0;
 
     if (resp.err != (mem_resp0.err || mem_resp1.err))
       result |= 8'h1;
+
+    if (resp.err) 
+      return result;
+
     if ((~mem_resp0.is_cap) || (mem_resp0.we != req.we) || (mem_resp0.be != 4'hf) ||
         (mem_resp0.addr32[0]) || (mem_resp0.addr32 != (req.addr[31:2] - 1)))
       result |= (8'h1 << 1);
@@ -164,15 +192,18 @@ module mem_monitor import cheri_pkg::*; import cheriot_dv_pkg::*; # (
         (~mem_resp1.addr32[0]) || (mem_resp1.addr32 != (mem_resp0.addr32+1)))
       result |= (8'h1 << 2);
 
-    // QQQ let's just do fmt0 for now and add fmt1 later
-    if (req.we && ((mem_resp0.wdata[31:0] != req.wdata) || mem_resp1.wdata != reg2memcap_fmt0(req.wcap)))
+    // if (req.we && ((mem_resp0.wdata[31:0] != cap_wdata66[31:0]) || mem_resp1.wdata[31:0] != cap_wdata66[64:33]))
+    if (req.we && ((mem_resp0.wdata != cap_wdata66[32:0]) || mem_resp1.wdata != cap_wdata66[65:33]))
       result |= (8'h1 << 3);
-    if (~req.we && (mem_resp0.rdata[31:0] != resp.rdata))
+
+    // src == 0: cpu, src == 1: tbre (use raw mem data)
+    if (~req.we && ((srcID == 0) && (mdata != resp.rdata) || (srcID == 1) && (mem_resp0.rdata[31:0] != resp.rdata)))
       result |= (8'h1 << 4);
+      //$display("@%t, mdata = %x (%x, %x), resp.rdata = %x", $time, mdata, mem_resp1.rdata, mem_resp0.rdata,resp.rdata);//result |= (8'h1 << 4);
     
-    mcap = mem2regcap_fmt0(mem_resp1.rdata, mem_resp0.rdata, 0);
+    // note we are not fully checking tag/perms since they can be cleared based on auth_cap(cs1)
     if (~req.we && (srcID == 0) && (~resp.err) &&       // ignore read cap for TBRE and STKZ
-                    ((mcap.valid != resp.rcap.valid) || (mcap.top_cor != resp.rcap.top_cor) ||
+                    ((~mcap.valid & resp.rcap.valid) || (mcap.top_cor != resp.rcap.top_cor) ||
                      (mcap.base_cor != resp.rcap.base_cor) || (mcap.exp != resp.rcap.exp) ||
                      (mcap.top != resp.rcap.top) || (mcap.base != resp.rcap.base) ||
                      (mcap.otype != resp.rcap.otype)))
@@ -194,6 +225,9 @@ module mem_monitor import cheri_pkg::*; import cheriot_dv_pkg::*; # (
 
     if (resp.err != (mem_resp0.err || mem_resp1.err))
       result |= 8'h1;
+    if (resp.err) 
+      return result;
+
     if ((mem_resp0.is_cap) || (mem_resp0.we != req.we) || (mem_resp0.addr32 != (req.addr[31:2] - 1)))
       result |= (8'h1 << 1);
     if ((mem_resp1.is_cap) || (mem_resp1.we != req.we) ||
@@ -213,6 +247,9 @@ module mem_monitor import cheri_pkg::*; import cheriot_dv_pkg::*; # (
 
     if (resp.err != mem_resp.err)
       result |= 8'h1;
+    if (resp.err) 
+      return result;
+
     if ((mem_resp.is_cap) || (mem_resp.we != req.we) || (mem_resp.addr32 != req.addr[31:2]))
       result |= (8'h1 << 1);
     
@@ -305,7 +342,8 @@ module mem_monitor import cheri_pkg::*; import cheriot_dv_pkg::*; # (
         dbg_mem_resp_head = mem_resp_queue[0];
 
         check_result_mem = check_mem_cmd(mem_req_queue[0], mem_resp_queue[0]);
-        if (check_result_mem != 0) $error("TB> %s: check failed: mem_req vs mem_resp", mon_str);
+        assert (check_result_mem == 0) else $error("TB> %s: check failed: mem_req vs mem_resp, %x", 
+                                              mon_str, check_result_mem);
 
         src_mem_resp_queue = {src_mem_resp_queue, mem_resp_queue[0]};
         src_mem_resp_cnt += 1;
@@ -336,7 +374,8 @@ module mem_monitor import cheri_pkg::*; import cheriot_dv_pkg::*; # (
         if (lsu_req_queue[0].is_cap && (src_mem_resp_queue.size() >= 2)) begin
           check_result_src = check_src_req_cap(lsu_req_queue[0], lsu_resp_queue[0], 
                                            src_mem_resp_queue[0],  src_mem_resp_queue[1]);
-          if (check_result_src != 0) $error("TB> %s: check failed: src req vs resp 1", mon_str);
+          assert (check_result_src == 0) else $error("TB> %s: check failed: src req vs resp 1, %x", 
+                                             mon_str, check_result_src);
 
           lsu_req_queue  = lsu_req_queue[1:$];
           lsu_resp_queue = lsu_resp_queue[1:$];
@@ -345,14 +384,16 @@ module mem_monitor import cheri_pkg::*; import cheriot_dv_pkg::*; # (
                       (src_mem_resp_queue.size() >= 2)) begin
           check_result_src = check_src_req_rv32_unaligned(lsu_req_queue[0], lsu_resp_queue[0], 
                                            src_mem_resp_queue[0],  src_mem_resp_queue[1]);
-          if (check_result_src != 0) $error("TB> %s: check failed: src req vs resp 2", mon_str);
+          assert (check_result_src == 0) else $error("TB> %s: check failed: src req vs resp 2, %x", 
+                                             mon_str, check_result_src);
 
           lsu_req_queue  = lsu_req_queue[1:$];
           lsu_resp_queue = lsu_resp_queue[1:$];
           src_mem_resp_queue = src_mem_resp_queue[2:$];
         end else if (src_mem_resp_queue.size() > 0) begin
           check_result_src = check_src_req_rv32(lsu_req_queue[0], lsu_resp_queue[0], src_mem_resp_queue[0]);
-          if (check_result_src != 0) $error("TB> %s: check failed: src_req vs resp 3", mon_str);
+          assert (check_result_src == 0) else $error("TB> %s: check failed: src_req vs resp 3, %x",
+                                             mon_str, check_result_src);
 
           lsu_req_queue  = lsu_req_queue[1:$];
           lsu_resp_queue = lsu_resp_queue[1:$];
@@ -382,10 +423,10 @@ module mem_monitor import cheri_pkg::*; import cheriot_dv_pkg::*; # (
         $display("TB> %s: pending terms in queues: %d, %d, %d, %d, %d", mon_str,
                   dbg_mem_req_size, dbg_mem_resp_size, dbg_src_mem_resp_size, dbg_lsu_req_size,
                   dbg_lsu_resp_size);
-        if ((lsu_req_cnt != lsu_resp_cnt) || (mem_req_cnt != src_mem_resp_cnt))
+        assert (!((lsu_req_cnt != lsu_resp_cnt) || (mem_req_cnt != src_mem_resp_cnt))) else
           $error("TB> %s: ERROR! memory transactions count mismatch", mon_str);
-        if ((dbg_mem_req_size != 0) || (dbg_mem_resp_size != 0) || (dbg_src_mem_resp_size != 0) ||
-            (dbg_lsu_req_size != 0) || (dbg_lsu_resp_size != 0))
+        assert (!((dbg_mem_req_size != 0) || (dbg_mem_resp_size != 0) || (dbg_src_mem_resp_size != 0) ||
+            (dbg_lsu_req_size != 0) || (dbg_lsu_resp_size != 0))) else
           $error("TB> %s: ERROR! Unresolved transactions found", mon_str);
       end
     end
