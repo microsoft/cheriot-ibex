@@ -734,7 +734,8 @@ module ibex_controller #(
             end
             illegal_insn_prio: begin
               exc_cause_o = EXC_CAUSE_ILLEGAL_INSN;
-              csr_mtval_o = instr_is_compressed_i ? {16'b0, instr_compressed_i} : instr_i;
+              csr_mtval_o = (CHERIoTEn & cheri_pmode_i) ? 32'h0 : 
+                            (instr_is_compressed_i ? {16'b0, instr_compressed_i} : instr_i);
             end
             ecall_insn_prio: begin
               exc_cause_o = (priv_mode_i == PRIV_LVL_M) ? EXC_CAUSE_ECALL_MMODE :

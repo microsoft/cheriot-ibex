@@ -485,8 +485,8 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
   function automatic logic is_cap_sentry (full_cap_t in_cap);
     logic result;
 
-    result = (in_cap.otype == OTYPE_SENTRY) || (in_cap.otype == OTYPE_SENTRY_ID) ||
-             (in_cap.otype == OTYPE_SENTRY_IE);
+    result = (in_cap.perms[PERM_EX]) && ((in_cap.otype == OTYPE_SENTRY) || (in_cap.otype == OTYPE_SENTRY_ID) ||
+             (in_cap.otype == OTYPE_SENTRY_IE));
     return result;
   endfunction
 
@@ -864,7 +864,6 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
   parameter logic [3:0] PVIO_SC    = 4'h5;
   parameter logic [3:0] PVIO_ASR   = 4'h6;
   parameter logic [3:0] PVIO_ALIGN = 4'h7;
-  parameter logic [3:0] PVIO_SLC   = 4'h8;
   
 
   function automatic logic [4:0] vio_cause_enc (logic bound_vio, logic[W_PVIO-1:0] perm_vio_vec);
@@ -882,8 +881,6 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
       vio_cause = 5'h13;
     else if (perm_vio_vec[PVIO_SC])
       vio_cause = 5'h15;
-    else if (perm_vio_vec[PVIO_SLC])
-      vio_cause = 5'h16;
     else if (perm_vio_vec[PVIO_ASR])
       vio_cause = 5'h18;
     else if (bound_vio)

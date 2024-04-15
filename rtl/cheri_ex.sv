@@ -173,7 +173,7 @@ module cheri_ex import cheri_pkg::*; #(
   logic          is_intl, is_lbc;
 
   logic          addr_bound_vio;
-  logic          perm_vio;
+  logic          perm_vio, perm_vio_slc;
   logic          rv32_lsu_err;
   logic          addr_bound_vio_rv32;
   logic          perm_vio_rv32;
@@ -527,7 +527,7 @@ module cheri_ex import cheri_pkg::*; #(
           cheri_ex_valid_raw   = 1'b1;
           cheri_ex_err_raw     = 1'b0;       // acc err passed to LSU and processed later in WB
           csc_wcap             = rf_rcap_b;
-          csc_wcap.valid       = rf_rcap_b.valid & ~perm_vio_vec[PVIO_SLC];
+          csc_wcap.valid       = rf_rcap_b.valid & ~perm_vio_slc;
         end
       cheri_operator_i[CCSR_RW]:           // cd <-- scr; scr <-- cs1 if cs1 != C0
         begin
@@ -906,6 +906,8 @@ module cheri_ex import cheri_pkg::*; #(
 
     // main permission logic
     perm_vio_vec = 0;
+    perm_vio     = 0;
+    perm_vio_slc = 0;
     cs2_bad_type = 1'b0;
     illegal_scr_addr = 1'b0;
 
@@ -923,7 +925,7 @@ module cheri_ex import cheri_pkg::*; #(
       perm_vio_vec[PVIO_SD]    = ~rf_fullcap_a.perms[PERM_SD];
       perm_vio_vec[PVIO_SC]    = (~rf_fullcap_a.perms[PERM_MC] && rf_fullcap_b.valid);
       perm_vio_vec[PVIO_ALIGN] = (cheri_ls_chkaddr[2:0] != 0); 
-      perm_vio_vec[PVIO_SLC]   = ~rf_fullcap_a.perms[PERM_SL] && rf_fullcap_b.valid && ~rf_fullcap_b.perms[PERM_GL];
+      perm_vio_slc             = ~rf_fullcap_a.perms[PERM_SL] && rf_fullcap_b.valid && ~rf_fullcap_b.perms[PERM_GL];
     end else if (cheri_operator_i[CSEAL]) begin
       cs2_bad_type = rf_fullcap_a.perms[PERM_EX] ? 
                      ((rf_rdata_b[31:3]!=0)||(rf_rdata_b[2:0]==0)||(rf_rdata_b[2:0]==3'h4)||(rf_rdata_b[2:0]==3'h5)) : 
@@ -950,12 +952,13 @@ module cheri_ex import cheri_pkg::*; #(
     end
 
     perm_vio = | perm_vio_vec;
+
   end
 
   // qualified by lsu_req later
   // store_local error only causes tag clearing unless escalated to fault for debugging
   assign cheri_lsu_err = cheri_pmode_i & ~debug_mode_i & 
-                         (addr_bound_vio | (|perm_vio_vec[7:0]) | (csr_dbg_tclr_fault_i & perm_vio_vec[PVIO_SLC]));
+                         (addr_bound_vio | perm_vio | (csr_dbg_tclr_fault_i & perm_vio_slc));
 
   //
   // fault case mtval generation
@@ -982,7 +985,8 @@ module cheri_ex import cheri_pkg::*; #(
     cheri_err_cause  = vio_cause_enc(addr_bound_vio_ext, perm_vio_vec);
     rv32_err_cause   = vio_cause_enc(addr_bound_vio_rv32, perm_vio_vec_rv32);
 
-    ls_addr_misaligned_only = perm_vio_vec[PVIO_ALIGN] && (cheri_err_cause == 0);
+    
+    ls_addr_misaligned_only = perm_vio_vec[PVIO_ALIGN] && (perm_vio_vec[PVIO_ALIGN-1:0] == 0) && ~addr_bound_vio_ext;
     
     if (cheri_exec_id_i & ~CheriPPLBC & cheri_tsafe_en_i & is_load_cap & cheri_lsu_err)  
       // 2-stage ppl load/store, error treated as EX error, cheri CLC check error
@@ -998,12 +1002,12 @@ module cheri_ex import cheri_pkg::*; #(
     // bit 12: illegal_scr_addr
     // bit 11: alignment error (load/store)
     // bit 10:0 mtval as defined by CHERIoT arch spec
-    if (cheri_operator_i[CCSR_RW] & cheri_wb_err_raw & perm_vio & cheri_exec_id_i)
-      // cspecialrw traps, PERM_SR
-      cheri_wb_err_info_d = {5'h0, 1'b1, cheri_cs2_dec_i, cheri_err_cause};
-    else if (cheri_operator_i[CCSR_RW] & cheri_wb_err_raw & cheri_exec_id_i)
+    if (cheri_operator_i[CCSR_RW] & cheri_wb_err_raw & illegal_scr_addr & cheri_exec_id_i)
       // cspecialrw trap, illegal addr, treated as illegal_insn
       cheri_wb_err_info_d = {3'h0, 1'b1, 12'h0};
+    else if (cheri_operator_i[CCSR_RW] & cheri_wb_err_raw & cheri_exec_id_i)
+      // cspecialrw traps, PERM_SR
+      cheri_wb_err_info_d = {5'h0, 1'b1, cheri_cs2_dec_i, cheri_err_cause};
     else if (cheri_wb_err_raw  & cheri_exec_id_i)
       cheri_wb_err_info_d = {5'h0, 1'b0, rf_raddr_a_i, cheri_err_cause};
     else if ((is_load_cap | is_store_cap) & cheri_lsu_err & cheri_exec_id_i)
