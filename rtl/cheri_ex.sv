@@ -221,6 +221,7 @@ module cheri_ex import cheri_pkg::*; #(
   logic          cpu_lsu_cheri_err, cpu_lsu_is_cap;
 
   logic          illegal_scr_addr;
+  logic          scr_legalization;
 
   // data forwarding for CHERI instructions
   //  - note address 0 is a read-only location per RISC-V
@@ -300,6 +301,7 @@ module cheri_ex import cheri_pkg::*; #(
     csr_wcap_o           = NULL_REG_CAP;
     csr_op_o             = CHERI_CSR_NULL;
     csr_op_en_raw        = 1'b0;
+    scr_legalization     = 1'b0;
 
     branch_req_raw       = 1'b0;
     branch_req_spec_raw  = 1'b0;
@@ -547,20 +549,29 @@ module cheri_ex import cheri_pkg::*; #(
           csr_addr_o         = cheri_cs2_dec_i;
 
           if (cheri_cs2_dec_i == CHERI_SCR_MTCC) begin
-            // MTVEC/MTCC or MEPCC, legalization (clear tag if checking fails)
+            // MTVEC/MTCC legalization (clear tag if checking fails)
+            // note we don't reall need set_address checks here - it's only used to update temp fields
+            //   so that RTL behavior would match sail
+            scr_legalization = 1'b1;
             csr_wdata_o      = {rf_rdata_a[31:2], 2'b00};          
-            trcap            = rf_rcap_a;
+            trcap            = full2regcap(setaddr1_outcap);
             if ((rf_rdata_a[1:0] != 2'b00) || ~rf_fullcap_a.perms[PERM_EX] || (rf_fullcap_a.otype != 0))
               trcap.valid = 1'b0; 
+            else
+              trcap.valid = rf_fullcap_a.valid; 
             csr_wcap_o       = trcap;
           end else if (cheri_cs2_dec_i == CHERI_SCR_MEPCC) begin
-            // MTVEC/MTCC or MEPCC, legalization (clear tag if checking fails)
+            // MEPCC legalization (clear tag if checking fails)
+            scr_legalization = 1'b1;
             csr_wdata_o      = {rf_rdata_a[31:1], 1'b0};          
-            trcap            = rf_rcap_a;
+            trcap            = full2regcap(setaddr1_outcap);
             if ((rf_rdata_a[0] != 1'b0) || ~rf_fullcap_a.perms[PERM_EX] || (rf_fullcap_a.otype != 0))
               trcap.valid = 1'b0; 
+            else
+              trcap.valid = rf_fullcap_a.valid; 
             csr_wcap_o       = trcap;
           end else begin
+            scr_legalization = 1'b0;
             csr_wdata_o      = rf_rdata_a;          
             csr_wcap_o       = rf_rcap_a;
           end 
@@ -694,8 +705,8 @@ module cheri_ex import cheri_pkg::*; #(
   //  - break out to make sure we can properly gate off operands to save power
   //
   always_comb begin: set_address_comb
-    full_cap_t   tfcap1, tfcap2;
-    logic [31:0] taddr1, taddr2;
+    full_cap_t   tfcap1;
+    logic [31:0] taddr1;
 
     // set_addr operation 1
     if (cheri_operator_i[CJAL] | cheri_operator_i[CJALR]) begin
@@ -709,6 +720,9 @@ module cheri_ex import cheri_pkg::*; #(
                  cheri_operator_i[CINC_ADDR_IMM] | cheri_operator_i[CAUICGP]) begin
       tfcap1  = rf_fullcap_a;
       taddr1  = addr_result;
+    end else if (scr_legalization) begin
+      tfcap1  = rf_fullcap_a;
+      taddr1  = csr_wdata_o;
     end else begin
       tfcap1  = NULL_FULL_CAP;
       taddr1  = 32'h0;
