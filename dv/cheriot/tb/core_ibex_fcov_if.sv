@@ -157,7 +157,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
         id_instr_category = InstrCategoryCheriMod;
       cheri_ops[CGET_PERM], cheri_ops[CGET_TYPE], cheri_ops[CGET_BASE], cheri_ops[CGET_TOP], 
       cheri_ops[CGET_LEN], cheri_ops[CGET_TAG], cheri_ops[CGET_ADDR], cheri_ops[CGET_HIGH], 
-      cheri_ops[CSUB_CAP], cheri_ops[CIS_SUBSET], cheri_ops[CIS_EQUAL]:
+      cheri_ops[CSUB_CAP], cheri_ops[CIS_SUBSET], cheri_ops[CIS_EQUAL], cheri_ops[CSET_HIGH]:
         id_instr_category = InstrCategoryCheriQuery;
       // cheri_ops[CJAL]:
       //  id_instr_category = InstrCategoryCheriCJAL;
