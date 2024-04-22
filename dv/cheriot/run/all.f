@@ -1,5 +1,4 @@
--Wno-WIDTHEXPAND
--Wno-WIDTHTRUNC
+-Wno-WIDTH
 -Wno-USERFATAL
 -Wno-UNOPTFLAT
 -Wno-IMPLICIT
@@ -8,6 +7,7 @@
 -Wno-UNSIGNED
 -Wno-INITIALDLY
 -Wno-CASEX
+--timing
 +incdir+$rtlRoot
 +incdir+$primRoot
 +incdir+$dvutilsRoot
