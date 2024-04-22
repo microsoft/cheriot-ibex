@@ -1,5 +1,4 @@
--Wno-WIDTHEXPAND
--Wno-WIDTHTRUNC
+-Wno-WIDTH
 -Wno-USERFATAL
 -Wno-UNOPTFLAT
 -Wno-IMPLICIT
@@ -8,6 +7,7 @@
 -Wno-UNSIGNED
 -Wno-INITIALDLY
 -Wno-CASEX
+--timing
 +incdir+$rtlRoot
 +incdir+$primRoot
 +incdir+$dvutilsRoot
@@ -18,6 +18,7 @@ $primRoot/prim_cipher_pkg.sv
 $rtlRoot/cheri_pkg.sv
 $rtlRoot/ibex_pkg.sv
 $rtlRoot/ibex_tracer_pkg.sv
+$verifRoot/tb/cheriot_dv_pkg.sv
 $rtlRoot/cheri_decoder.sv
 $rtlRoot/cheri_ex.sv
 $rtlRoot/cheri_regfile.sv
@@ -48,5 +49,9 @@ $rtlRoot/ibex_pmp.sv
 $rtlRoot/ibexc_top.sv
 $rtlRoot/ibex_tracer.sv
 $rtlRoot/ibexc_top_tracing.sv
-$verifRoot/tb/mem_model.sv
+$verifRoot/tb/data_mem_model.sv
+$verifRoot/tb/dii_if.sv
+$verifRoot/tb/instr_mem_model.sv
+$verifRoot/tb/mem_monitor.sv
+$verifRoot/tb/mem_obi_if.sv
 $verifRoot/tb/tb_cheriot_top.sv

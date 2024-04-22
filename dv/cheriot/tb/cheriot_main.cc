@@ -44,7 +44,7 @@ int main(int argc, char** argv, char** env) {
     uint64_t sim_time = 0;
 
     dut->clk_i = 0;
-    dut->rstn_i = 1;
+    dut->rst_ni = 1;
     dut->dii_insn_i = 0x1;
 
     first_cycle = 1;
@@ -83,8 +83,8 @@ int main(int argc, char** argv, char** env) {
 
         dut->eval();
         sim_time++;
-        if (sim_time == 10) { dut->rstn_i = 0;} 
-        else if (sim_time == 20) { dut->rstn_i = 1; }
+        if (sim_time == 10) { dut->rst_ni = 0; }
+        else if (sim_time == 20) { dut->rst_ni = 1; }
     }
 
 #ifdef VCD_TRACE

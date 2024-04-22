@@ -103,7 +103,6 @@ module mem_obi_if import cheriot_dv_pkg::*; #(
       cmd_wr_ptr_ext <= 0;
       resp_valid     <= 1'b0;
       resp_idle      <= 1'b1;
-      resp_waits     <= 0;
       resp_cntr      <= 0;
       cmd_fifo_rd    <= 1'b0;
     end else begin
@@ -156,6 +155,7 @@ module mem_obi_if import cheriot_dv_pkg::*; #(
       data_rvalid <= 1'b0;
       data_err    <= 1'b0;
       cmd_rd_ptr_ext <= 0;
+      resp_waits     <= 0;
     end else begin
       data_rvalid <= resp_valid;
       data_err    <= resp_valid & mem_err;
