@@ -194,7 +194,7 @@ module data_mem_model import cheriot_dv_pkg::*; (
   always @(posedge clk, negedge rst_n) begin
     int i;
     if (~rst_n) begin
-      for (i=0; i<2**TSRAM_AW; i++) tsram[i] <= 32'h0; // initialize tsram to match sail
+      for (i=0; i<2**TSRAM_AW; i++) tsram[i] = 32'h0; // initialize tsram to match sail
     end else begin
       if (tsram_p0_cs && mem_we) begin
         // p0 read/write
