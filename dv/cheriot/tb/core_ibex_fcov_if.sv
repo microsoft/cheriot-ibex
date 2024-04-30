@@ -1038,7 +1038,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     }
 
     // mret when PCC doesn't have PERM_SR
-    cp_illegal_mret_cheri: coverpoint id_stage_i.controller_i.illegal_mret_cheri;
+    cp_illegal_mret_cheri: coverpoint id_stage_i.controller_i.mret_cheri_asr_err;
 
     ///////////////////
     // Cross coverage

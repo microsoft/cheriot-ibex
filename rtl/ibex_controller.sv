@@ -33,6 +33,7 @@ module ibex_controller #(
   input  logic                  wfi_insn_i,              // decoder has WFI instr
   input  logic                  ebrk_insn_i,             // decoder has EBREAK instr
   input  logic                  csr_pipe_flush_i,        // do CSR-related pipeline flush
+  input  logic                  csr_access_i,            // decoder has CSR access instr
 
   // instr from IF-ID pipeline stage
   input  logic                  instr_valid_i,           // instr is valid
@@ -148,6 +149,7 @@ module ibex_controller #(
   logic illegal_insn_q, illegal_insn_d;
   logic cheri_ex_err_q, cheri_ex_err_d;
   logic cheri_wb_err_q;
+  logic cheri_asr_err_q, cheri_asr_err_d;
 
   // Of the various exception/fault signals, which one takes priority in FLUSH and hence controls
   // what happens next (setting exc_cause, csr_mtval etc)
@@ -159,6 +161,7 @@ module ibex_controller #(
   logic load_err_prio;
   logic cheri_ex_err_prio;
   logic cheri_wb_err_prio;
+  logic cheri_asr_err_prio;
 
   logic stall;
   logic halt_if;
@@ -190,7 +193,8 @@ module ibex_controller #(
   logic csr_pipe_flush;
   logic instr_fetch_err;
   logic cheri_ex_err;
-  logic illegal_mret_cheri;
+  logic mret_cheri_asr_err;
+  logic csr_cheri_asr_err;
 
 `ifndef SYNTHESIS
   // synopsys translate_off
@@ -232,25 +236,27 @@ module ibex_controller #(
                          // MRET must be in M-Mode. TW means trap WFI to M-Mode.
                          (mret_insn | (csr_mstatus_tw_i & wfi_insn));
 
-  assign illegal_mret_cheri = CHERIoTEn & cheri_pmode_i & ~csr_pcc_perm_sr_i & mret_insn;
+  assign mret_cheri_asr_err = CHERIoTEn & cheri_pmode_i & ~csr_pcc_perm_sr_i & mret_insn;
+  assign csr_cheri_asr_err  = CHERIoTEn & cheri_pmode_i & ~csr_pcc_perm_sr_i & csr_access_i & ~illegal_insn_i;
 
   // This is recorded in the illegal_insn_q flop to help timing.  Specifically
   // it is needed to break the path from ibex_cs_registers/illegal_csr_insn_o
   // to pc_set_o.  Clear when controller is in FLUSH so it won't remain set
   // once illegal instruction is handled.
   // All terms in this expression are qualified by instr_valid_i
-  assign illegal_insn_d = (illegal_insn_i | illegal_dret | illegal_umode | (cheri_pmode_i & illegal_mret_cheri)) & 
-                          (ctrl_fsm_cs != FLUSH);
+  assign illegal_insn_d = illegal_insn_i | illegal_dret | illegal_umode;
   assign cheri_ex_err_d = cheri_pmode_i & cheri_ex_err & (ctrl_fsm_cs != FLUSH);
+
+  assign cheri_asr_err_d = (~illegal_insn_i & csr_cheri_asr_err) | mret_cheri_asr_err;
 
   // exception requests
   // requests are flopped in exc_req_q.  This is cleared when controller is in
   // the FLUSH state so the cycle following exc_req_q won't remain set for an
   // exception request that has just been handled.
   // All terms in this expression are qualified by instr_valid_i
-  assign exc_req_d = (ecall_insn | ebrk_insn | illegal_insn_d | instr_fetch_err | (cheri_pmode_i & cheri_ex_err)) &
-                     (ctrl_fsm_cs != FLUSH);
-  assign exc_req_nc = (ecall_insn | ebrk_insn | illegal_insn_d | instr_fetch_err) &
+  assign exc_req_d = (ecall_insn | ebrk_insn | illegal_insn_d | instr_fetch_err | (cheri_pmode_i & cheri_ex_err) | 
+                      cheri_asr_err_d) & (ctrl_fsm_cs != FLUSH);
+  assign exc_req_nc = (ecall_insn | ebrk_insn | illegal_insn_d | instr_fetch_err | cheri_asr_err_d) &
                       (ctrl_fsm_cs != FLUSH);
 
   // LSU exception requests
@@ -288,6 +294,7 @@ module ibex_controller #(
       load_err_prio        = 0;
       cheri_ex_err_prio    = 0;
       cheri_wb_err_prio    = 0;
+      cheri_asr_err_prio   = 0;
 
       // Note that with the writeback stage store/load errors occur on the instruction in writeback,
       // all other exception/faults occur on the instruction in ID/EX. The faults from writeback
@@ -308,6 +315,8 @@ module ibex_controller #(
         ebrk_insn_prio = 1'b1;
       end else if (cheri_pmode_i & cheri_ex_err_q) begin
         cheri_ex_err_prio = 1'b1;
+      end else if (cheri_asr_err_q) begin
+        cheri_asr_err_prio = 1'b1;
       end
     end
 
@@ -323,6 +332,7 @@ module ibex_controller #(
       load_err_prio        = 0;
       cheri_wb_err_prio    = 0;
       cheri_ex_err_prio    = 0;
+      cheri_asr_err_prio   = 0;
 
       if (instr_fetch_err) begin
         instr_fetch_err_prio = 1'b1;
@@ -340,6 +350,8 @@ module ibex_controller #(
         load_err_prio  = 1'b1;
       end else if (cheri_wb_err_q) begin
         cheri_wb_err_prio  = 1'b1;
+      end else if (cheri_asr_err_q) begin
+        cheri_asr_err_prio = 1'b1;
       end
     end
     assign wb_exception_o = 1'b0;
@@ -352,7 +364,8 @@ module ibex_controller #(
                       ebrk_insn_prio,
                       store_err_prio,
                       load_err_prio,
-                      cheri_ex_err_prio}),
+                      cheri_ex_err_prio,
+                      cheri_asr_err_prio}),
              (ctrl_fsm_cs == FLUSH) & exc_req_q)
 
   ////////////////
@@ -819,6 +832,11 @@ module ibex_controller #(
                 end
               end
             end
+            cheri_asr_err_prio: begin
+              exc_cause_o = EXC_CAUSE_CHERI_FAULT;
+              //csr_mtval_o = instr_is_compressed_i ? {16'b0, instr_compressed_i} : instr_i;
+              csr_mtval_o = {21'b0, 1'b1, 5'h0, 5'h18};  // S=1, cap_idx=0 (pcc), err=0x18
+            end
 
             default: ;
           endcase
@@ -907,6 +925,7 @@ module ibex_controller #(
       illegal_insn_q          <= 1'b0;
       cheri_ex_err_q          <= 1'b0;
       cheri_wb_err_q          <= 1'b0;
+      cheri_asr_err_q         <= 1'b0;
     end else begin
       ctrl_fsm_cs             <= ctrl_fsm_ns;
       nmi_mode_q              <= nmi_mode_d;
@@ -919,7 +938,8 @@ module ibex_controller #(
       exc_req_q               <= exc_req_d;
       illegal_insn_q          <= illegal_insn_d;
       cheri_ex_err_q          <= cheri_ex_err_d;
-      cheri_wb_err_q          <= cheri_pmode_i & cheri_wb_err_i;
+      cheri_wb_err_q          <= cheri_wb_err_i;
+      cheri_asr_err_q         <= cheri_asr_err_d;
     end
   end
 

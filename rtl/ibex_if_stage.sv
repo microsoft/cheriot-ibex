@@ -353,25 +353,22 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
   assign if_instr_err_plus2 = ((if_instr_addr[1] & ~instr_is_compressed & pmp_err_if_plus2_i) |
                                fetch_err_plus2) & ~pmp_err_if_i;
 
-  // let's only check this in pure-cap mode. otherwise jalr/ret gives so much headache
   // pre-calculate headroom to improve memory read timing
-  logic [2:0]  unused_instr_len;
-  logic [32:0] instr_hdrm;
+  logic [33:0] instr_hdrm;
   logic        hdrm_ge4, hdrm_ge2, hdrm_ok;
 
-  assign unused_instr_len  = (fetch_valid & ~fetch_err & instr_is_compressed) ? 2 : 4;
-  assign instr_hdrm = pcc_cap_i.top33 - if_instr_addr;
-  assign hdrm_ge4   = (instr_hdrm >= 4);
-  assign hdrm_ge2   = (instr_hdrm >= 2);
+  assign instr_hdrm = {1'b0, pcc_cap_i.top33} - {2'b00, if_instr_addr};
+  assign hdrm_ge4   = (|instr_hdrm[32:2]) & ~instr_hdrm[33];     // >= 4
+  assign hdrm_ge2   = (|instr_hdrm[32:1]) & ~instr_hdrm[33];     // >= 2
   assign hdrm_ok    = instr_is_compressed ? hdrm_ge2 : hdrm_ge4;
 
   // only issue cheri_acc_vio on valid fetches
-  assign cheri_bound_vio = CHERIoTEn & cheri_pmode_i & ~debug_mode_i & fetch_valid & ~fetch_err & pcc_cap_i.valid  &
-                           ((if_instr_addr < pcc_cap_i.base32) || instr_hdrm[32] || ~hdrm_ok);
+  assign cheri_bound_vio = CHERIoTEn & cheri_pmode_i & ~debug_mode_i &
+                           ((if_instr_addr < pcc_cap_i.base32)  || ~hdrm_ok);
 
   // we still check seal/perm here to be safe, however by ISA those can't happen at fetch time 
   // since they are check elsewhere already
-  assign cheri_acc_vio = CHERIoTEn & cheri_pmode_i & ~debug_mode_i & fetch_valid & ~fetch_err &
+  assign cheri_acc_vio = CHERIoTEn & cheri_pmode_i & ~debug_mode_i & 
                          (~pcc_cap_i.perms[PERM_EX] || ~pcc_cap_i.valid || (pcc_cap_i.otype!=0));
 
   // compressed instruction decoding, or more precisely compressed instruction

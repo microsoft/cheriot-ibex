@@ -622,6 +622,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     .wfi_insn_i      (wfi_insn_dec),
     .ebrk_insn_i     (ebrk_insn),
     .csr_pipe_flush_i(csr_pipe_flush),
+    .csr_access_i    (csr_access_o),
 
     // from IF-ID pipeline
     .instr_valid_i          (instr_valid_i),
@@ -1021,11 +1022,11 @@ module ibex_id_stage import cheri_pkg::*; #(
     // - There was an error on instruction fetch
 
     // cheri instr can only generate exception after execution
-    // exclude cheri exception from insr_kill improves timing
+    // exclude cheri EX exception from insr_kill improves timing
 
     assign instr_kill = instr_fetch_err_i |
                         wb_exception      |
-                        id_exception_nc   |   // exclude cheri exceptions
+                        id_exception_nc   |   // exclude cheri EX exceptions
                         ~controller_run;
 
     // With writeback stage instructions must be prevented from executing if there is:
