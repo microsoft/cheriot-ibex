@@ -811,6 +811,11 @@ module ibex_cs_registers import cheri_pkg::*;  #(
         mstatus_en     = 1'b1;
         mstatus_d.mie  = mstatus_q.mpie; // re-enable interrupts
 
+        // merge in upstream change 9/7/2022  // LEC_NOT_COMPATIBLE
+        if (mstatus_q.mpp != PRIV_LVL_M) begin
+          mstatus_d.mprv = 1'b0;
+        end
+
         cpuctrl_we              = 1'b1;
         cpuctrl_d.sync_exc_seen = 1'b0;
 
