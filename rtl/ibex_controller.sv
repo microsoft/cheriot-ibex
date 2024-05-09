@@ -34,6 +34,7 @@ module ibex_controller #(
   input  logic                  ebrk_insn_i,             // decoder has EBREAK instr
   input  logic                  csr_pipe_flush_i,        // do CSR-related pipeline flush
   input  logic                  csr_access_i,            // decoder has CSR access instr
+  input  logic                  csr_cheri_always_ok_i,   // cheri safe-listed CSR registers
 
   // instr from IF-ID pipeline stage
   input  logic                  instr_valid_i,           // instr is valid
@@ -238,7 +239,7 @@ module ibex_controller #(
 
   assign mret_cheri_asr_err = CHERIoTEn & cheri_pmode_i & ~csr_pcc_perm_sr_i & mret_insn;
   assign csr_cheri_asr_err  = CHERIoTEn & cheri_pmode_i & ~csr_pcc_perm_sr_i & instr_valid_i & 
-                              csr_access_i & ~illegal_insn_i;
+                              csr_access_i & ~illegal_insn_i & ~csr_cheri_always_ok_i;
 
   // This is recorded in the illegal_insn_q flop to help timing.  Specifically
   // it is needed to break the path from ibex_cs_registers/illegal_csr_insn_o

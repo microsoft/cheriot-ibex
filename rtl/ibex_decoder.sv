@@ -93,6 +93,7 @@ module ibex_decoder import cheri_pkg::*; #(
   // CSRs
   output logic                 csr_access_o,          // access to CSR
   output ibex_pkg::csr_op_e    csr_op_o,              // operation to perform on CSR
+  output logic                 csr_cheri_always_ok_o, // CHERI safe-listed (no ASR needed) CSRs
 
   // LSU
   output logic                 data_req_o,            // start transaction to data memory
@@ -271,6 +272,7 @@ module ibex_decoder import cheri_pkg::*; #(
     csr_access_o          = 1'b0;
     csr_illegal           = 1'b0;
     csr_op                = CSR_OP_READ;
+    csr_cheri_always_ok_o = 1'b0;
 
     data_we_o             = 1'b0;
     data_type_o           = 2'b00;
@@ -741,6 +743,13 @@ module ibex_decoder import cheri_pkg::*; #(
             default: csr_illegal = 1'b1;
           endcase
 
+          // always allow access to the following CSRs even without ASR permission 
+          //   -- 0xC01-0xC03 (unpriviledged counters)
+          //   -- 0xB01-0xB03 (m-mode counters). 
+          //      note 0xb01 is undefined per rvi spec. CSR register logic will handle it.
+          csr_cheri_always_ok_o = CHERIoTEn & cheri_pmode_i &
+                                  (((instr[31:28] == 4'hb) || (instr[31:28] == 4'hc)) && (instr[27:22] == 0)); 
+       
           illegal_insn = csr_illegal;
         end
       end

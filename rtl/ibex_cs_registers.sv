@@ -869,17 +869,17 @@ module ibex_cs_registers import cheri_pkg::*;  #(
   // only write CSRs during one clock cycle
 
   // enforcing the CHERI CSR access policy. 
-  //  -- is reading zero back ok? or do we need to generate illegal access exception??
-  //  -- also note IBEX didn't implement user-mode TIME/counters.
-  //     for now we are allowing reading the M-mode counters (assuming only use single priv level)
+  //  - exceptions for ASR violation is generated in the controller. 
+  //  - we never allow writes to any CSR if ASR=0 
+  //  - no need to gate csr_rdata for ASR violation since the instruction will be faulted anyway 
 
-  logic read_ok;
-  assign read_ok = ~CHERIoTEn || ~cheri_pmode_i || debug_mode_i || pcc_cap_q.perms[PERM_SR] || 
-                   ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<=CSR_CDBG_CTRL));
-                   // ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<CSR_MSHWM));
-
+  // logic read_ok;
+  // assign read_ok = ~CHERIoTEn || ~cheri_pmode_i || debug_mode_i || pcc_cap_q.perms[PERM_SR] || 
+                   // ((csr_addr_i>=CSR_MCYCLE) && (csr_addr_i<=CSR_CDBG_CTRL));
   assign csr_we_int  = csr_wr & csr_op_en_i & (~CHERIoTEn | ~cheri_pmode_i | debug_mode_i | pcc_cap_q.perms[PERM_SR]) & ~illegal_csr_insn_o;
-  assign csr_rdata_o = read_ok ? csr_rdata_int : 0;
+
+  //  assign csr_rdata_o = read_ok ? csr_rdata_int : 0;
+   assign csr_rdata_o = csr_rdata_int;
 
   // directly output some registers
   assign csr_mepc_o  = mepc_q;

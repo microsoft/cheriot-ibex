@@ -321,6 +321,7 @@ module ibex_id_stage import cheri_pkg::*; #(
 
   // CSR control
   logic        csr_pipe_flush;
+  logic        csr_cheri_always_ok;
 
   logic [31:0] alu_operand_a;
   logic [31:0] alu_operand_b;
@@ -537,6 +538,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     // CSRs
     .csr_access_o(csr_access_o),
     .csr_op_o    (csr_op_o),
+    .csr_cheri_always_ok_o (csr_cheri_always_ok),
 
     // LSU
     .data_req_o           (lsu_req_dec),
@@ -623,6 +625,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     .ebrk_insn_i     (ebrk_insn),
     .csr_pipe_flush_i(csr_pipe_flush),
     .csr_access_i    (csr_access_o),
+    .csr_cheri_always_ok_i (csr_cheri_always_ok),
 
     // from IF-ID pipeline
     .instr_valid_i          (instr_valid_i),
