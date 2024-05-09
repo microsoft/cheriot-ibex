@@ -1780,8 +1780,14 @@ end
 
   // Factor in exceptions taken in ID so RVFI tracking picks up flushed instructions that took
   // a trap
+  // kliu 05082024: add the ~wb_exception_o iterm to handle the corner case where
+  // ID and WB both faulted, e.g., illegal_insn in ID and cheri_wb_err in WB
+  // The previous behavior is 2 rvfi items in the trace (both traps),
+  // even if the instruction in the ID is never executed.
+  // The new behavior only generate 1 rvfi item for wb stage fault
   assign rvfi_id_done = instr_id_done | (id_stage_i.controller_i.rvfi_flush_next &
-                                         id_stage_i.controller_i.id_exception_o);
+                                         id_stage_i.controller_i.id_exception_o &
+                                         ~id_stage_i.controller_i.wb_exception_o);
 
   if (WritebackStage) begin : gen_rvfi_wb_stage
     logic unused_instr_new_id;

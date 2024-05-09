@@ -365,9 +365,10 @@ module ibex_controller #(
                       ebrk_insn_prio,
                       store_err_prio,
                       load_err_prio,
+                      cheri_wb_err_prio,
                       cheri_ex_err_prio,
                       cheri_asr_err_prio}),
-             (ctrl_fsm_cs == FLUSH) & exc_req_q)
+             (ctrl_fsm_cs == FLUSH) & csr_save_cause_o)
 
   ////////////////
   // Interrupts //
