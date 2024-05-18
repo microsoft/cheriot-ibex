@@ -21,7 +21,7 @@ Use of Microsoft trademarks or logos in modified versions of this project must n
 Any use of third-party trademarks or logos are subject to those third-party's policies.
 
 ## Introduction
-cheriot-ibex is 32-bit RISC-V microcontroller which implements the CHERIoT ISA extension in addition to RV32IMCB. Same as the original ibex core, the design can be configured either with a 2-stage or a 3-stage pipeline. It has passed preliminary simulation and FPGA validation, and is currently undergoing  further verification as well as PPA analysis at Microsoft.
+cheriot-ibex is 32-bit RISC-V microcontroller which implements the CHERIoT ISA extension in addition to RV32IMCB. Same as the original ibex core, the design can be configured either with a 2-stage or a 3-stage pipeline. It has passed preliminary simulation, formal verification and FPGA validation, and is currently under further verification at Microsoft.
 
 ![image](https://github.com/microsoft/cheriot-ibex/assets/116126768/51b768f5-a528-4d93-bce4-392ac2fe1488)
 
@@ -29,7 +29,7 @@ cheriot-ibex is 32-bit RISC-V microcontroller which implements the CHERIoT ISA e
 
 cheriot-ibex supports all instructions listed in the [CHERIoT ISA specification](https://github.com/microsoft/cheriot-sail/tree/main/archdoc), including
 
-- To query or test capabilities: cgetaddr, cgetbase, cgetlen, cgetperm, cgettag, cgettop, cgettype, ctestsubset, csetequalexact, csub
+- To query or test capabilities: cgetaddr, cgetbase, cgethigh, cgetlen, cgetperm, cgettag, cgettop, cgettype, ctestsubset, csetequalexact, csub, csethigh
 - To modify or derive capabilities: auicgp, auipcc, candperm, ccleartag, cincaddr, cincaddrimm, cmove, cram, crrl, csetaddr, csetbounds, csetboundsexact, csetboundsimm, cseal, cunseal
 - To load/store capabilities from memory: clc, csc
 - To control the program flow: cjal, cjalr
@@ -120,7 +120,7 @@ A PPA study conducted at Microsoft shows that cheriot-ibex is similar to the ori
 
 cheriot-ibex (configured as 3-stage pipeline) has been synthesized successfully using Synopsys DC-topo at 250MHz using TSMC 28nm (28LP) libraries (ss 1.03v) and 550MHz using TSMC 5nm (N5) libraries (ss 0.6v). Timing is mostly limited by TCM read access time (which approaches 1.6ns in the N5 case). 
 
-The design area is ~60k gate equivalents (~25% more the original ibex design). Both dynamic and leakage power are shown as similar to the original ibex design.
+The design area is ~60k gate equivalents. Both dynamic and leakage power are shown as similar to the original ibex design.
 
 
 ## Build the design for simulation and emulation
