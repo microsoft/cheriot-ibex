@@ -1,0 +1,26 @@
+Compile flags used (riscv32 GCC):
+
+    PULP_CFLAGS_BASE="-static -mcmodel=medany -march=rv32imc -mabi=ilp32 -nostartfiles -fvisibility=hidden -ffast-math -fno-common -fno-builtin-printf -std=gnu99 -nostdlib -ffreestanding"
+    ADDON_CFLAGS="-DNDEBUG -I$SRC -I$SRC/riscv32"
+    RUN_CFLAGS="-DPERFORMACE_RUN=1 -DITERATIONS=1 -DCLOCKS_PER_SEC=10000000"
+    CFLAGS="$PULP_CFLAGS_BASE $ADDON_CFLAGS $RUN_CFLAGS -O2 -T$LD_FILE"
+
+linker load script:
+    OUTPUT_ARCH( "riscv" )
+    /*ENTRY(_start) */
+
+    SECTIONS
+    {
+      . = 0x20000000;
+      .text.vec : {vector.o(.text)}
+      . = 0x20000080;
+      .text.start : {startup.o(.text)}
+      . = ALIGN(0x100);
+      .tohost : { *(.tohost) }
+      . = ALIGN(0x0100);
+      .text : { *(.text) }
+      . = ALIGN(0x0100);
+      .rodata : { *(.rodata*) }
+      .data : { *(.data) }
+      .bss : { *(.bss) }
+      _end = .;
