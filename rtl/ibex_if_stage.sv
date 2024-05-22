@@ -360,11 +360,17 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
   // pre-calculate headroom to improve memory read timing
   logic [33:0] instr_hdrm;
   logic        hdrm_ge4, hdrm_ge2, hdrm_ok, base_ok;
+  logic        allow_all;
+
+  // allow_all is used to permit the pc wraparound case (pc = 0xffff_fffe, uncompressed instruction)
+  // - in this case fetch should be allowed if pcc bounds is specified as the entire 32-bit space. 
+  // - If we don't treat this as a specail case the fetch would be erred since headroom < 4
+  assign allow_all  = (pcc_cap_i.base32==0) & (pcc_cap_i.top33==33'h1_0000_0000);
 
   assign instr_hdrm = {1'b0, pcc_cap_i.top33} - {2'b00, if_instr_addr};
   assign hdrm_ge4   = (|instr_hdrm[32:2]) & ~instr_hdrm[33];     // >= 4
   assign hdrm_ge2   = (|instr_hdrm[32:1]) & ~instr_hdrm[33];     // >= 2
-  assign hdrm_ok    = instr_is_compressed ? hdrm_ge2 : hdrm_ge4;
+  assign hdrm_ok    = allow_all || (instr_is_compressed ? hdrm_ge2 : hdrm_ge4);
   assign base_ok    = ~(if_instr_addr < pcc_cap_i.base32);
 
   // only issue cheri_acc_vio on valid fetches
@@ -375,7 +381,7 @@ module ibex_if_stage import ibex_pkg::*; import cheri_pkg::*; #(
   // to treat the current rdata as a unaligned compressed instruction if pc[1]=1, and push it to 
   // ID stage without waiting for the 2nd part of 32-bit instruciton. 
   // 
-  assign cheri_force_uc = CHERIoTEn & cheri_pmode_i & (~base_ok | ~hdrm_ge4);
+  assign cheri_force_uc = CHERIoTEn & cheri_pmode_i & ~allow_all & (~base_ok | ~hdrm_ge4);
 
   // we still check seal/perm here to be safe, however by ISA those can't happen at fetch time 
   // since they are check elsewhere already
