@@ -113,11 +113,8 @@ module cheri_decoder import cheri_pkg::*; # (
   // register dependency decoding
   // only handled opcode=0x5b case here.
   // Will be qualified and combined with other cases by ibexc_decoder
-  //   - note: rf_reb_b_o actually should be '0' for CSPECIALRW. 
-  //     however that's the only mismatch case so performance loss due to stalling 
-  //     should be small, and so we choose to have simpler decoder for timing
   assign cheri_rf_ren_a_o = 1'b1;
-  assign cheri_rf_ren_b_o = (func3_op == 0) && (func7_op != 7'h7f);
+  assign cheri_rf_ren_b_o = (func3_op == 0) && (func7_op != 7'h7f) && (func7_op !=7'h01);
 
   // this will be used separately, so include full decoding
   assign cheri_rf_we_dec_o = cheri_opcode_en_i | cheri_auipcc_en_i | cheri_auicgp_en_i |
