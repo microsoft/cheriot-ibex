@@ -978,7 +978,11 @@ module ibex_controller #(
     logic exception_pc_set, seen_exception_pc_set, expect_exception_pc_set;
     logic exception_req_needs_pc_set;
 
-    assign exception_req = (special_req | enter_debug_mode | handle_irq);
+    // kliu 05242024: excluding handle_irq here since handle_irq may not be processed if 
+    // mstatus.mie is clearaed by the current instruction (either cssrw to mstatus or cjalr to
+    // an interrupt-disabled sentry)
+    // assign exception_req = (special_req | enter_debug_mode | handle_irq);
+    assign exception_req = (special_req | enter_debug_mode);
     // Any exception rquest will cause a transition out of DECODE, once the controller transitions
     // back into DECODE we're done handling the request.
     assign exception_req_done =
