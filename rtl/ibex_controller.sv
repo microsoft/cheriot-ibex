@@ -977,18 +977,30 @@ module ibex_controller #(
     logic exception_req, exception_req_pending, exception_req_accepted, exception_req_done;
     logic exception_pc_set, seen_exception_pc_set, expect_exception_pc_set;
     logic exception_req_needs_pc_set;
+    logic cs_taken_exception, ns_taken_exception;
+
+    assign cs_taken_exception = (ctrl_fsm_cs == FLUSH) || (ctrl_fsm_cs == DBG_TAKEN_IF) ||
+                                (ctrl_fsm_cs == DBG_TAKEN_ID);
+    assign ns_taken_exception = (ctrl_fsm_ns == FLUSH) || (ctrl_fsm_ns == DBG_TAKEN_IF) ||
+                                (ctrl_fsm_ns == DBG_TAKEN_ID);
 
     // kliu 05242024: excluding handle_irq here since handle_irq may not be processed if 
     // mstatus.mie is clearaed by the current instruction (either cssrw to mstatus or cjalr to
     // an interrupt-disabled sentry)
     // assign exception_req = (special_req | enter_debug_mode | handle_irq);
     assign exception_req = (special_req | enter_debug_mode);
+
     // Any exception rquest will cause a transition out of DECODE, once the controller transitions
     // back into DECODE we're done handling the request.
+    // kliu 05242024: change the condition to cover the wfi case (
+    // assign exception_req_done =
+    // exception_req_pending & (ctrl_fsm_cs != DECODE) & (ctrl_fsm_ns == DECODE);
     assign exception_req_done =
-      exception_req_pending & (ctrl_fsm_cs != DECODE) & (ctrl_fsm_ns == DECODE);
+      exception_req_pending & cs_taken_exception;
 
-    assign exception_req_needs_pc_set = enter_debug_mode | handle_irq | special_req_pc_change;
+    // kliu 05242024: excluding handle_irq 
+    // assign exception_req_needs_pc_set = enter_debug_mode | handle_irq | special_req_pc_change;
+    assign exception_req_needs_pc_set = enter_debug_mode | special_req_pc_change;
 
     // An exception PC set uses specific PC types
     assign exception_pc_set =
@@ -1005,8 +1017,12 @@ module ibex_controller #(
         exception_req_pending <= (exception_req_pending | exception_req) & ~exception_req_done;
 
         // The exception req has been accepted once the controller transitions out of decode
+        // kliu 05242024
+        //exception_req_accepted <= (exception_req_accepted & ~exception_req_done) |
+        //  (exception_req & ctrl_fsm_ns != DECODE);
         exception_req_accepted <= (exception_req_accepted & ~exception_req_done) |
-          (exception_req & ctrl_fsm_ns != DECODE);
+          (exception_req & ns_taken_exception);
+
 
         // Set `expect_exception_pc_set` if exception req needs one and keep it asserted until
         // exception req is done
