@@ -35,6 +35,7 @@ module cheri_ex import cheri_pkg::*; #(
   input  logic [31:0]   rf_rdata_b_i,
   input  reg_cap_t      rf_rcap_b_i,
   output logic          rf_trsv_en_o,
+  input  logic  [4:0]   rf_waddr_i,
 
   // pcc interface
   input  pcc_cap_t      pcc_cap_i,
@@ -603,7 +604,7 @@ module cheri_ex import cheri_pkg::*; #(
           // (link address == pc_id + delta, but pc_if should be the next executed PC (the jump target)
           //  if branch prediction works)
           result_data_o        = pc_id_nxt;
-          seal_type            = csr_mstatus_mie_i ? OTYPE_SENTRY_IE : OTYPE_SENTRY_ID;
+          seal_type            = csr_mstatus_mie_i ? OTYPE_SENTRY_IE_BKWD : OTYPE_SENTRY_ID_BKWD;
           tfcap                = seal_cap(setaddr1_outcap, seal_type);
           result_cap_o         = full2regcap(tfcap);
 
@@ -624,9 +625,11 @@ module cheri_ex import cheri_pkg::*; #(
           cheri_wb_err_raw     = instr_fault;
           cheri_ex_err_raw     = 1'b0;
           csr_set_mie_raw      = ~instr_fault && cheri_operator_i[CJALR] && 
-                                 (rf_fullcap_a.otype == OTYPE_SENTRY_IE);
+                                 ((rf_fullcap_a.otype == OTYPE_SENTRY_IE_FWD) ||
+                                  (rf_fullcap_a.otype == OTYPE_SENTRY_IE_BKWD)) ;
           csr_clr_mie_raw      = ~instr_fault && cheri_operator_i[CJALR] && 
-                                 (rf_fullcap_a.otype == OTYPE_SENTRY_ID);
+                                 ((rf_fullcap_a.otype == OTYPE_SENTRY_ID_FWD) || 
+                                  (rf_fullcap_a.otype == OTYPE_SENTRY_ID_BKWD)) ;
           cheri_ex_valid_raw   = 1'b1;
         end
       default:;
@@ -877,6 +880,7 @@ module cheri_ex import cheri_pkg::*; #(
     logic [32:0] top_chkaddr;
     logic        top_vio, base_vio, top_equal;
     logic        cs2_bad_type;
+    logic        cs1_otype_0, cs1_otype_1, cs1_otype_45, cs1_otype_23;
 
     // generate the address used to check top bound violation
     if (cheri_operator_i[CSEAL] | cheri_operator_i[CUNSEAL])
@@ -926,6 +930,11 @@ module cheri_ex import cheri_pkg::*; #(
     cs2_bad_type = 1'b0;
     illegal_scr_addr = 1'b0;
 
+    cs1_otype_0  =  (rf_fullcap_a.otype == 3'h0);
+    cs1_otype_1  =  (rf_fullcap_a.otype == 3'h1);
+    cs1_otype_45 = (rf_fullcap_a.otype == 3'h4) || (rf_fullcap_a.otype == 3'h5);
+    cs1_otype_23 = (rf_fullcap_a.otype == 3'h2) || (rf_fullcap_a.otype == 3'h3);
+ 
     // note cseal/unseal/cis_subject doesn't generate exceptions, 
     // so for all exceptions, violations can always be attributed to cs1, thus no need to further split
     // exceptions based on source operands.
@@ -956,8 +965,12 @@ module cheri_ex import cheri_pkg::*; #(
                                    (~rf_fullcap_b.perms[PERM_US]);
     end else if (cheri_operator_i[CJALR]) begin
       perm_vio_vec[PVIO_TAG]   = ~rf_fullcap_a.valid;
-      perm_vio_vec[PVIO_SEAL]  = is_cap_sealed(rf_fullcap_a) && 
-                                  (~is_cap_sentry(rf_fullcap_a) || (cheri_imm12_i != 0));
+      perm_vio_vec[PVIO_SEAL]  = (is_cap_sealed(rf_fullcap_a) && (cheri_imm12_i != 0)) ||
+                                 ~(((rf_waddr_i == 0) && (rf_raddr_a_i == 5'h1) && cs1_otype_45) || 
+                                   ((rf_waddr_i == 0) && (rf_raddr_a_i != 5'h1) && (cs1_otype_0 || cs1_otype_1)) ||
+                                   ((rf_waddr_i == 5'h1) && (cs1_otype_0 | cs1_otype_23)) ||
+                                   ((rf_waddr_i != 0) && (cs1_otype_0 | cs1_otype_1)));
+                                 
       perm_vio_vec[PVIO_EX]    = ~rf_fullcap_a.perms[PERM_EX]; 
     end else if (cheri_operator_i[CCSR_RW]) begin
       perm_vio_vec[PVIO_ASR]   = ~pcc_cap_i.perms[PERM_SR];

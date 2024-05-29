@@ -187,7 +187,10 @@ module cap_err_gen import ibex_pkg::*; import cheri_pkg::*; (
         if (cap_err_seed[3:2] == 2'b00)
           force `EX_PATH.rf_rcap_a.cperms = 6'b010011;  // LD/SD only, no EX
         if (cap_err_seed[5:4] == 2'b00)
-          force `EX_PATH.rf_rcap_a.otype = {1'b1, cap_err_seed[9:8]};  // sealed but not sentry
+          force `EX_PATH.rf_rcap_a.otype = {2'b11, cap_err_seed[8]};  // sealed but not sentry
+      //randomize otypes - this causes mismatch with sail..  QQQ
+      //end else if (is_cjalr & ~pc_in_isr) begin
+      //    force `EX_PATH.rf_rcap_a.otype = {cap_err_seed[9:8]};  // otype 0/1/2/3
       end else begin
         release `EX_PATH.rf_rcap_a;
         release `EX_PATH.rv32_ls_chkaddr;

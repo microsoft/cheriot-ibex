@@ -37,8 +37,10 @@ package cheri_pkg;
   parameter int unsigned PERM_U1 = 12;     //
 //  parameter int unsigned PERM_U2 = 13;     // temp workaround
 
-  parameter logic [2:0] OTYPE_SENTRY_IE  = 3'd3;
-  parameter logic [2:0] OTYPE_SENTRY_ID  = 3'd2;
+  parameter logic [2:0] OTYPE_SENTRY_IE_BKWD = 3'd5;
+  parameter logic [2:0] OTYPE_SENTRY_ID_BKWD = 3'd4;
+  parameter logic [2:0] OTYPE_SENTRY_IE_FWD  = 3'd3;
+  parameter logic [2:0] OTYPE_SENTRY_ID_FWD  = 3'd2;
   parameter logic [2:0] OTYPE_SENTRY     = 3'd1;
   parameter logic [2:0] OTYPE_UNSEALED   = 3'd0;
 
@@ -482,13 +484,13 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     return result;
   endfunction
 
-  function automatic logic is_cap_sentry (full_cap_t in_cap);
-    logic result;
+  //function automatic logic is_cap_sentry (full_cap_t in_cap);
+  //  logic result;
 
-    result = (in_cap.perms[PERM_EX]) && ((in_cap.otype == OTYPE_SENTRY) || (in_cap.otype == OTYPE_SENTRY_ID) ||
-             (in_cap.otype == OTYPE_SENTRY_IE));
-    return result;
-  endfunction
+  //  result = (in_cap.perms[PERM_EX]) && ((in_cap.otype == OTYPE_SENTRY) || (in_cap.otype == OTYPE_SENTRY_ID) ||
+  //            (in_cap.otype == OTYPE_SENTRY_IE));
+  //  return result;
+  //endfunction
 
 
   function automatic logic [3:0] decode_otype (logic [2:0] otype3, logic perm_ex);

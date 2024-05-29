@@ -898,6 +898,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .rf_rdata_b_i         (rf_rdata_b),
       .rf_rcap_b_i          (rf_rcap_b_i),
       .rf_trsv_en_o         (rf_trsv_en),
+      .rf_waddr_i           (rf_waddr_id),
       .pcc_cap_i            (pcc_cap_r),
       .pcc_cap_o            (pcc_cap_w),
       .pc_id_i              (pc_id),
