@@ -309,13 +309,14 @@ addr_exit:
 #  test seal/unseal 
 #  ///////////////////////////////////////
 test_seal:
-    cincoffset csp, csp, -48    
+    cincoffset csp, csp, -64    
     csc c8,  0(csp)                
     csc c9,  8(csp)                
     csc c11, 16(csp)                
     csc c12, 24(csp)                
     csc c13, 32(csp)                
     csc c14, 40(csp)                
+    csc c1,  48(csp)                
 
     # seal/unseal, interrupt enable/disable with sentries
     cmove  c8, c7           # sealing root
@@ -335,7 +336,8 @@ test_seal:
     auipcc  c9, %cheri_compartment_pccrel_hi(seal_cont1)
     cincoffset c9, c9, %cheri_compartment_pccrel_lo(2b)
     cseal c9, c9, c8                   # seal with
-    cjalr c0, 0(c9)
+    cjalr c1, 0(c9)
+    cjal seal_cont2
 
 seal_cont1:
     nop
@@ -345,13 +347,7 @@ seal_cont1:
     bne x11, x0, seal_fail
     
     # jump to sentries with interrupt enabled
-    li x11, 0x3                        # sentry = enable intr
-    csetaddr  c8, c8, x11 
-3: 
-    auipcc  c9, %cheri_compartment_pccrel_hi(seal_cont2)
-    cincoffset c9, c9, %cheri_compartment_pccrel_lo(3b)
-    cseal c9, c9, c8                   # seal with
-    cjalr c0, 0(c9)
+    cjalr c0, 0(c1)
 
 seal_cont2:
     nop
@@ -372,7 +368,8 @@ seal_exit:
     clc c12, 24(csp)                
     clc c13, 32(csp)                
     clc c14, 40(csp)                
-    cincoffset csp, csp, 48    
+    clc c1,  48(csp)                
+    cincoffset csp, csp, 64    
     cret
 
 #  ///////////////////////////////////////
@@ -444,27 +441,28 @@ tsafe_exit:
 #  ///////////////////////////////////////
 
 test_jump:
-    cincoffset csp, csp, -48    
+    cincoffset csp, csp, -64    
     csc c8,  0(csp)                
     csc c9,  8(csp)                
     csc c11, 16(csp)                
     csc c12, 24(csp)                
     csc c13, 32(csp)                
     csc c14, 40(csp)                
+    csc c1,  48(csp)                
 
     # enable ts_safe and do load cap again
     # JAL test case
 
     li x13, 0x246
     add x12, x0, x0
-    cjal c11, test_jal1
+    cjal c1, test_jal1
     beq x12, x13, test_jalr
     j jump_fail
 
 test_jal1:
     addi x12, x12, 0x123
     addi x12, x12, 0x123
-    cjalr c0, c11
+    cjr c1
 
     # JALR test case 1, tag+perm_ex violation
 test_jalr:
@@ -563,7 +561,8 @@ jump_exit:
     clc c12, 24(csp)                
     clc c13, 32(csp)                
     clc c14, 40(csp)                
-    cincoffset csp, csp, 48    
+    clc c1,  48(csp)                
+    cincoffset csp, csp, 64   
     cret
 
 
