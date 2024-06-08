@@ -326,10 +326,7 @@ module ibex_id_stage import cheri_pkg::*; #(
   logic [31:0] alu_operand_a;
   logic [31:0] alu_operand_b;
 
-  logic        cheri_rf_we, cheri_rf_we_dec;
   logic        stall_cheri_trvk;
-
-  assign       cheri_rf_we = CHERIoTEn & cheri_pmode_i & instr_valid_i & ~instr_fetch_err_i & ~illegal_insn_o & cheri_rf_we_dec;
 
   /////////////
   // LSU Mux //
@@ -559,7 +556,6 @@ module ibex_id_stage import cheri_pkg::*; #(
     .cheri_imm21_o      (cheri_imm21_o),
     .cheri_operator_o   (cheri_operator_o),
     .cheri_cs2_dec_o    (cheri_cs2_dec_o),
-    .cheri_rf_we_dec_o  (cheri_rf_we_dec),
     .cheri_multicycle_dec_o (cheri_multicycle_dec)
   );
 
@@ -1117,10 +1113,14 @@ module ibex_id_stage import cheri_pkg::*; #(
 
     assign stall_ld_hz = outstanding_load_wb_i & (rf_rd_a_hz | rf_rd_b_hz);
 
+    logic rf_we_valid;
+    assign rf_we_valid = rf_we_dec & instr_valid_i & ~instr_fetch_err_i;
+   
+
     assign stall_cheri_trvk = (CHERIoTEn & cheri_pmode_i & CheriPPLBC) ? 
                                ((rf_ren_a && ~rf_reg_rdy_i[rf_raddr_a_o]) |
                                 (rf_ren_b && ~rf_reg_rdy_i[rf_raddr_b_o]) |
-                                (cheri_rf_we && ~ rf_reg_rdy_i[rf_waddr_id_o])) :
+                                (rf_we_valid && ~rf_reg_rdy_i[rf_waddr_id_o])) :
                                1'b0;
 
     assign instr_type_wb_o = ~lsu_req_dec ? WB_INSTR_OTHER :

@@ -27,15 +27,22 @@ endmodule
 // ibex_if_stage
 ////////////////////////////////////////////////////////////////
 
-module ibex_if_stage_dv_ext (
+module ibex_if_stage_dv_ext import cheri_pkg::*; import cheriot_dv_pkg::*; (
   input  logic                  clk_i,
-  input  logic                  rst_ni
+  input  logic                  rst_ni,
+  input  logic                  if_instr_valid,
+  input  logic [31:0]           pc_if_o,
+  input  pcc_cap_t              pcc_cap_i
 );
+
+  logic fcov_pending_fetch_bound_vio;
 
   `DV_FCOV_SIGNAL_GEN_IF(logic [1:0], dummy_instr_type,
     gen_dummy_instr.dummy_instr_i.lfsr_data.instr_type, if_stage_i.DummyInstructions)
   `DV_FCOV_SIGNAL_GEN_IF(logic, insert_dummy_instr,
     gen_dummy_instr.insert_dummy_instr, if_stage_i.DummyInstructions)
+
+   assign fcov_pending_fetch_bound_vio = ~if_instr_valid & ~is_representable(pcc2fullcap(pcc_cap_i), pc_if_o);
 
 endmodule
 
@@ -51,7 +58,8 @@ module ibex_id_stage_dv_ext (
   input  logic [4:0]  rf_raddr_a_o,
   input  logic        rf_ren_b,
   input  logic [4:0]  rf_raddr_b_o,
-  input  logic        cheri_rf_we,
+  input  logic        rf_we_id_o,
+  input  logic        rf_we_dec,
   input  logic [4:0]  rf_waddr_id_o,
   input  logic        cheri_exec_id_o,
   input  logic        instr_executing
@@ -61,9 +69,12 @@ module ibex_id_stage_dv_ext (
 
   assign fcov_trvk_stall_cause[0] = rf_ren_a && ~rf_reg_rdy_i[rf_raddr_a_o];
   assign fcov_trvk_stall_cause[1] = rf_ren_b && ~rf_reg_rdy_i[rf_raddr_b_o];
-  assign fcov_trvk_stall_cause[2] = cheri_rf_we && ~rf_reg_rdy_i[rf_waddr_id_o]; 
+  assign fcov_trvk_stall_cause[2] = rf_we_id_o && ~rf_reg_rdy_i[rf_waddr_id_o]; 
 
   `ASSERT(IbexExecInclCheri, (cheri_exec_id_o |-> instr_executing))
+
+  // rf_we_dec is now a superset of cheri_rf_we_dec
+  `ASSERT(IbexCheriRfWe, (decoder_i.cheri_rf_we_dec |-> rf_we_dec))
  
 
 
@@ -227,22 +238,18 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
     end
   end
  
-  reg_cap_t    mem_raw_cap;
+  full_cap_t   fcov_clc_mem_cap;
   logic [12:0] mem_raw_perms;
-  logic        mem_raw_is_sealed;
-  logic [5:0]  fcov_clc_mem_cap_info;
+  logic [1:0]  fcov_clc_mem_cap_valid;
       
-  if (MemCapFmt) begin
-    assign mem_raw_cap = mem2regcap_fmt0(data_rdata_i, cap_lsw_q, 4'h0);
-  end else begin
-    assign mem_raw_cap = mem2regcap_fmt1(data_rdata_i, cap_lsw_q, 4'h0);
-  end
+  //if (MemCapFmt) begin
+    assign fcov_clc_mem_cap = mem2fullcap_fmt0_raw(data_rdata_i, cap_lsw_q);
+  //end else begin
+    //assign mem_raw_cap = mem2regcap_fmt1(data_rdata_i, cap_lsw_q, 4'h0);
+  //end
 
-  assign mem_raw_perms = expand_perms(mem_raw_cap.cperms);
-  assign mem_raw_is_sealed = (mem_raw_cap.otype != 0);
-  assign fcov_clc_mem_cap_info = {mem_raw_cap.valid, mem_raw_is_sealed, mem_raw_perms[3:0]};
-
-
+  assign fcov_clc_mem_cap_valid  = {cap_lsw_q[32], data_rdata_i[32]};
+ 
 
   ////////////////
   // Assertions //

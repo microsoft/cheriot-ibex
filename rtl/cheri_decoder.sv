@@ -110,15 +110,16 @@ module cheri_decoder import cheri_pkg::*; # (
   assign cheri_imm21_o    = cheri_operator_o[CJAL]  ? {instr_rdata_i[31], instr_rdata_i[19:12],
                                                        instr_rdata_i[20], instr_rdata_i[30:21], 1'b0} : 0;
 
-  // register dependency decoding
+  // register dependency decoding (ren_a, ren_b, we)
   // only handled opcode=0x5b case here.
   // Will be qualified and combined with other cases by ibexc_decoder
   assign cheri_rf_ren_a_o = 1'b1;
   assign cheri_rf_ren_b_o = (func3_op == 0) && (func7_op != 7'h7f) && (func7_op !=7'h01);
-
-  // this will be used separately, so include full decoding
-  assign cheri_rf_we_dec_o = cheri_opcode_en_i | cheri_auipcc_en_i | cheri_auicgp_en_i |
-                             cheri_jal_en_i | cheri_jalr_en_i | cheri_cload_en_i;
+ 
+  // cheri_rf_we_dec_o is not used to generate the actual regfile write enables in the case of 
+  // cheri instructions (which is in cheri_ex and  muxed with rf_we in wb_stage). 
+  // However it is merged into the overall rf_we and used to generate stall_cheri_trvk
+  assign cheri_rf_we_dec_o = cheri_opcode_en_i & (|cheri_operator_o);
 
   assign cheri_multicycle_dec_o = (cheri_operator_o[CLOAD_CAP] & cheri_tsafe_en_i & ~CheriPPLBC) |
                                   (CheriSBND2 & (cheri_operator_o[CSET_BOUNDS] |

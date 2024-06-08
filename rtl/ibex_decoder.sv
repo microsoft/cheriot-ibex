@@ -116,7 +116,6 @@ module ibex_decoder import cheri_pkg::*; #(
   output logic [20:0]          cheri_imm21_o,
   output logic [OPDW-1:0]      cheri_operator_o,
   output logic [4:0]           cheri_cs2_dec_o,
-  output logic                 cheri_rf_we_dec_o,
   output logic                 cheri_multicycle_dec_o
 );
 
@@ -156,6 +155,7 @@ module ibex_decoder import cheri_pkg::*; #(
   logic        cheri_cstore_en;
   logic        instr_is_legal_cheri;
   logic        cheri_rf_ren_a, cheri_rf_ren_b;
+  logic        cheri_rf_we_dec;
 
   // To help timing the flops containing the current instruction are replicated to reduce fan-out.
   // instr_alu is used to determine the ALU control logic and associated operand/imm select signals
@@ -319,9 +319,10 @@ module ibex_decoder import cheri_pkg::*; #(
         if (CHERIoTEn & cheri_pmode_i & ~illegal_c_insn_i) begin
           // cheri_ex takes over JAL now as a single-cycle jump
           cheri_jal_en      = 1'b1;
-          illegal_insn      = ~instr_is_legal_cheri;
+          illegal_insn      = 1'b0;
+          rf_we             = 1'b1;
         end else begin
-          jump_in_dec_o      = 1'b1;
+          jump_in_dec_o     = 1'b1;
 
           if (instr_first_cycle_i) begin
             // Calculate jump target (and store PC + 4 if BranchTargetALU is configured)
@@ -339,7 +340,8 @@ module ibex_decoder import cheri_pkg::*; #(
           // cheri_ex takes over JALR now as a single-cycle jump
           cheri_jalr_en     = (instr[14:12] == 3'b0);
           rf_ren_a_o        = 1'b1;
-          illegal_insn      = ~instr_is_legal_cheri;
+          rf_we             = 1'b1;
+          illegal_insn      = 1'b0;
         end else begin
           jump_in_dec_o      = 1'b1;
 
@@ -461,7 +463,8 @@ module ibex_decoder import cheri_pkg::*; #(
       OPCODE_AUIPC: begin
         if (CHERIoTEn & cheri_pmode_i & ~illegal_c_insn_i) begin
           cheri_auipcc_en  = 1'b1;
-          illegal_insn     = ~instr_is_legal_cheri;
+          illegal_insn     = 1'b0;
+          rf_we            = 1'b1;
         end else begin
           // OPCODE_AUIPC: begin  // Add Upper Immediate to PC
           rf_we            = 1'b1;
@@ -771,7 +774,7 @@ module ibex_decoder import cheri_pkg::*; #(
           cheri_opcode_en  = 1'b1;
           rf_ren_a_o       = cheri_rf_ren_a;
           rf_ren_b_o       = cheri_rf_ren_b;
-          rf_we            = cheri_rf_we_dec_o;
+          rf_we            = cheri_rf_we_dec;
           illegal_insn     = ~instr_is_legal_cheri;
         end else begin
           cheri_opcode_en  = 1'b0;
@@ -787,6 +790,7 @@ module ibex_decoder import cheri_pkg::*; #(
           cheri_auicgp_en  = 1'b1;
           rf_ren_a_o       = 1'b1;
           rf_ren_b_o       = 1'b0;
+          rf_we            = 1'b1;
           illegal_insn     = 1'b0;
         end else begin
           cheri_opcode_en  = 1'b0;
@@ -1383,7 +1387,7 @@ module ibex_decoder import cheri_pkg::*; #(
       .cheri_cs2_dec_o         (cheri_cs2_dec_o),
       .cheri_rf_ren_a_o        (cheri_rf_ren_a),
       .cheri_rf_ren_b_o        (cheri_rf_ren_b),
-      .cheri_rf_we_dec_o       (cheri_rf_we_dec_o),
+      .cheri_rf_we_dec_o       (cheri_rf_we_dec),
       .cheri_multicycle_dec_o  (cheri_multicycle_dec_o)
       );
   end else begin
@@ -1397,7 +1401,7 @@ module ibex_decoder import cheri_pkg::*; #(
     assign cheri_cs2_dec_o        = 1'b0;
     assign cheri_rf_ren_a         = 1'b0;    
     assign cheri_rf_ren_b         = 1'b0;
-    assign cheri_rf_we_dec_o      = 1'b0;
+    assign cheri_rf_we_dec        = 1'b0;
     assign cheri_multicycle_dec_o = 1'b0;
  
   end
