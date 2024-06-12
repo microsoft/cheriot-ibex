@@ -759,11 +759,12 @@ module ibex_decoder import cheri_pkg::*; #(
           endcase
 
           // always allow access to the following CSRs even without ASR permission 
-          //   -- 0xC01-0xC03 (unpriviledged counters)
-          //   -- 0xB01-0xB03 (m-mode counters). 
+          //   -- 0xC01-0xC9F (unpriviledged counters)
+          //   -- 0xB01-0xB9F (m-mode counters). 
           //      note 0xb01 is undefined per rvi spec. CSR register logic will handle it.
           csr_cheri_always_ok_o = CHERIoTEn & cheri_pmode_i &
-                                  (((instr[31:28] == 4'hb) || (instr[31:28] == 4'hc)) && (instr[27:22] == 0)); 
+                                  (((instr[31:28] == 4'hb) || (instr[31:28] == 4'hc)) && 
+                                   ((instr[27] == 1'b0) || (instr[26:25] == 2'b00))); 
        
           illegal_insn = csr_illegal;
         end
