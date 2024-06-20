@@ -202,7 +202,6 @@ module ibex_id_stage import cheri_pkg::*; #(
   output logic                      instr_is_cheri_id_o,
   output logic                      instr_is_rv32lsu_id_o,
   output logic [11:0]               cheri_imm12_o,
-  output logic [13:0]               cheri_imm14_o,
   output logic [19:0]               cheri_imm20_o,
   output logic [20:0]               cheri_imm21_o,
   output logic [OPDW-1:0]           cheri_operator_o,
@@ -551,7 +550,6 @@ module ibex_id_stage import cheri_pkg::*; #(
     // cheri signals
     .instr_is_cheri_o   (instr_is_cheri_id_o),
     .cheri_imm12_o      (cheri_imm12_o),
-    .cheri_imm14_o      (cheri_imm14_o),
     .cheri_imm20_o      (cheri_imm20_o),
     .cheri_imm21_o      (cheri_imm21_o),
     .cheri_operator_o   (cheri_operator_o),

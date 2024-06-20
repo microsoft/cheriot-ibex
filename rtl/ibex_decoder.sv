@@ -111,7 +111,6 @@ module ibex_decoder import cheri_pkg::*; #(
   // output to cheri EX
   output logic                 instr_is_cheri_o,
   output logic [11:0]          cheri_imm12_o,
-  output logic [13:0]          cheri_imm14_o,
   output logic [19:0]          cheri_imm20_o,
   output logic [20:0]          cheri_imm21_o,
   output logic [OPDW-1:0]      cheri_operator_o,
@@ -1381,7 +1380,6 @@ module ibex_decoder import cheri_pkg::*; #(
       .instr_is_cheri_o        (instr_is_cheri_o),
       .instr_is_legal_cheri_o  (instr_is_legal_cheri),
       .cheri_imm12_o           (cheri_imm12_o),
-      .cheri_imm14_o           (cheri_imm14_o),
       .cheri_imm20_o           (cheri_imm20_o),
       .cheri_imm21_o           (cheri_imm21_o),
       .cheri_operator_o        (cheri_operator_o),
@@ -1395,7 +1393,6 @@ module ibex_decoder import cheri_pkg::*; #(
     assign instr_is_cheri_o       = 1'b0;
     assign instr_is_legal_cheri   = 1'b0;
     assign cheri_imm12_o          = 12'h0;
-    assign cheri_imm14_o          = 14'h0;
     assign cheri_imm20_o          = 20'h0;
     assign cheri_imm21_o          = 21'h0;
     assign cheri_operator_o       = 'h0;

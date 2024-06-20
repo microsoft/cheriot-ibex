@@ -96,7 +96,13 @@ module ibex_controller_dv_ext import ibex_pkg::*; (
   input  ctrl_fsm_e             ctrl_fsm_ns,
   input  logic                  flush_id,
   input  logic                  pc_set_o,
-  input  pc_sel_e               pc_mux_o
+  input  pc_sel_e               pc_mux_o,
+  input  logic                  special_req,
+  input  logic                  special_req_pc_change,
+  input  logic                  handle_irq,
+  input  logic                  enter_debug_mode,
+  input  logic                  id_in_ready_o,
+  input   exc_pc_sel_e          exc_pc_mux_o
 );
 
   `DV_FCOV_SIGNAL(logic, all_debug_req, debug_req_i || debug_mode_q || debug_single_step_i)
@@ -131,6 +137,114 @@ module ibex_controller_dv_ext import ibex_pkg::*; (
    end
 
 
+   //
+   // Assertions moved from the ibex_controller.sv RTL to here
+   //
+ 
+  // Selectors must be known/valid.
+  `ASSERT(IbexCtrlStateValid, ctrl_fsm_cs inside {
+      RESET, BOOT_SET, WAIT_SLEEP, SLEEP, FIRST_FETCH, DECODE, FLUSH,
+      IRQ_TAKEN, DBG_TAKEN_IF, DBG_TAKEN_ID})
+
+  `ifdef INC_ASSERT
+    // If something that causes a jump into an exception handler is seen that jump must occur before
+    // the next instruction executes. The logic tracks whether a jump into an exception handler is
+    // expected. Assertions check the jump occurs.
+
+    logic exception_req, exception_req_pending, exception_req_accepted, exception_req_done;
+    logic exception_pc_set, seen_exception_pc_set, expect_exception_pc_set;
+    logic exception_req_needs_pc_set;
+    logic cs_taken_exception, ns_taken_exception;
+
+    assign cs_taken_exception = (ctrl_fsm_cs == FLUSH);
+    // || (ctrl_fsm_cs == DBG_TAKEN_IF) || (ctrl_fsm_cs == DBG_TAKEN_ID);
+    assign ns_taken_exception = (ctrl_fsm_ns == FLUSH);
+    // || (ctrl_fsm_ns == DBG_TAKEN_IF) || (ctrl_fsm_ns == DBG_TAKEN_ID);
+
+    // kliu 05242024: excluding handle_irq here since handle_irq may not be processed if 
+    // mstatus.mie is clearaed by the current instruction (either cssrw to mstatus or cjalr to
+    // an interrupt-disabled sentry)
+    // assign exception_req = (special_req | enter_debug_mode | handle_irq);
+    //
+    // kliu 06182024: this doesn't really work with enter_debug_mode either since ctrl_fsm can 
+    // go directly from FLUSH to DBG_TAKEN_IF, without going back to DECODE first. Basically the 
+    // assertion logic below assumes exception requests canbe sequentialized but it's not true in
+    // this case.
+    // assign exception_req = (special_req | enter_debug_mode);
+    assign exception_req = special_req;
+
+    // Any exception rquest will cause a transition out of DECODE, once the controller transitions
+    // back into DECODE we're done handling the request.
+    // kliu 05242024: change the condition to cover the wfi case (
+    // assign exception_req_done =
+    // exception_req_pending & (ctrl_fsm_cs != DECODE) & (ctrl_fsm_ns == DECODE);
+    assign exception_req_done =
+      exception_req_pending & cs_taken_exception;
+
+    // kliu 05242024: excluding handle_irq 
+    // assign exception_req_needs_pc_set = enter_debug_mode | handle_irq | special_req_pc_change;
+    assign exception_req_needs_pc_set = enter_debug_mode | special_req_pc_change;
+
+    // An exception PC set uses specific PC types
+    assign exception_pc_set =
+      exception_req_pending & (pc_set_o & (pc_mux_o inside {PC_EXC, PC_ERET, PC_DRET}));
+
+   always @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        exception_req_pending   <= 1'b0;
+        exception_req_accepted  <= 1'b0;
+        expect_exception_pc_set <= 1'b0;
+        seen_exception_pc_set   <= 1'b0;
+      end else begin
+        // Keep `exception_req_pending` asserted once an exception_req is seen until it is done
+        exception_req_pending <= (exception_req_pending | exception_req) & ~exception_req_done;
+
+        // The exception req has been accepted once the controller transitions out of decode
+        // kliu 05242024
+        //exception_req_accepted <= (exception_req_accepted & ~exception_req_done) |
+        //  (exception_req & ctrl_fsm_ns != DECODE);
+        exception_req_accepted <= (exception_req_accepted & ~exception_req_done) |
+          (exception_req & ns_taken_exception);
+
+
+        // Set `expect_exception_pc_set` if exception req needs one and keep it asserted until
+        // exception req is done
+        expect_exception_pc_set <= (expect_exception_pc_set | exception_req_needs_pc_set) &
+          ~exception_req_done;
+
+        // Keep `seen_exception_pc_set` asserted once an exception PC set is seen until the
+        // exception req is done
+        seen_exception_pc_set <= (seen_exception_pc_set | exception_pc_set) & ~exception_req_done;
+      end
+    end
+
+    // Once an exception request has been accepted it must be handled before controller goes back to
+    // DECODE
+    `ASSERT(IbexNoDoubleExceptionReq, exception_req_accepted |-> ctrl_fsm_cs != DECODE)
+
+    // Only signal ready, allowing a new instruction into ID, if there is no exception request
+    // pending or it is done this cycle.
+    `ASSERT(IbexDontSkipExceptionReq,
+      id_in_ready_o |-> !exception_req_pending || exception_req_done)
+
+    // Once a PC set has been performed for an exception request there must not be any other
+    // excepting those to move into debug mode.
+    `ASSERT(IbexNoDoubleSpecialReqPCSet,
+      seen_exception_pc_set &&
+        !((ctrl_fsm_cs inside {DBG_TAKEN_IF, DBG_TAKEN_ID}) &&
+          (pc_mux_o == PC_EXC) && (exc_pc_mux_o == EXC_PC_DBD))
+      |-> !pc_set_o)
+
+    // When an exception request is done there must have been an appropriate PC set (either this
+    // cycle or a previous one).
+    `ASSERT(IbexSetExceptionPCOnSpecialReqIfExpected,
+      exception_req_pending && expect_exception_pc_set && exception_req_done |->
+      seen_exception_pc_set || exception_pc_set)
+
+    // If there's a pending exception req that doesn't need a PC set we must not see one
+    `ASSERT(IbexNoPCSetOnSpecialReqIfNotExpected,
+      exception_req_pending && !expect_exception_pc_set |-> ~pc_set_o)
+  `endif
 
 endmodule
 
@@ -138,7 +252,7 @@ endmodule
 ////////////////////////////////////////////////////////////////
 // ibex_load_store_unit
 ////////////////////////////////////////////////////////////////
-module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
+module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; import cheriot_dv_pkg::*; (
   input  logic         clk_i,
   input  logic         rst_ni,
   input  logic         lsu_req_i,

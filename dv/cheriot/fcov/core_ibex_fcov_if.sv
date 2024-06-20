@@ -9,7 +9,7 @@
 `include "prim_assert.sv"
 `include "core_ibex_csr_categories.svh"
 
-interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
+interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cheriot_dv_pkg::*; (
   input clk_i,
   input rst_ni,
 
@@ -17,6 +17,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
   input priv_lvl_e priv_mode_lsu,
 
   input debug_mode,
+  input cheri_pmode_i,
 
 //  input fcov_rf_ecc_err_a_id,
 //  input fcov_rf_ecc_err_b_id,
@@ -94,7 +95,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
 
     case (id_stage_i.instr_rdata_i[6:0])
       ibex_pkg::OPCODE_LUI:    id_instr_category = InstrCategoryALU;
-      // ibex_pkg::OPCODE_AUIPC:  id_instr_category = InstrCategoryALU;
+      ibex_pkg::OPCODE_AUIPC:  id_instr_category = InstrCategoryCheriAddr;
       ibex_pkg::OPCODE_JAL:    id_instr_category = InstrCategoryCJAL;
       ibex_pkg::OPCODE_JALR:   id_instr_category = InstrCategoryCJALR;
       ibex_pkg::OPCODE_BRANCH: id_instr_category = InstrCategoryBranch;
@@ -374,7 +375,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
   logic instr_id_matches_trigger_d, instr_id_matches_trigger_q;
 
   assign instr_id_matches_trigger_d = id_stage_i.controller_i.trigger_match_i &&
-                                      id_stage_i.controller_i.fcov_debug_entry_if;
+                                      id_stage_i.controller_i.controller_dv_ext_i.fcov_debug_entry_if;
 
   // Delay instruction matching trigger point since it is catched in IF stage.
   // We would want to cross it with decoded instruction categories and it does not matter
@@ -518,7 +519,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
   logic [5:0] fcov_rs1_bitsize;
   assign fcov_rs1_bitsize = get_size(g_cheri_ex.u_cheri_ex.rf_rdata_a);
 
-  logic fcov_id_error, fcov_wb_err;
+  logic fcov_id_error, fcov_wb_error;
   assign fcov_id_error = id_stage_i.controller_i.instr_fetch_err_prio | id_stage_i.controller_i.illegal_insn_prio |
                          id_stage_i.controller_i.ecall_insn_prio      | id_stage_i.controller_i.ebrk_insn_prio |
                          id_stage_i.controller_i.cheri_ex_err_prio    | id_stage_i.controller_i.cheri_ex_err_prio |
@@ -667,7 +668,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
 //    `DV_FCOV_EXPR_SEEN(icache_enable, cs_registers_i.cpuctrlsts_part_d.icache_enable)
 
     cp_irq_pending: coverpoint id_stage_i.irq_pending_i | id_stage_i.irq_nm_i;
-    cp_debug_req: coverpoint id_stage_i.controller_i.fcov_debug_req;
+    cp_debug_req: coverpoint id_stage_i.controller_i.controller_dv_ext_i.fcov_debug_req;
 
     cp_csr_read_only: coverpoint cs_registers_i.csr_addr_i iff (ibex_core_dv_ext_i.fcov_csr_read_only) {
       ignore_bins ignore = {`IGNORED_CSRS};
@@ -693,9 +694,9 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     `DV_FCOV_EXPR_SEEN(insn_trigger_enter_debug, instr_id_matches_trigger_q)
 
     cp_nmi_taken: coverpoint ((fcov_irqs[5] || fcov_irqs[4])) iff
-                             (id_stage_i.controller_i.fcov_interrupt_taken);
+                             (id_stage_i.controller_i.controller_dv_ext_i.fcov_interrupt_taken);
 
-    cp_interrupt_taken: coverpoint fcov_irqs iff (id_stage_i.controller_i.fcov_interrupt_taken){
+    cp_interrupt_taken: coverpoint fcov_irqs iff (id_stage_i.controller_i.controller_dv_ext_i.fcov_interrupt_taken){
       wildcard bins nmi_external  = {6'b1?????};
       wildcard bins nmi_internal  = {6'b01????};
       wildcard bins irq_fast      = {6'b001???};
@@ -776,14 +777,14 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     // New coverage points
     //
 
-    cp_rs1_regaddr: coverpoint id_stage_i.rf_raddr_a_o[4:0] iff (id_stage_i.rf_ren_a) {
+    cp_rs1_regaddr: coverpoint id_stage_i.rf_raddr_a_o[4:0] iff (cheri_pmode_i & id_stage_i.rf_ren_a) {
       bins bin0      = {0};
       bins bin1to14  = {[1:14]};
       bins bin15     = {15};
       bins bin16to31 = {[16:31]};   // for CHERIoT negative case
     }
 
-    cp_rs2_regaddr: coverpoint id_stage_i.rf_raddr_b_o[4:0] iff (id_stage_i.rf_ren_b) {
+    cp_rs2_regaddr: coverpoint id_stage_i.rf_raddr_b_o[4:0] iff (cheri_pmode_i & id_stage_i.rf_ren_b) {
       bins bin0      = {0};
       bins bin1to14  = {[1:14]};
       bins bin15     = {15};
@@ -791,7 +792,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
     }
  
     cp_rd_regaddr:  coverpoint id_stage_i.rf_waddr_id_o[4:0] iff 
-                 (id_stage_i.rf_we_id_o | g_cheri_ex.u_cheri_ex.cheri_rf_we_o) {
+                 (cheri_pmode_i & (id_stage_i.rf_we_id_o | g_cheri_ex.u_cheri_ex.cheri_rf_we_o)) {
       bins bin0      = {0};
       bins bin1to14  = {[1:14]};
       bins bin15     = {15};
@@ -1169,7 +1170,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
       wildcard illegal_bins illegal = {5'b1????} ;
     }
 
-    cp_scr_addr: coverpoint id_stage_i.rf_raddr_b_o[4:0] { 
+    cp_scr_addr: coverpoint g_cheri_ex.u_cheri_ex.csr_addr_o { 
       bins good[] = {[28:31]};  // ZTOPC goes to a separate interface
       bins bad    = {[0:23]};
       ignore_bins ignore = {[24:26]};    // debug SCR
@@ -1487,7 +1488,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
 
     // interrupt_taken_instr_cross: cross cp_nmi_taken, instr_unstalled_last,
     interrupt_taken_instr_cross: cross cp_interrupt_taken, instr_unstalled_last,
-      cp_id_instr_category_last iff (id_stage_i.controller_i.fcov_interrupt_taken);
+      cp_id_instr_category_last iff (id_stage_i.controller_i.controller_dv_ext_i.fcov_interrupt_taken);
 
     debug_instruction_cross: cross cp_debug_mode, cp_id_instr_category;
 
@@ -1620,7 +1621,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; (
 
     // Instruction/error/interrupt sequence coverage
     // -- note instructions faulted at ID stage doesn't go to WB stage, so we need both cross items below
-    instr_error_sequence_cross0: cross id_instr_category, wb_instr_category, id_stage_i.controller_i.handle_irq, fcov_id_error, fcov_wb_err;
+    instr_error_sequence_cross0: cross id_instr_category, wb_instr_category, id_stage_i.controller_i.handle_irq, fcov_id_error, fcov_wb_error;
     instr_error_sequence_cross1: cross id_instr_category, id_instr_category_q, fcov_id_exc_int, fcov_id_exc_int_q;
 
 
