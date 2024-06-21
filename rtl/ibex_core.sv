@@ -1894,6 +1894,10 @@ end
     end
   end
 
+  logic is_mem_rd, is_mem_wr;
+  assign is_mem_rd = lsu_req & ~lsu_we;
+  assign is_mem_wr = lsu_req & lsu_we;
+
   for (genvar i = 0; i < RVFI_STAGES; i = i + 1) begin : g_rvfi_stages
     int im1;
 
@@ -1953,8 +1957,8 @@ end
             rvfi_stage_rs3_addr[i]        <= rvfi_rs3_addr_d;
             rvfi_stage_pc_rdata[i]        <= pc_id;
             rvfi_stage_pc_wdata[i]        <= pc_set ? branch_target_ex : pc_if;
-            rvfi_stage_mem_rmask[i]       <= (data_we_o | ~data_rvalid_i) ? 4'b0000 : rvfi_mem_mask_int;  // kliu
-            rvfi_stage_mem_wmask[i]       <= data_we_o ? rvfi_mem_mask_int : 4'b0000;
+            rvfi_stage_mem_rmask[i]       <= is_mem_rd ? rvfi_mem_mask_int : 4'b0000;  // kliu
+            rvfi_stage_mem_wmask[i]       <= is_mem_wr ? rvfi_mem_mask_int : 4'b0000;
             rvfi_stage_rs1_rdata[i]       <= rvfi_rs1_data_d;
             rvfi_stage_rs2_rdata[i]       <= rvfi_rs2_data_d;
             rvfi_stage_rs3_rdata[i]       <= rvfi_rs3_data_d;
