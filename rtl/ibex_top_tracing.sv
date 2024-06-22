@@ -192,7 +192,6 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
     .RndCnstLfsrPerm  ( RndCnstLfsrPerm  ),
     .DmHaltAddr       (DmHaltAddr       ),
     .DmExceptionAddr  (DmExceptionAddr  ),
-    .BranchTargetALU  (BranchTargetALU),
     .CHERIoTEn        (CHERIoTEn),
     .DataWidth        (DataWidth),
     .HeapBase         (HeapBase   ),
