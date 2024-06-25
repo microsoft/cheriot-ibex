@@ -22,7 +22,7 @@ module instr_mem_model (
   output logic [31:0] instr_rdata,
   output logic        instr_err
 );
-  localparam int unsigned MEM_AW     = 16;  
+  localparam int unsigned MEM_AW     = 17;   // use the higher 256kB for debug ROM space 
   localparam int unsigned MEM_DW     = 32; 
  
   logic              mem_cs;
@@ -37,7 +37,7 @@ module instr_mem_model (
   reg   [MEM_DW-1:0] iram[0:2**MEM_AW-1];
 
   mem_obi_if #(
-    .DW         (32)
+    .DW         (MEM_DW)
   ) u_mem_obj_if (
     .clk_i        (clk),
     .rst_ni       (rst_n),
@@ -95,5 +95,18 @@ module instr_mem_model (
     end
   end 
  
+  // initialize debug ROM content
+  initial begin
+    #1;
+    // debug entry
+    iram[65536] = 32'h0001_0001;   // nop, nop
+    iram[65537] = 32'h7b20_0073;   // dret
+    iram[65538] = 32'h0;
+   
+    // debug mode exception handler 
+    iram[65568] = 32'h0001_0001;
+    iram[65569] = 32'h3020_0073;   // mret
+    iram[65570] = 32'h0;
+  end
 
 endmodule

@@ -1992,8 +1992,8 @@ end
             rvfi_stage_rs3_addr[i]  <= rvfi_stage_rs3_addr[im1];
             rvfi_stage_pc_rdata[i]  <= rvfi_stage_pc_rdata[im1];
             rvfi_stage_pc_wdata[i]  <= rvfi_stage_pc_wdata[im1];
-            rvfi_stage_mem_rmask[i] <= rvfi_stage_mem_rmask[im1];
-            rvfi_stage_mem_wmask[i] <= rvfi_stage_mem_wmask[im1];
+            rvfi_stage_mem_rmask[i] <= rvfi_trap_wb ? 4'b0000 : rvfi_stage_mem_rmask[im1];
+            rvfi_stage_mem_wmask[i] <= rvfi_trap_wb ? 4'b0000 : rvfi_stage_mem_wmask[im1];
             rvfi_stage_rs1_rdata[i] <= rvfi_stage_rs1_rdata[im1];
             rvfi_stage_rs2_rdata[i] <= rvfi_stage_rs2_rdata[im1];
             rvfi_stage_rs3_rdata[i] <= rvfi_stage_rs3_rdata[im1];

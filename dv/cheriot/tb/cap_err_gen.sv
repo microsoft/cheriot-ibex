@@ -111,6 +111,7 @@ module cap_err_gen import ibex_pkg::*; import cheri_pkg::*; (
   logic [31:0] cap_err_seed;
 
   logic        pc_in_isr;
+  logic        debug_mode;
   reg_cap_t    rcap_a, rcap_b;
   logic [31:0] rdata_a, rdata_b;
 
@@ -144,6 +145,7 @@ module cap_err_gen import ibex_pkg::*; import cheri_pkg::*; (
   assign is_cheri_lsu = cheri_exec_id  & (cheri_operator[CLOAD_CAP] | cheri_operator[CSTORE_CAP]);
   assign is_cjalr     = cheri_exec_id  & cheri_operator[CJALR];
   assign pc_in_isr    = dut.u_ibex_top.u_ibex_core.id_stage_i.controller_i.controller_dv_ext_i.cpu_in_isr;
+  assign debug_mode   = dut.u_ibex_top.u_ibex_core.debug_mode;
 
   assign err_failed = err_active & `EX_PATH.lsu_req_o &
                       (~`EX_PATH.lsu_cheri_err_o) & 
@@ -172,7 +174,7 @@ module cap_err_gen import ibex_pkg::*; import cheri_pkg::*; (
 
       // inject load/store cheri errors
       force `EX_PATH.rf_rcap_a = rcap_a;  // default
-      if ((is_cheri_lsu | is_rv32_lsu) & cap_err_schd & ~pc_in_isr) begin 
+      if ((is_cheri_lsu | is_rv32_lsu) & cap_err_schd & ~pc_in_isr & ~debug_mode) begin 
         lsu_acc_mod  = inject_ls_cap_err(lsu_acc_orig, cap_err_seed);
         force `EX_PATH.rf_rcap_a = lsu_acc_mod.cs1_cap;
         if (is_rv32_lsu && (lsu_acc_mod.flag[7:6] == 2'b01))   // modify address
@@ -181,7 +183,7 @@ module cap_err_gen import ibex_pkg::*; import cheri_pkg::*; (
           force `EX_PATH.cheri_ls_chkaddr = lsu_acc_mod.addr;
 
         err_active = 1'b1;
-      end else if (is_cjalr & cap_err_schd & ~pc_in_isr) begin
+      end else if (is_cjalr & cap_err_schd & ~pc_in_isr & ~debug_mode) begin
         if (cap_err_seed[1:0] == 2'b00)
           force `EX_PATH.rf_rcap_a.valid = 1'b0; 
         if (cap_err_seed[3:2] == 2'b00)

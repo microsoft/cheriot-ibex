@@ -788,6 +788,7 @@ module ibex_controller #(
                  * following instruction." [Privileged Spec v1.11, p.40]
                  */
                 exc_cause_o      = EXC_CAUSE_BREAKPOINT;
+                if (CHERIoTEn && cheri_pmode_i) csr_mtval_o = pc_id_i;     // kliu added to match sail
               end
             end
             store_err_prio: begin

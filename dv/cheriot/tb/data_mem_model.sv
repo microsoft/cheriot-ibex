@@ -131,7 +131,7 @@ module data_mem_model import cheriot_dv_pkg::*; (
   //   - responds with an error, or
   //   - accesses from stkz is supposed to be ignored.
   assign dram_addr32 = mem_addr32[DRAM_AW-1:0];
-  assign dram_sel    = mem_cs & mem_addr32[29] & (mem_addr32[28:DRAM_AW+2] == 0);   
+  assign dram_sel    = mem_cs & mem_addr32[29] & (mem_addr32[28:DRAM_AW+1] == 0);   
   assign dram_cs     = dram_sel & ~mem_err & (~mem_req_stkz | ~ignore_stkz);   
 
   always @(posedge clk, negedge rst_n) begin

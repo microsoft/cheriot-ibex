@@ -51,6 +51,8 @@ module tb_cheriot_top (
   logic        irq_timer;
   logic [2:0]  irq_vec, intr_ack;
   logic        intr_enable;
+ 
+  logic        dbg_req_enable;
 
   logic        tbre_bg_enable, stkz_bg_enable;
   logic        tbre_bg_active, stkz_bg_active;
@@ -67,6 +69,8 @@ module tb_cheriot_top (
   logic [127:0] mmreg_corein, mmreg_corein_0, mmreg_corein_1;
   logic [63:0]  mmreg_coreout;
   logic         cheri_fatal_err;
+
+  logic         debug_req;
 
 `ifndef VERILATOR
   `ifdef CHERI0
@@ -154,8 +158,8 @@ module tb_cheriot_top (
                      .HeapBase        (32'h8000_0000),
                      .TSMapBase       (32'h8003_0000),
                      .TSMapSize       (1024),
-                     .DmHaltAddr      (`BOOT_ADDR + 'h40),
-                     .DmExceptionAddr (`BOOT_ADDR + 'h44),
+                     .DmHaltAddr      (32'h8004_0000),
+                     .DmExceptionAddr (32'h8004_0080),
                      .MMRegDinW       (128),
                      .MMRegDoutW      (64)
   ) dut (
@@ -168,7 +172,7 @@ module tb_cheriot_top (
     .cheri_pmode_i        (cheri_pmode ),
     .cheri_tsafe_en_i     (cheri_tsafe_en ),
     .boot_addr_i          (`BOOT_ADDR  ), // align with spike boot address
-    .debug_req_i          (1'b0        ),
+    .debug_req_i          (debug_req   ),
     .fetch_enable_i       (4'b1001     ),
     .instr_req_o          (instr_req   ),
     .instr_gnt_i          (instr_gnt   ),
@@ -277,11 +281,13 @@ module tb_cheriot_top (
   logic [3:0] err_enable_vec;
 
   logic [3:0] tbre_intvl, stkz_intvl;
+  logic [3:0] dbg_req_intvl;
 
   int unsigned cfg_instr_err_rate, cfg_data_err_rate;
   int unsigned cfg_instr_gnt_wmax, cfg_data_gnt_wmax;
   int unsigned cfg_instr_resp_wmax, cfg_data_resp_wmax;
   int unsigned cfg_intr_intvl;
+  int unsigned cfg_dbg_req_intvl;
   int unsigned cfg_cap_err_rate;
   int unsigned cfg_tbre_intvl, cfg_stkz_intvl;
 
@@ -297,6 +303,7 @@ module tb_cheriot_top (
     cap_err_enable   = 1'b0;
     tbre_bg_enable   = 1'b0;
     stkz_bg_enable   = 1'b0;
+    dbg_req_enable   = 1'b0;
     end_mon_flag     = 1'b0;
     end_sim_ack_o    = 1'b0;
 
@@ -311,6 +318,7 @@ module tb_cheriot_top (
     cap_err_rate    = 3'h0;
     tbre_intvl      = 3'h0;
     stkz_intvl      = 3'h0;
+    dbg_req_intvl   = 4'h0;
 
     i = $value$plusargs("INSTR_ERR_RATE=%d", cfg_instr_err_rate);
     if (i == 1) instr_err_rate = cfg_instr_err_rate[2:0];
@@ -329,6 +337,9 @@ module tb_cheriot_top (
     i = $value$plusargs("INTR_INTVL=%d", cfg_intr_intvl);
     if (i == 1) intr_intvl = cfg_intr_intvl[3:0];
 
+    i = $value$plusargs("DBG_REQ_INTVL=%d", cfg_dbg_req_intvl);
+    if (i == 1) dbg_req_intvl = cfg_dbg_req_intvl[3:0];
+
     i = $value$plusargs("CAP_ERR_RATE=%d", cfg_cap_err_rate);
     if (i == 1) cap_err_rate = cfg_cap_err_rate[2:0];
 
@@ -342,7 +353,7 @@ module tb_cheriot_top (
              instr_gnt_wmax, instr_resp_wmax, data_gnt_wmax, data_resp_wmax); 
     $display("TB> INSTR_ERR_RATE = %d, DATA_ERR_RATE = %d, INTR_INTVL = %d, CAP_ERR_RATE = %d", 
              instr_err_rate,  data_err_rate, intr_intvl, cap_err_rate);
-    $display("TB> TBRE_INTVL = %d, STKZ_INTVL = %d", tbre_intvl, stkz_intvl);
+    $display("TB> TBRE_INTVL = %d, STKZ_INTVL = %d, DBG_REQ_INTVL = %d", tbre_intvl, stkz_intvl, dbg_req_intvl);
 
     @(posedge rst_ni);
     repeat (10) @(posedge clk_i);
@@ -355,6 +366,7 @@ module tb_cheriot_top (
       cap_err_enable   = err_enable_vec[3];
       tbre_bg_enable   = 1'b1;   // embedded firmware doesn't need to be aware of bg traffic
       stkz_bg_enable   = 1'b1;   // if it's not using tbre/stkz in the foreground
+      dbg_req_enable   = 1'b1;
     end
  
     // end of simulation
@@ -365,6 +377,7 @@ module tb_cheriot_top (
     cap_err_enable   = 1'b0;
     tbre_bg_enable   = 1'b0;
     stkz_bg_enable   = 1'b0;
+    dbg_req_enable   = 1'b0;
 
     while (tbre_bg_active | stkz_bg_active) @(posedge clk_i);   // wait for TBRE done
     repeat (200) @(posedge clk_i);  // wait for exception/interrupts  to settle
@@ -461,6 +474,18 @@ module tb_cheriot_top (
     .intr_en         (intr_enable  ),
     .intr_ack        (intr_ack     ),  
     .irq_o           (irq_vec      )
+  );
+
+  //
+  // random debug request generator
+  //
+  dbg_req_gen u_dbg_req_gen (
+    .clk             (clk_i        ), 
+    .rst_n           (rst_ni       ),
+    .DBG_REQ_INTVL   (dbg_req_intvl),
+    .dbg_req_en      (dbg_req_enable),
+    .dbg_mode_i      (dut.u_ibex_top.u_ibex_core.debug_mode),  
+    .dbg_req_o       (debug_req    )
   );
 
   //
