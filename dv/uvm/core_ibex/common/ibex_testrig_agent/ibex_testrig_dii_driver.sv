@@ -78,6 +78,8 @@ class ibex_testrig_dii_driver extends uvm_component;
         end
       end
 
+      $display ("XYZ:dii_cmd=%x, dii_insn=%x", dii_cmd, dii_insn);
+
       dii_stream_begun = 1;
       insn_wait_timeouts = 0;
 
@@ -103,6 +105,7 @@ class ibex_testrig_dii_driver extends uvm_component;
 
         // Wait for all of the injected instructions to retire.
         wait (dii_vif.instr_out >= dii_vif.instr_in);
+        repeat (2) @(posedge dii_vif.clk);
 
         // Reset the core.
         `uvm_info(`gfn, "Performing reset", UVM_LOW);
@@ -113,6 +116,7 @@ class ibex_testrig_dii_driver extends uvm_component;
         dii_vif.enable_count_instr();
       end if (dii_cmd == DII_CMD_INSN) begin
         `uvm_info(`gfn, $sformatf("Injecting instruction %x", dii_insn), UVM_HIGH);
+      $display ("UUU:injecting insn=%x", dii_insn);
 
         dii_vif.cb.instr_rdata_dii <= dii_insn;
         @dii_vif.cb;
@@ -122,6 +126,7 @@ class ibex_testrig_dii_driver extends uvm_component;
           `uvm_info(`gfn, "Waiting for ack", UVM_HIGH);
         end
 
+      $display ("UUU:Seeing ack insn=%x", dii_insn);
         `uvm_info(`gfn, "Ack seen", UVM_HIGH);
       end
     end
