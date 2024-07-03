@@ -239,11 +239,11 @@ module ibex_decoder import cheri_pkg::*; #(
 
   if (CheriLimit16Regs) begin : gen_cheri_reg_check_active
     assign illegal_reg_cheri = cheri_pmode_i & 
-                               ((rf_raddr_a_o[4] & (alu_op_a_mux_sel_o == OP_A_REG_A)) |
-                                (rf_raddr_a_o[4] & cheri_rf_ren_a) | 
-                                (rf_raddr_b_o[4] & (alu_op_b_mux_sel_o == OP_B_REG_B)) |
-                                (rf_raddr_b_o[4] & cheri_rf_ren_b) | 
-                                (rf_waddr_o[4]   & rf_we));
+                               ((raddr_a[4]  & (alu_op_a_mux_sel_o == OP_A_REG_A)) |
+                                (raddr_a[4]  & cheri_rf_ren_a & cheri_opcode_en) | 
+                                (raddr_b[4]  & (alu_op_b_mux_sel_o == OP_B_REG_B)) |
+                                (raddr_b[4]  & cheri_rf_ren_b & cheri_opcode_en) | 
+                                (instr_rd[4] & rf_we));
   end else begin : gen_cheri_reg_check_inactive
     assign illegal_reg_cheri = 1'b0;
   end
