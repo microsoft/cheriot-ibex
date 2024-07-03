@@ -136,6 +136,15 @@ module data_mem_model import cheriot_dv_pkg::*; (
     end else if (dram_cs) begin
       tsmap_rdata <= dram[tsram_addr32];  
     end
+  end
+
+  // initialize memory content to match sail
+  initial begin 
+     int i;
+     while (1) begin
+       @(posedge rst_n);
+       for (i=0; i < 2**DRAM_AW; i++) dram[i] = 33'h0;
+     end
   end 
   
 endmodule

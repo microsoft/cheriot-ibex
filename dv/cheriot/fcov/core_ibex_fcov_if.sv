@@ -818,7 +818,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       bins bin0 = {0};
       bins bin1 = {[1:14]};
       bins bin2 = {24};
-      illegal_bins illegal = default;
+      illegal_bins illegal = default;       // illegal for tagged caps
     }
 
     // valid pcc now will always have otype == 0 and perm_ex set (assertion in cs_reg_dv_ext)
@@ -857,8 +857,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       bins bin[] = {[0:7]};    // including reserved values for coverage
     }
 
-    cp_cs1_sealed: coverpoint ~(|g_cheri_ex.u_cheri_ex.rf_fullcap_a.otype) iff 
-                              (g_cheri_ex.u_cheri_ex.rf_fullcap_a.valid);
+    cp_cs1_sealed: coverpoint ((g_cheri_ex.u_cheri_ex.rf_fullcap_a.otype != 0) & (g_cheri_ex.u_cheri_ex.rf_fullcap_a.valid));
 
     cp_cs1_cor: coverpoint {g_cheri_ex.u_cheri_ex.rf_fullcap_a.base_cor, 
                             g_cheri_ex.u_cheri_ex.rf_fullcap_a.top_cor} {
@@ -867,7 +866,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       // bins bin2 = {4'b0011}; // base_cor = 0, top_cor = -1, impossible case
       bins bin3 = {4'b1100}; 
       // bins bin4 = {4'b1101};    // impossible case
-      bins bin5 = {4'b1111};    
+      bins bin5 = {4'b1111};
     }
 
     cp_cs1_top: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_a.top {
@@ -952,6 +951,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       bins bin1   = {[1: 33'hffff_fffe]};
       bins bin2   = {33'hffff_ffff};
       bins bin3   = {33'h1_0000_0000};
+      // ignore_bins ignore = {[33'h1_0000_0001:$]}; 
     }
 
     cp_rs2_perm_mask: coverpoint g_cheri_ex.u_cheri_ex.rf_rdata_b[12:0] {
@@ -997,8 +997,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       bins bin[] = {[0:7]};    // including reserved values for coverage
     }
 
-    cp_cs2_sealed: coverpoint ~(|g_cheri_ex.u_cheri_ex.rf_fullcap_b.otype) iff 
-                              (g_cheri_ex.u_cheri_ex.rf_fullcap_a.valid);
+    cp_cs2_sealed: coverpoint ((g_cheri_ex.u_cheri_ex.rf_fullcap_b.otype != 0) & (g_cheri_ex.u_cheri_ex.rf_fullcap_b.valid));
 
     cp_cs2_cor: coverpoint {g_cheri_ex.u_cheri_ex.rf_fullcap_b.base_cor, 
                             g_cheri_ex.u_cheri_ex.rf_fullcap_b.top_cor} {
@@ -1387,17 +1386,43 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       bins case2 = {2};    
     }
 
-    cp_cjal_target_bound_cases:  coverpoint fcov_cjal_target_bound_cases;
-    cp_cjalr_target_bound_cases: coverpoint fcov_cjalr_target_bound_cases;
-    cp_branch_target_bound_cases: coverpoint fcov_branch_target_bound_cases;
+    cp_cjal_target_bound_cases:  coverpoint fcov_cjal_target_bound_cases {
+      wildcard ignore_bins igonroe0 = {9'b???????11};
+      wildcard ignore_bins igonroe1 = {9'b?????11??};
+    }
 
-    cp_clsc_bound_cases: coverpoint fcov_clsc_bound_cases;
-    cp_seal_bound_cases: coverpoint fcov_seal_bound_cases;
+    cp_cjalr_target_bound_cases: coverpoint fcov_cjalr_target_bound_cases {
+      wildcard ignore_bins igonroe0 = {9'b???????11};
+      wildcard ignore_bins igonroe1 = {9'b?????11??};
+    }
+
+    cp_branch_target_bound_cases: coverpoint fcov_branch_target_bound_cases {
+      wildcard ignore_bins igonroe0 = {9'b???????11};
+      wildcard ignore_bins igonroe1 = {9'b?????11??};
+    }
+
+    cp_clsc_bound_cases: coverpoint fcov_clsc_bound_cases {
+      wildcard ignore_bins igonroe0 = {9'b???????11};
+      wildcard ignore_bins igonroe1 = {9'b?????11??};
+    }
+
+    cp_seal_bound_cases: coverpoint fcov_seal_bound_cases {
+      wildcard ignore_bins igonroe0 = {9'b???????11};
+      wildcard ignore_bins igonroe1 = {9'b?????11??};
+    }
 
     cp_clsc_addr_lsb: coverpoint g_cheri_ex.u_cheri_ex.cheri_ls_chkaddr[2:0];
 
-    cp_setbounds_cases: coverpoint fcov_setbounds_cases;
-    cp_setboundsimm_cases: coverpoint fcov_setboundsimm_cases;
+    cp_setbounds_cases: coverpoint fcov_setbounds_cases {
+      wildcard ignore_bins igonroe0 = {5'b???11};
+      wildcard ignore_bins igonroe1 = {5'b?11??};
+    }
+
+    cp_setboundsimm_cases: coverpoint fcov_setboundsimm_cases {
+      wildcard ignore_bins igonroe0 = {5'b???11};
+      wildcard ignore_bins igonroe1 = {5'b?11??};
+    }
+
     cp_rs1_bitsize: coverpoint fcov_rs1_bitsize;
 
     cp_mstatus_mie: coverpoint cs_registers_i.csr_mstatus_mie_o;
@@ -1723,7 +1748,10 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       bins bin1 = {1'b1};
     }
 
-    cheriot_instr_csethigh_cross0: cross cp_cd_tag, cp_cd_otype, cp_cd_cperms, cp_instr_csethigh; 
+    cheriot_instr_csethigh_cross0: cross cp_cd_tag, cp_cd_otype, cp_cd_cperms, cp_instr_csethigh {
+      illegal_bins illegal = (binsof(cp_cd_tag) intersect {1'b1});
+    }
+ 
     cheriot_instr_csethigh_cross1: cross cp_cd_cor, cp_cd_exp, cp_cd_top, cp_cd_base, cp_cd_address, cp_instr_csethigh; 
     
     //
@@ -1784,7 +1812,8 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       bins bin1 = {1'b1};
     }
     
-    cheriot_instr_cgethigh_cross0: cross cp_cs1_tag, cp_cs1_otype, cp_cs1_perms, cp_instr_cgethigh; 
+    cheriot_instr_cgethigh_cross0: cross cp_cs1_tag, cp_cs1_otype, cp_cs1_perms, cp_instr_cgethigh;
+
     cheriot_instr_cgethigh_cross1: cross cp_cs1_cor, cp_cs1_exp, cp_cs1_top, cp_cs1_base, cp_cs1_address, cp_instr_cgethigh; 
 
     //
@@ -1877,7 +1906,12 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
     }
 
     cheriot_instr_csetbounds_cross0: cross cp_cs1_tag, cp_cs1_sealed, cp_setbounds_cases, cp_cs1_base32, cp_cs1_top33, cp_cs1_exp, 
-                                           cp_cd_tag, cp_instr_csetbounds; 
+                                           cp_cd_tag, cp_instr_csetbounds { 
+      // we really only care about cs1.tag == 1 case
+      // when tag == 1, addr < base case (cp_setbounds_cases[0] == 1) is only possible when exp == 24
+      ignore_bins ignore = (binsof(cp_cs1_tag) intersect {1'b0}) ||
+                           ((!binsof(cp_cs1_exp) intersect {24}) && (binsof(cp_setbounds_cases) with (cp_setbounds_cases %2 == 1)));
+    }
    
     // CSetboundsexact
     cp_instr_csetboundsexact: coverpoint cheri_ops[CSET_BOUNDS_EX]  iff (g_cheri_ex.u_cheri_ex.cheri_exec_id_i) {

@@ -198,6 +198,7 @@ module ibex_controller #(
   logic csr_cheri_asr_err;
 
 `ifndef SYNTHESIS
+`ifndef DII_SIM
   // synopsys translate_off
   // make sure we are called later so that we do not generate messages for
   // glitches
@@ -211,6 +212,7 @@ module ibex_controller #(
     end
   end
   // synopsys translate_on
+`endif
 `endif
 
   ////////////////

@@ -136,6 +136,9 @@ def parse_ibex_cap(cap_val, addr_val):
       top  = (top9 << exp)  + (((addr_val >> (exp+9)) + top_cor)  << (exp+9));
       base = (base9 << exp) + (((addr_val >> (exp+9)) + base_cor) << (exp+9));
 
+    top  &= 0x1ffffffff    # convert to unsigned
+    base &= 0xffffffff
+
     perm = expand_perms(cperms)
 
     return (tag, perm , obj_type, 0, top, base)        # QQQQ perm coding later. sail doesn't log exp
@@ -145,6 +148,7 @@ def parse_ibex_cap(cap_val, addr_val):
 #
 class trace_obj:
     def __init__(self):
+        self.line_num = 0
         self.valid = 0
         self.cycle = 0
         self.pc = 0
@@ -223,7 +227,8 @@ class trace_obj:
     #    return result
 
     def __str__(self):          # for printing
-        pstr = f"trace_obj: {self.valid}, {self.trap}, {self.cycle}, 0x{self.pc:08x}, 0x{self.instr:08x}, " 
+        pstr = f"trace_obj: line {self.line_num:6d},"
+        pstr += f"{self.valid}, {self.trap}, {self.cycle}, 0x{self.pc:08x}, 0x{self.instr:08x}, " 
         pstr += f"[{self.reg_wr}, {self.reg_waddr}, 0x{self.reg_wdata:X}, "
         pstr += f"({self.reg_wcap[0]}, 0x{self.reg_wcap[1]:x}, 0x{self.reg_wcap[2]:x}, "
         pstr += f"0x{self.reg_wcap[3]:x}, 0x{self.reg_wcap[4]:x}, 0x{self.reg_wcap[5]:x})], "
@@ -273,6 +278,8 @@ class ibex_trace_file(trace_file):
                 break
 
         if len(matches1) != 0:
+            nxt_obj.line_num = self.line_ptr
+
             nxt_obj.valid = 1
             nxt_obj.cycle = int(matches1[0][1])
             nxt_obj.pc    = int(matches1[0][2], 16)
@@ -382,6 +389,8 @@ class sail_trace_file(trace_file) :
         #printf("line_ptr =%d\n", self.line_ptr);
 
         if len(matches1) != 0:
+            nxt_obj.line_num = self.line_ptr
+
             nxt_obj.valid = 1
             nxt_obj.cycle = int(matches1[0][0])
             nxt_obj.pc    = int(matches1[0][1], 16)
@@ -393,10 +402,13 @@ class sail_trace_file(trace_file) :
             while True:
                 if (self.line_ptr >= len(self.lines)):               # end of file
                     break
-                if re.search(r'^\s*mem\[X', self.lines[self.line_ptr]) :  # another instr
+                if (self.is_rvfi == 0) and re.search(r'^\s*mem\[X', self.lines[self.line_ptr]) :  # another instr
                     self.line_ptr += 1 
                     break
                 if re.search(r'^\s*$', self.lines[self.line_ptr]) :  # empty lines
+                    self.line_ptr += 1 
+                    break
+                if (self.is_rvfi == 1) and re.search(r'^\Sending.*response', self.lines[self.line_ptr]) :  # another instr
                     self.line_ptr += 1 
                     break
                 full_instr += " "
@@ -463,6 +475,19 @@ class sail_trace_file(trace_file) :
 
         return nxt_obj
 
+    def load(self):             # sail_trace load function
+        super().load()
+        self.is_rvfi = 0
+        pattern0 = r'RVFI'
+        i = 0;
+        while i < 10 :
+            matches0 = re.findall(pattern0, self.lines[i])
+            if len(matches0) != 0:
+                self.is_rvfi = 1
+                print("Sail log is RVFI")
+                break
+            i += 1
+
 #
 # main program body
 #
@@ -500,7 +525,9 @@ sail_trace = sail_trace_file(sail_trace_name)
 ibex_trace.load()
 sail_trace.load()
 
-cmp_cnt = 0; eq_cnt = 0; neq_cnt = 0; revoke_err_cnt = 0; ibex_isr_cnt = 0;
+cmp_cnt = 0; eq_cnt = 0; neq_cnt = 0; revoke_err_cnt = 0; 
+ibex_isr_cnt = 0; ibex_dbg_cnt = 0;
+
 pending_revoke_regs = [0] * 32
 ibex_in_isr = 0
 outstanding_trap = 0
@@ -511,13 +538,15 @@ while True:
             ibex_obj = ibex_trace.find_nxt()
             if (ibex_obj.valid == 0):
                 break
-            if (ibex_obj.trap == 0) and (ibex_obj.intr == 0) and (ibex_in_isr == 0):
+            if (ibex_obj.trap == 0) and (ibex_obj.intr == 0) and (ibex_in_isr == 0) and (ibex_obj.pc < 0x80040000):
                 break
             if (ibex_obj.trap == 1) or  (ibex_obj.intr == 1): 
                 ibex_in_isr = 1
                 ibex_isr_cnt += 1
             if (ibex_in_isr == 1) and (ibex_obj.instr == 0x30200073):  # mret
                 ibex_in_isr = 0
+            if (ibex_obj.pc == 0x80040000): 
+                ibex_dbg_cnt += 1
     else :  
         ibex_obj = ibex_trace.find_nxt()
 
@@ -585,8 +614,8 @@ while True:
     del sail_obj
 
 
-printf("%d trace objects compared, %d equal, %d not equal, %d revocation errors, %d ISRs found in ibex trace\n", 
-        cmp_cnt, eq_cnt, neq_cnt, revoke_err_cnt, ibex_isr_cnt)
+printf("%d trace objects compared, %d equal, %d not equal, %d revocation errors, %d ISRs and %d DBG_REQs found in ibex trace\n", 
+        cmp_cnt, eq_cnt, neq_cnt, revoke_err_cnt, ibex_isr_cnt, ibex_dbg_cnt)
 
 ibex_lines_total =  len(ibex_trace.lines)
 sail_lines_total =  len(sail_trace.lines)

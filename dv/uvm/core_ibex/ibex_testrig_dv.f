@@ -96,6 +96,12 @@ ${PRJ_DIR}/rtl/ibex_top_tracing.sv
 
 ${PRJ_DIR}/dv/cheriot/tb/cheriot_dv_pkg.sv
 
+// FCOV files
++incdir+${PRJ_DIR}/dv/cheriot/fcov/
+${PRJ_DIR}/dv/cheriot/fcov/module_dv_ext.sv
+${PRJ_DIR}/dv/cheriot/fcov/core_ibex_fcov_bind.sv
+${PRJ_DIR}/dv/cheriot/fcov/core_ibex_fcov_if.sv
+
 // Core DV files
 ${PRJ_DIR}/vendor/google_riscv-dv/src/riscv_signature_pkg.sv
 +incdir+${PRJ_DIR}/dv/uvm/core_ibex/env
