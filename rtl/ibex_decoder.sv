@@ -110,6 +110,7 @@ module ibex_decoder import cheri_pkg::*; #(
 
   // output to cheri EX
   output logic                 instr_is_cheri_o,
+  output logic                 instr_is_legal_cheri_o,
   output logic [11:0]          cheri_imm12_o,
   output logic [19:0]          cheri_imm20_o,
   output logic [20:0]          cheri_imm21_o,
@@ -230,19 +231,23 @@ module ibex_decoder import cheri_pkg::*; #(
   // Register check //
   ////////////////////
   if (RV32E) begin : gen_rv32e_reg_check_active
-    assign illegal_reg_rv32e = ((rf_raddr_a_o[4] & (alu_op_a_mux_sel_o == OP_A_REG_A)) |
-                                (rf_raddr_b_o[4] & (alu_op_b_mux_sel_o == OP_B_REG_B)) |
+    //assign illegal_reg_rv32e = ((rf_raddr_a_o[4] & (alu_op_a_mux_sel_o == OP_A_REG_A)) |
+    //                            (rf_raddr_b_o[4] & (alu_op_b_mux_sel_o == OP_B_REG_B)) |
+    assign illegal_reg_rv32e = ((rf_raddr_a_o[4] & rf_ren_a_o) |
+                                (rf_raddr_b_o[4] & rf_ren_b_o) |
                                 (rf_waddr_o[4]   & rf_we));
   end else begin : gen_rv32e_reg_check_inactive
     assign illegal_reg_rv32e = 1'b0;
   end
 
   if (CheriLimit16Regs) begin : gen_cheri_reg_check_active
+                               // ((raddr_a[4]  & (alu_op_a_mux_sel_o == OP_A_REG_A)) |
+                               //  (raddr_a[4]  & cheri_rf_ren_a & cheri_opcode_en) | 
+                               // (raddr_b[4]  & (alu_op_b_mux_sel_o == OP_B_REG_B)) |
+                               // (raddr_b[4]  & cheri_rf_ren_b & cheri_opcode_en) | 
     assign illegal_reg_cheri = cheri_pmode_i & 
-                               ((raddr_a[4]  & (alu_op_a_mux_sel_o == OP_A_REG_A)) |
-                                (raddr_a[4]  & cheri_rf_ren_a & cheri_opcode_en) | 
-                                (raddr_b[4]  & (alu_op_b_mux_sel_o == OP_B_REG_B)) |
-                                (raddr_b[4]  & cheri_rf_ren_b & cheri_opcode_en) | 
+                               ((raddr_a[4]  & rf_ren_a_o) |
+                                (raddr_b[4]  & rf_ren_b_o) |
                                 (instr_rd[4] & rf_we));
   end else begin : gen_cheri_reg_check_inactive
     assign illegal_reg_cheri = 1'b0;
@@ -1349,8 +1354,8 @@ module ibex_decoder import cheri_pkg::*; #(
   end
 
   // do not enable multdiv in case of illegal instruction exceptions
-  assign mult_en_o = illegal_insn ? 1'b0 : mult_sel_o;
-  assign div_en_o  = illegal_insn ? 1'b0 : div_sel_o;
+  assign mult_en_o = illegal_insn_o ? 1'b0 : mult_sel_o;
+  assign div_en_o  = illegal_insn_o ? 1'b0 : div_sel_o;
 
   // make sure instructions accessing non-available registers in RV32E cause illegal
   // instruction exceptions
@@ -1361,6 +1366,8 @@ module ibex_decoder import cheri_pkg::*; #(
 
   // Not all bits are used
   assign unused_instr_alu = {instr_alu[19:15],instr_alu[11:7]};
+
+  assign instr_is_legal_cheri_o = instr_is_legal_cheri & ~illegal_reg_cheri;
 
   // cheri decoder
   if (CHERIoTEn) begin : gen_cheri_decoder
