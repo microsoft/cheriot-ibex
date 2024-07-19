@@ -48,6 +48,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   parameter bit          CheriPPLBC       = 1'b1,
   parameter bit          CheriSBND2       = 1'b0,
   parameter bit          CheriTBRE        = 1'b1,
+  parameter bit          CheriStkZ        = 1'b1,
   parameter int unsigned MMRegDinW         = 128,
   parameter int unsigned MMRegDoutW        = 64
 ) (
@@ -306,7 +307,8 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .MemCapFmt        (MemCapFmt   ),
     .CheriPPLBC       (CheriPPLBC),
     .CheriSBND2       (CheriSBND2),
-    .CheriTBRE        (CheriTBRE)
+    .CheriTBRE        (CheriTBRE),
+    .CheriStkZ        (CheriStkZ)
   ) u_ibex_core (
     .clk_i(clk),
     .rst_ni,

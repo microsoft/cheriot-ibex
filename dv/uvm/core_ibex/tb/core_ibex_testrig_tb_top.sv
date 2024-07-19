@@ -6,8 +6,7 @@ module core_ibex_testrig_tb_top;
 
   wire clk;
   wire rst_n;
-  wire clk_dly;
-  wire [15:0]  clk_d;
+  logic clk_dly;
 
   clk_rst_if clk_if(.clk(clk), .rst_n(rst_n));
   core_ibex_rvfi_if rvfi_if(.clk(clk));
@@ -16,12 +15,10 @@ module core_ibex_testrig_tb_top;
   // need to figure out a better way to do this - this is just to make sure instr_ack is sampled 
   // and dii_instr is updated right before the clk rising edge (after the ID stage instruction
   // retirement decision is made by RTL
-  assign clk_d[0] = clk;
-  for (genvar i = 1; i < 16; i++) begin : clk_stage
-     assign #1 clk_d[i] = clk_d[i-1];
-  end
 
-  assign clk_dly = clk_d[15];
+  always @(clk) begin
+    clk_dly <= #15 clk;
+  end
 
   logic instr_req;
   logic instr_gnt;

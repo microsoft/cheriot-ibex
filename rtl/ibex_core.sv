@@ -57,6 +57,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   parameter bit          CheriPPLBC        = 1'b1,
   parameter bit          CheriSBND2        = 1'b0,
   parameter bit          CheriTBRE         = 1'b1,
+  parameter bit          CheriStkZ         = 1'b1,
   parameter int unsigned MMRegDinW         = 128,
   parameter int unsigned MMRegDoutW        = 64
 ) (
@@ -877,7 +878,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .TSMapSize            (TSMapSize),
       .CheriPPLBC           (CheriPPLBC),
       .CheriSBND2           (CheriSBND2),
-      .CheriStkZ            (CheriTBRE)
+      .CheriStkZ            (CheriStkZ)
     ) u_cheri_ex (
       .clk_i                (clk_i),
       .rst_ni               (rst_ni),
@@ -1079,7 +1080,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   cheri_tbre_wrapper #(
     .CHERIoTEn   (CHERIoTEn),
     .CheriTBRE   (CheriTBRE),
-    .CheriStkZ   (CheriTBRE),
+    .CheriStkZ   (CheriStkZ),
     .MMRegDinW   (MMRegDinW),
     .MMRegDoutW  (MMRegDoutW)
   ) cheri_tbre_wrapper_i (

@@ -856,7 +856,7 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
   parameter logic [4:0] CHERI_SCR_DEPCC      = 5'd24;
 
   // permission violations
-  parameter int unsigned W_PVIO = 9;
+  parameter int unsigned W_PVIO = 8;
 
   parameter logic [3:0] PVIO_TAG   = 4'h0;
   parameter logic [3:0] PVIO_SEAL  = 4'h1;

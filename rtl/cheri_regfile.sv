@@ -152,19 +152,25 @@ module cheri_regfile import cheri_pkg::*; #(
         reg_rdy_vec[0] <= 1'b1;
     end
 
-    for (genvar i=1; i<32; i++) begin
+    for (genvar i=1; i<NCAPS; i++) begin
       always_ff @(posedge clk_i or negedge rst_ni) begin
         if (!rst_ni)
-          reg_rdy_vec[i] <= 1'b1;
-        else if (i >= NCAPS) 
           reg_rdy_vec[i] <= 1'b1;
         else if (trsv_dec[i] & trsv_en_i)   // prioritize trsv t
           reg_rdy_vec[i] <= 1'b0;
         else if (trvk_dec[i] & trvk_en_i)
           reg_rdy_vec[i] <= 1'b1;
       end  // always_ff
-    end      // for
+    end
 
+    // unused bits
+    for (genvar i=NCAPS; i<32; i++) begin
+      always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni)
+          reg_rdy_vec[i] <= 1'b1;
+      end
+    end
+    
     // build the shadow copy of reg_rdy_vec for fault protection
     if (RegFileECC) begin : gen_shdw
       logic  [4:0] trvk_addr_q;

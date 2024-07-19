@@ -562,7 +562,7 @@ module cheri_trvk_stage_dv_ext (
   input  logic                rf_trvk_en_o,
   input  logic                rf_trvk_clrtag_o
 );
-
+`ifndef FORMAL
   logic [4:0] tqueue[$];
   logic       trvk_err;
   int         outstanding_trsv_cnt;
@@ -591,7 +591,7 @@ module cheri_trvk_stage_dv_ext (
   end
 
   `ASSERT(TrsvQueueChk, !trvk_err, clk_i, !rst_ni)
-
+`endif
 
 endmodule
 
@@ -837,6 +837,7 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic [35:0] cheri_operator,
   input  logic        csr_op_en,
   input  logic        instr_done_wb,
+  input  logic        instr_id_done,
   input  logic        outstanding_load_wb,
   input  logic        outstanding_store_wb
   );
