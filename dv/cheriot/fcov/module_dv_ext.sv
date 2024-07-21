@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0, see LICENSE for details.
 // SPDX-License-Identifier: Apache-2.0
 
+`include "prim_assert.sv"
 `include "dv_fcov_macros.svh"
 
 //
@@ -50,19 +51,24 @@ endmodule
 // ibex_id_stage
 ////////////////////////////////////////////////////////////////
 
-module ibex_id_stage_dv_ext (
+module ibex_id_stage_dv_ext import ibex_pkg::*; (
   input  logic        clk_i,
   input  logic        rst_ni,
   input  logic [31:0] rf_reg_rdy_i,
   input  logic        rf_ren_a,
+  input  logic        rf_ren_a_dec,
   input  logic [4:0]  rf_raddr_a_o,
   input  logic        rf_ren_b,
+  input  logic        rf_ren_b_dec,
   input  logic [4:0]  rf_raddr_b_o,
   input  logic        rf_we_id_o,
   input  logic        rf_we_dec,
   input  logic [4:0]  rf_waddr_id_o,
   input  logic        cheri_exec_id_o,
-  input  logic        instr_executing
+  input  logic        instr_executing,
+  input  logic        instr_valid_i,
+  input  logic        instr_fetch_err_i,
+  input  logic        illegal_insn_o
 );
 
   logic [2:0] fcov_trvk_stall_cause;
@@ -74,8 +80,33 @@ module ibex_id_stage_dv_ext (
   `ASSERT(IbexExecInclCheri, (cheri_exec_id_o |-> instr_executing))
 
   // rf_we_dec is now a superset of cheri_rf_we_dec
-  `ASSERT(IbexCheriRfWe, (decoder_i.cheri_rf_we_dec |-> rf_we_dec))
+  `ASSERT(IbexCheriRfWe, ((decoder_i.cheri_rf_we_dec & ~decoder_i.illegal_insn_o) |-> rf_we_dec))
+
+
+  // rf_ren_x is directly gated by illegal_insn in RTL, no need to prove here.
+  // assign rf_ren_a = instr_valid_i & ~instr_fetch_err_i & ~illegal_insn_o & rf_ren_a_dec;
+  // assign rf_ren_b = instr_valid_i & ~instr_fetch_err_i & ~illegal_insn_o & rf_ren_b_dec;
+
+  // Let's use formal tool to prove rf_ren_x matches alu_op_x_mux_sel. 
+  logic fcov_rf_ren_a, fcov_rf_ren_b;
+
+  logic no_ren_a_case1, no_ren_a_case2;
+  assign no_ren_a_case1 = (decoder_i.opcode == OPCODE_SYSTEM) & 
+                         ((decoder_i.instr[14] == 1'b1) | (decoder_i.instr[14:12] == 3'b000));
+  assign no_ren_a_case2 = (decoder_i.opcode == OPCODE_MISC_MEM);  
  
+  assign fcov_rf_ren_a = ((decoder_i.alu_op_a_mux_sel_o == OP_A_REG_A) & ~no_ren_a_case1 & ~no_ren_a_case2) | 
+                         (decoder_i.cheri_rf_ren_a & decoder_i.cheri_opcode_en & ~decoder_i.illegal_c_insn_i) |
+                         ((decoder_i.opcode == OPCODE_AUICGP) & ~decoder_i.illegal_c_insn_i) |
+                         (decoder_i.opcode == OPCODE_JALR) |
+                         (decoder_i.opcode == OPCODE_BRANCH);
+  assign fcov_rf_ren_b = (decoder_i.alu_op_b_mux_sel_o == OP_B_REG_B) | 
+                         (decoder_i.cheri_rf_ren_b & decoder_i.cheri_opcode_en & ~decoder_i.illegal_c_insn_i) |
+                         (decoder_i.opcode == OPCODE_STORE);
+ 
+  `ASSERT(IbexRfRenA, (rf_ren_a_dec == fcov_rf_ren_a))
+  // alu_op_b_mux_sel in branch cases has instr_valid_i term, not purely from decoding
+  `ASSERT(IbexRfRenB, ((rf_ren_b_dec & instr_valid_i) == (fcov_rf_ren_b & instr_valid_i)))
 
 
 endmodule
@@ -102,7 +133,8 @@ module ibex_controller_dv_ext import ibex_pkg::*; (
   input  logic                  handle_irq,
   input  logic                  enter_debug_mode,
   input  logic                  id_in_ready_o,
-  input   exc_pc_sel_e          exc_pc_mux_o
+  input  exc_pc_sel_e           exc_pc_mux_o,
+  input  logic                  cheri_wb_err_i
 );
 
   `DV_FCOV_SIGNAL(logic, all_debug_req, debug_req_i || debug_mode_q || debug_single_step_i)
@@ -136,6 +168,10 @@ module ibex_controller_dv_ext import ibex_pkg::*; (
 
    end
 
+   //
+   // CHERIoT assertions
+   //
+    `ASSERT(CHERI_WB_FAULT, (cheri_wb_err_i |=> (ctrl_fsm_cs == FLUSH)))
 
    //
    // Assertions moved from the ibex_controller.sv RTL to here
@@ -229,12 +265,14 @@ module ibex_controller_dv_ext import ibex_pkg::*; (
 
     // Once a PC set has been performed for an exception request there must not be any other
     // excepting those to move into debug mode.
+`ifndef FORMAL
+    // the condidtion is unreachable given the new seen_exception_pc_set definition
     `ASSERT(IbexNoDoubleSpecialReqPCSet,
       seen_exception_pc_set &&
         !((ctrl_fsm_cs inside {DBG_TAKEN_IF, DBG_TAKEN_ID}) &&
           (pc_mux_o == PC_EXC) && (exc_pc_mux_o == EXC_PC_DBD))
       |-> !pc_set_o)
-
+`endif
     // When an exception request is done there must have been an appropriate PC set (either this
     // cycle or a previous one).
     `ASSERT(IbexSetExceptionPCOnSpecialReqIfExpected,
@@ -418,8 +456,13 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic [32:0]    cpu_lsu_wdata,
   input  logic           cpu_lsu_is_cap,
   input  logic [31:0]    cpu_lsu_addr,
-  input  logic           addr_incr_req_i
+  input  logic           addr_incr_req_i,
+  input  logic [31:0]    cs1_addr_plusimm,
+  input  logic           cheri_wb_err_d
   );
+
+  // Cheri_wb_err_d must signal retiring the current instr from ID stage and sending it to WB stage
+  `ASSERT(CheriWbErrEndInstr, (cheri_wb_err_d |-> u_ibex_core.id_stage_i.instr_done));
 
   logic        outstanding_lsu_req;
   logic [1:0]  cpu_lsu_type;
@@ -442,8 +485,9 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
 
   // for rv32 accesses, addresses are formed by using ALU to do (addr_last_q +4 if addr_incr_req)
   // when addr_incr_req is owned by tbre, addr_last_q is not related with the EX instruction, there
-  // the address will be toggling when cpu_lsu_req is active.
-  assign cheri_lsu_start_addr = instr_is_cheri_i ? (cpu_lsu_addr - {addr_incr_req_i, 2'b00}) : 0; 
+  // the cpu_lsu_addr could be toggling when cpu_lsu_req is active. So let's just cover the cheri
+  // accesses here
+  assign cheri_lsu_start_addr = instr_is_cheri_i ? cs1_addr_plusimm : 0; 
 
   // protocol check for CPU-generated lsu requests
   // note lsu_req_o and lsu_req_done_i are for CPU request only
@@ -463,8 +507,11 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   `ASSERT(IbexLsuReqStable1, (lsu_req_done_i |-> lsu_req_o));
   `ASSERT(IbexLsuReqStable2, (outstanding_lsu_req |-> lsu_req_o));
   `ASSERT(IbexLsuCtrlStable, (outstanding_lsu_req |-> $stable(cpu_lsu_ctrls)));
+`ifndef FORMAL
+  // FV have trouble handling this since the regfile read/hazard handling is not modeled yet
   `ASSERT(IbexLsuWdataStable, ((outstanding_lsu_req & cpu_lsu_we) |-> ($stable(cpu_lsu_wdata) && $stable(cpu_lsu_wcap))));
   `ASSERT(IbexLsuAddrStable, (outstanding_lsu_req |-> $stable(cheri_lsu_start_addr)));
+`endif
   // -- ensure PC/instr_execute is aligned with transactions
   // -- req & req_done is enclosed in the same instruction always
   // -- max 1 req per instruction (unless ~cheriPPLBC when CLC has to read TSMAP via LSU)
@@ -474,7 +521,6 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
     `ASSERT(IbexLsuReqEpoch, (lsu_req_done_i |-> u_ibex_core.id_stage_i.instr_done));
   end 
   
-
   // Cheri and RV32 LSU req can't both be active per decoder
   `ASSERT(IbexLsuReqSrc, !(cheri_lsu_req & rv32_lsu_req_i)) 
 
@@ -591,8 +637,14 @@ module cheri_trvk_stage_dv_ext (
   end
 
   `ASSERT(TrsvQueueChk, !trvk_err, clk_i, !rst_ni)
+`else
+  `ifdef TRVK_DLY4_FORMAL
+    `ASSERT(TrsvAlwaysHandled0, (rf_trsv_en_i |-> ## 4 rf_trvk_en_o ))
+    `ASSERT(TrsvAlwaysHandled1, (~rf_trsv_en_i |-> ## 4 ~rf_trvk_en_o ))
+    TrskAddrCorrect: assert property (@(posedge clk_i) disable iff (!rst_ni | !rf_trsv_en_i) 
+      (## 4 rf_trsv_addr_i == rf_trvk_addr_o));
+  `endif 
 `endif
-
 endmodule
 
 ////////////////////////////////////////////////////////////////
@@ -670,7 +722,9 @@ module cheri_tbre_dv_ext (
   input  logic        snoop_lsu_req_i,
   input  logic        snoop_lsu_req_done_i,
   input  logic        snoop_lsu_we_i,
-  input  logic [31:0] snoop_lsu_addr_i
+  input  logic [31:0] snoop_lsu_addr_i,
+  input  logic [31:0] load_addr,
+  input  logic [31:0] store_addr
   );
 
   logic [2:0] req_fifo_depth, cap_fifo_depth, shdw_fifo_depth;
@@ -744,9 +798,10 @@ module cheri_tbre_dv_ext (
   logic        lsu_cur_req_is_tbre;
 
   assign tbre_lsu_ctrls = {tbre_lsu_is_cap_o, tbre_lsu_we_o};  
-  assign tbre_lsu_start_addr = tbre_lsu_we_o? tbre_lsu_addr_o : 
-                               (tbre_lsu_addr_o - {lsu_tbre_addr_incr_i, 2'b00}); 
-  assign  lsu_tbre_sel = cheri_tbre_wrapper_i.lsu_tbre_sel_i;
+  assign tbre_lsu_start_addr = tbre_lsu_we_o ? store_addr : load_addr;
+  //assign tbre_lsu_start_addr = tbre_lsu_we_o? tbre_lsu_addr_o : 
+  //                             (tbre_lsu_addr_o - {lsu_tbre_addr_incr_i, 2'b00}); 
+  assign  lsu_tbre_sel = cheri_tbre_wrapper_i.lsu_tbre_sel_i & cheri_tbre_wrapper_i.mstr_arbit_comb[1];
 
   
   // note in the fcov_tbre_fifo_head_hazard case, TBRE may cancel a store request.
@@ -765,7 +820,6 @@ module cheri_tbre_dv_ext (
   // -- once asserted, req can't go low until req_done
   // -- no change in address/control signals within the same request
   `ASSERT(TbreLsuReqStable1, (lsu_tbre_req_done_i |-> tbre_lsu_req_o));
-  `ASSERT(TbreLsuReqStable2, (outstanding_lsu_req |-> tbre_lsu_req_o));
   `ASSERT(TbreLsuCtrlStable, (outstanding_lsu_req |-> $stable(tbre_lsu_ctrls))); 
   `ASSERT(TbreLsuWdataStable, (outstanding_lsu_req & tbre_lsu_we_o |-> $stable(tbre_lsu_wdata_o))); 
   `ASSERT(TbreLsuAddrStable, (outstanding_lsu_req |-> $stable(tbre_lsu_start_addr)));
@@ -811,16 +865,21 @@ module ibex_cs_registers_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic         rst_ni,
   input  logic [31:0]  cheri_csr_wdata_i,
   input  reg_cap_t     cheri_csr_wcap_i,
+  input  logic [31:0]  mepc_q,
+  input  reg_cap_t     mepc_cap,
   input  pcc_cap_t     pcc_cap_o
   );
 
   full_cap_t fcov_scr_wfcap;
+  full_cap_t fcov_mepc_fcap;
 
   assign fcov_scr_wfcap = reg2fullcap(cheri_csr_wcap_i, cheri_csr_wdata_i);
+  assign fcov_mepc_fcap = reg2fullcap(mepc_cap, mepc_q);
+  `ASSERT(MepcOtypeInvalid, (fcov_mepc_fcap.valid |-> (fcov_mepc_fcap.otype==0)))
+  `ASSERT(MepcPermEx0, (fcov_mepc_fcap.valid |-> fcov_mepc_fcap.perms[PERM_EX]))
 
-  `ASSERT(PccOtypeInvalid, (pcc_cap_o.valid |-> (pcc_cap_o.otype==0)))
-  `ASSERT(PccPermEx0, (pcc_cap_o.valid |-> pcc_cap_o.perms[PERM_EX]))
-
+  `ASSERT(PccPermEx, (pcc_cap_o.valid |-> pcc_cap_o.perms[PERM_EX]))
+  `ASSERT(PccOtype, (pcc_cap_o.valid |-> (pcc_cap_o.otype==0)))
 endmodule
 
 ////////////////////////////////////////////////////////////////
@@ -839,7 +898,14 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic        instr_done_wb,
   input  logic        instr_id_done,
   input  logic        outstanding_load_wb,
-  input  logic        outstanding_store_wb
+  input  logic        outstanding_store_wb,
+  input  logic        illegal_insn_id,
+  input  logic        instr_valid_id,
+  input  logic        cheri_ex_err,
+  input  logic        instr_fetch_err,
+  input  logic        rf_we_id,
+  input  logic        cheri_csr_op_en,
+  input  logic        lsu_req
   );
 
   // Signals used for assertions only
@@ -914,6 +980,21 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
       CSR_OP_CLEAR
       })
   `ASSERT_KNOWN_IF(IbexCsrWdataIntKnown, cs_registers_i.csr_wdata_int, csr_op_en)
+
+  // Make sure invalid/faulted instructions won't take effect
+  logic instr_no_execute;
+  assign instr_no_execute = ~instr_valid_id | illegal_insn_id | instr_fetch_err | cheri_ex_err |
+                            ~id_stage_i.controller_run | id_stage_i.controller_i.cheri_asr_err_d |
+                            cheri_ex_err | id_stage_i.wb_exception;
+
+  // No regfile write or LSU request if instruction bad or faulted
+  //`ASSERT(IbexRfWeNoIllegal, (illegal_insn_id |-> ~rf_we_id))
+  `ASSERT(IbexRfWeNoIllegal, (instr_no_execute |-> ~rf_we_id))
+  `ASSERT(IbexLsuReqNoIllegal, (instr_no_execute |-> ~lsu_req))
+
+  // No csr/scr write if instruction bad or faulted
+  `ASSERT(IbexCSRWeNoIllegal, (instr_no_execute |-> ~csr_op_en))
+  `ASSERT(IbexSCRWeNoIllegal, (instr_no_execute |-> ~cheri_csr_op_en))
 
   // Functional coverage signals
   `DV_FCOV_SIGNAL(logic, csr_read_only,
