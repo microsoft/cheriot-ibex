@@ -437,7 +437,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   if (CHERIoTEn) begin : gen_regfile_cheriot
 
     localparam int unsigned NRegs = RV32E? 16 : 32;
-    localparam int unsigned NCaps = RV32E? 16 : 32;
+    localparam int unsigned NCaps = 16;
 
     cheri_regfile #(
       .NREGS     (NRegs),

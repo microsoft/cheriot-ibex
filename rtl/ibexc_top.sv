@@ -429,7 +429,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   end else begin
     cheri_regfile #(
       .NREGS(32),
-      .NCAPS(32),
+      .NCAPS(16),
       .CheriPPLBC(CheriPPLBC)
     ) register_file_i (
       .clk_i         (clk),
