@@ -346,7 +346,10 @@ module ibex_decoder import cheri_pkg::*; #(
           cheri_jalr_en     = (instr[14:12] == 3'b0);
           rf_ren_a_o        = 1'b1;
           rf_we             = 1'b1;
-          illegal_insn      = 1'b0;
+
+          if (instr[14:12] != 3'b0) begin
+            illegal_insn    = 1'b1;
+          end
         end else begin
           jump_in_dec_o      = 1'b1;
 

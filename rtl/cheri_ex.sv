@@ -897,10 +897,11 @@ module cheri_ex import cheri_pkg::*; #(
     cs2_bad_type = 1'b0;
     illegal_scr_addr = 1'b0;
 
-    cs1_otype_0  =  (rf_fullcap_a.otype == 3'h0);
-    cs1_otype_1  =  (rf_fullcap_a.otype == 3'h1);
-    cs1_otype_45 = (rf_fullcap_a.otype == 3'h4) || (rf_fullcap_a.otype == 3'h5);
-    cs1_otype_23 = (rf_fullcap_a.otype == 3'h2) || (rf_fullcap_a.otype == 3'h3);
+    // otype_1: forward sentry; otype_23: forward inherit sentry; otype_45: backward sentry; 
+    cs1_otype_0  = (rf_fullcap_a.otype == 3'h0);
+    cs1_otype_1  = rf_fullcap_a.perms[PERM_EX] & (rf_fullcap_a.otype == 3'h1);  // fwd sentry
+    cs1_otype_45 = rf_fullcap_a.perms[PERM_EX] & ((rf_fullcap_a.otype == 3'h4) || (rf_fullcap_a.otype == 3'h5)); // 
+    cs1_otype_23 = rf_fullcap_a.perms[PERM_EX] & ((rf_fullcap_a.otype == 3'h2) || (rf_fullcap_a.otype == 3'h3));
  
     // note cseal/unseal/cis_subject doesn't generate exceptions, 
     // so for all exceptions, violations can always be attributed to cs1, thus no need to further split
