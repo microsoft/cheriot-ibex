@@ -848,6 +848,7 @@ module cheri_ex import cheri_pkg::*; #(
     logic        top_vio, base_vio, top_equal;
     logic        cs2_bad_type;
     logic        cs1_otype_0, cs1_otype_1, cs1_otype_45, cs1_otype_23;
+    logic        cs2_otype_45;
 
     // generate the address used to check top bound violation
     if (cheri_operator_i[CSEAL] | cheri_operator_i[CUNSEAL])
@@ -900,9 +901,11 @@ module cheri_ex import cheri_pkg::*; #(
     // otype_1: forward sentry; otype_23: forward inherit sentry; otype_45: backward sentry; 
     cs1_otype_0  = (rf_fullcap_a.otype == 3'h0);
     cs1_otype_1  = rf_fullcap_a.perms[PERM_EX] & (rf_fullcap_a.otype == 3'h1);  // fwd sentry
-    cs1_otype_45 = rf_fullcap_a.perms[PERM_EX] & ((rf_fullcap_a.otype == 3'h4) || (rf_fullcap_a.otype == 3'h5)); // 
+    cs1_otype_45 = rf_fullcap_a.perms[PERM_EX] & ((rf_fullcap_a.otype == 3'h4) || (rf_fullcap_a.otype == 3'h5)); 
     cs1_otype_23 = rf_fullcap_a.perms[PERM_EX] & ((rf_fullcap_a.otype == 3'h2) || (rf_fullcap_a.otype == 3'h3));
  
+    cs2_otype_45 = rf_fullcap_b.perms[PERM_EX] & ((rf_fullcap_b.otype == 3'h4) || (rf_fullcap_b.otype == 3'h5)); 
+
     // note cseal/unseal/cis_subject doesn't generate exceptions, 
     // so for all exceptions, violations can always be attributed to cs1, thus no need to further split
     // exceptions based on source operands.
@@ -917,10 +920,11 @@ module cheri_ex import cheri_pkg::*; #(
       perm_vio_vec[PVIO_SD]    = ~rf_fullcap_a.perms[PERM_SD];
       perm_vio_vec[PVIO_SC]    = (~rf_fullcap_a.perms[PERM_MC] && rf_fullcap_b.valid);
       perm_vio_vec[PVIO_ALIGN] = (cheri_ls_chkaddr[2:0] != 0); 
-      perm_vio_slc             = ~rf_fullcap_a.perms[PERM_SL] && rf_fullcap_b.valid && ~rf_fullcap_b.perms[PERM_GL];
+      perm_vio_slc             = ~rf_fullcap_a.perms[PERM_SL] && rf_fullcap_b.valid && 
+                                (~rf_fullcap_b.perms[PERM_GL] | cs2_otype_45) ;
     end else if (cheri_operator_i[CSEAL]) begin
       cs2_bad_type = rf_fullcap_a.perms[PERM_EX] ? 
-                     ((rf_rdata_b[31:3]!=0)||(rf_rdata_b[2:0]==0)||(rf_rdata_b[2:0]==3'h4)||(rf_rdata_b[2:0]==3'h5)) : 
+                     ((rf_rdata_b[31:3]!=0)||(rf_rdata_b[2:0]==0)) : 
                      ((|rf_rdata_b[31:4]) || (rf_rdata_b[3:0] <= 8));
       // cs2.addr check : ex: 0-7, non-ex: 9-15
       perm_vio_vec[PVIO_TAG]   = ~rf_fullcap_a.valid || ~rf_fullcap_b.valid;
