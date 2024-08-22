@@ -24,6 +24,7 @@ please feel free to open a pull request to get your name added to this file.
 - Ioannis Karageorgos
 - Markus Wegmann
 - Ivan Ribeiro
+- Louis-Emile Ploix
 - Matthias Baer
 - Michael Gautschi
 - Michael Schaffner
