@@ -68,7 +68,8 @@ module ibex_id_stage_dv_ext import ibex_pkg::*; (
   input  logic        instr_executing,
   input  logic        instr_valid_i,
   input  logic        instr_fetch_err_i,
-  input  logic        illegal_insn_o
+  input  logic        illegal_insn_o,
+  input  logic        instr_is_legal_cheri
 );
 
   logic [2:0] fcov_trvk_stall_cause;
@@ -77,7 +78,9 @@ module ibex_id_stage_dv_ext import ibex_pkg::*; (
   assign fcov_trvk_stall_cause[1] = rf_ren_b && ~rf_reg_rdy_i[rf_raddr_b_o];
   assign fcov_trvk_stall_cause[2] = rf_we_id_o && ~rf_reg_rdy_i[rf_waddr_id_o]; 
 
+  // cheri_exec_id is included in instr_executing
   `ASSERT(IbexExecInclCheri, (cheri_exec_id_o |-> instr_executing))
+  `ASSERT(IbexLegalCheri, (instr_is_legal_cheri |-> ~illegal_insn_o))
 
   // rf_we_dec is now a superset of cheri_rf_we_dec
   `ASSERT(IbexCheriRfWe, ((decoder_i.cheri_rf_we_dec & ~decoder_i.illegal_insn_o) |-> rf_we_dec))
@@ -108,7 +111,6 @@ module ibex_id_stage_dv_ext import ibex_pkg::*; (
   // alu_op_b_mux_sel in branch cases has instr_valid_i term, not purely from decoding
   `ASSERT(IbexRfRenB, ((rf_ren_b_dec & instr_valid_i) == (fcov_rf_ren_b & instr_valid_i)))
 
-
 endmodule
 
 ////////////////////////////////////////////////////////////////
@@ -133,8 +135,10 @@ module ibex_controller_dv_ext import ibex_pkg::*; (
   input  logic                  handle_irq,
   input  logic                  enter_debug_mode,
   input  logic                  id_in_ready_o,
+  input  logic                  ready_wb_i,
   input  exc_pc_sel_e           exc_pc_mux_o,
-  input  logic                  cheri_wb_err_i
+  input  logic                  cheri_wb_err_i,
+  input  logic                  instr_valid_i
 );
 
   `DV_FCOV_SIGNAL(logic, all_debug_req, debug_req_i || debug_mode_q || debug_single_step_i)
@@ -154,19 +158,28 @@ module ibex_controller_dv_ext import ibex_pkg::*; (
 
    // signal used by testbench to see if CPU is executing an exception/intrrupt handler
    logic cpu_in_isr;
+   logic irq_pending;
+   logic fcov_irq_miss;
 
    always @(posedge clk_i, negedge rst_ni) begin
      if (~rst_ni) begin
        cpu_in_isr <= 1'b0;
+       irq_pending <= 1'b0;
      end else begin 
        if (((ctrl_fsm_cs == FLUSH) && pc_set_o && (pc_mux_o == PC_EXC)) ||
            (ctrl_fsm_cs == IRQ_TAKEN))
          cpu_in_isr <= 1'b1;
        else if ((ctrl_fsm_cs == FLUSH) && pc_set_o && (pc_mux_o == PC_ERET))
          cpu_in_isr <= 1'b0;
+
+       irq_pending <= (ctrl_fsm_cs == DECODE) && handle_irq && id_stage_i.instr_done;
      end
 
    end
+
+  // IRQ must be taken if unmasked interrupt at the end of current instruction unless irq goes away..
+  // this is for coverage.
+  assign fcov_irq_miss = irq_pending & ~handle_irq;
 
    //
    // CHERIoT assertions
@@ -181,6 +194,30 @@ module ibex_controller_dv_ext import ibex_pkg::*; (
   `ASSERT(IbexCtrlStateValid, ctrl_fsm_cs inside {
       RESET, BOOT_SET, WAIT_SLEEP, SLEEP, FIRST_FETCH, DECODE, FLUSH,
       IRQ_TAKEN, DBG_TAKEN_IF, DBG_TAKEN_ID})
+   
+
+  // Interrupt are taken in 3 sequential steps
+  //   - DECODE, handle_irq (unmasked interrupts) and no special_req. 
+  //     halt_if and wait for current ID instr done
+  //   - instr_valid  = 0. 
+  //     -- Note at this step if mie is cleared by the ID instr, handle_irq goes asway and we 
+  //        stay in DECODE
+  //   - ctrl_fsm_cs = IRQ_TAKEN, set PC
+  logic go_take_irq, ready_for_irq;
+  assign ready_for_irq = (ctrl_fsm_cs == DECODE) && handle_irq && ~special_req &&
+                          ~enter_debug_mode && id_stage_i.instr_done;
+  assign go_take_irq = (ctrl_fsm_cs == DECODE) && handle_irq && ~special_req &&
+                       ~enter_debug_mode && ~instr_valid_i & ready_wb_i;
+
+  `ASSERT(IbexIrqReady, (ready_for_irq |=> ~instr_valid_i))
+  `ASSERT(IbexIrqTaken, (go_take_irq |-> (ctrl_fsm_ns == IRQ_TAKEN)))
+
+  `ASSERT(IbexIrqTakenInvalid, ((ctrl_fsm_cs == IRQ_TAKEN) && !handle_irq |-> !instr_valid_i))
+
+
+  // this transition exists in the RTL but unreachable. (Lastest upstream ibex removed it already)
+  `ASSERT(IbexCtrlStateUnused0, ((ctrl_fsm_cs == FLUSH) |-> ctrl_fsm_ns != IRQ_TAKEN))
+
 
   `ifdef INC_ASSERT
     // If something that causes a jump into an exception handler is seen that jump must occur before
@@ -199,7 +236,7 @@ module ibex_controller_dv_ext import ibex_pkg::*; (
 
     // kliu 05242024: excluding handle_irq here since handle_irq may not be processed if 
     // mstatus.mie is clearaed by the current instruction (either cssrw to mstatus or cjalr to
-    // an interrupt-disabled sentry)
+    // an interrupt-disabled sentry, etc)
     // assign exception_req = (special_req | enter_debug_mode | handle_irq);
     //
     // kliu 06182024: this doesn't really work with enter_debug_mode either since ctrl_fsm can 
@@ -423,6 +460,8 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; import cheriot_d
   // Address must be word aligned when request is sent.
   `ASSERT(IbexDataAddrUnaligned, data_req_o |-> (data_addr_o[1:0] == 2'b00))
 
+  `ASSERT(IbexLsuFsmIdle, (((ls_fsm_cs == IDLE) && lsu_req_i)  |->
+          (cap_rx_fsm_q==CRX_IDLE) | (cap_rx_fsm_q==CRX_WAIT_RESP2)))
 endmodule
 
 
@@ -892,6 +931,12 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic        cheri_pmode_i,
   input  logic        cheri_tsafe_en_i,
   input  logic        cheri_exec_id,
+  input  logic        instr_req_o,
+  input  logic [31:0] instr_addr_o,
+  input  logic [31:0] instr_rdata_i,
+  input  logic        instr_gnt_i,
+  input  logic        instr_err_i,
+  input  logic        instr_rvalid_i,
   input  logic        rf_we_lsu,
   input  logic [35:0] cheri_operator,
   input  logic        csr_op_en,
@@ -901,12 +946,24 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic        outstanding_store_wb,
   input  logic        illegal_insn_id,
   input  logic        instr_valid_id,
+  input  logic        instr_valid_clear,
   input  logic        cheri_ex_err,
   input  logic        instr_fetch_err,
   input  logic        rf_we_id,
   input  logic        cheri_csr_op_en,
-  input  logic        lsu_req
+  input  logic        lsu_req,
+  input  logic        en_wb,
+  input  logic        ready_wb,
+  input  logic        ctrl_busy
   );
+  // Functional coverage signals
+  `DV_FCOV_SIGNAL(logic, csr_read_only,
+      (u_ibex_core.csr_op == CSR_OP_READ) && u_ibex_core.csr_access && (csr_op_en || u_ibex_core.illegal_insn_id))
+  `DV_FCOV_SIGNAL(logic, csr_write,
+      cs_registers_i.csr_wr && u_ibex_core.csr_access && (csr_op_en || u_ibex_core.illegal_insn_id))
+
+  `DV_FCOV_SIGNAL_GEN_IF(logic, rf_ecc_err_a_id, gen_regfile_ecc.rf_ecc_err_a_id, u_ibex_core.RegFileECC)
+  `DV_FCOV_SIGNAL_GEN_IF(logic, rf_ecc_err_b_id, gen_regfile_ecc.rf_ecc_err_b_id, u_ibex_core.RegFileECC)
 
   // Signals used for assertions only
   logic outstanding_load_resp;
@@ -958,12 +1015,10 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
     `ASSERT_IF(CheriFwdCheckA, (g_cheri_ex.u_cheri_ex.rf_rdata_ng_a == id_stage_i.rf_rdata_a_fwd), id_stage_i.instr_executing)
     `ASSERT_IF(CheriFwdCheckB, (g_cheri_ex.u_cheri_ex.rf_rdata_ng_b == id_stage_i.rf_rdata_b_fwd), id_stage_i.instr_executing)
 
-    if (u_ibex_core.WritebackStage && ~u_ibex_core.CheriPPLBC) begin
-    // cheri_ex state machines must be in IDLE state when a new instruction starts
-    `ASSERT(CheriLsuFsmIdle1, instr_id_done |-> (load_store_unit_i.ls_fsm_ns == 0), clk_i, !rst_ni)
-    `ASSERT(CheriLsuFsmIdle2, ((load_store_unit_i.ls_fsm_cs == 0) && load_store_unit_i.lsu_req_i)  |->
-           ((load_store_unit_i.cap_rx_fsm_q==0) | (load_store_unit_i.cap_rx_fsm_q==2)), clk_i, !rst_ni)
-    `ASSERT_IF(CheriLsuFsmWaitResp, (load_store_unit_i.cap_rx_fsm_q != 7), 1'b1)
+    if (u_ibex_core.WritebackStage) begin
+    // cheri_ex state machines can't still  be doing an CPU LSU request when an instruction completes
+    `ASSERT(CheriLsuFsmIdle1, (instr_id_done |-> 
+            (load_store_unit_i.ls_fsm_ns == 0) || load_store_unit_i.cur_req_is_tbre))
     end
 
     // only writes to regfile when wb_done
@@ -980,30 +1035,116 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
       CSR_OP_CLEAR
       })
   `ASSERT_KNOWN_IF(IbexCsrWdataIntKnown, cs_registers_i.csr_wdata_int, csr_op_en)
+  
+  /////////////////////////////////////////////////////////
+  // High-level properties to be proven by formal
+  /////////////////////////////////////////////////////////
+ 
+  // 
+  // Writeback
+  //
+  `ASSERT(IbexWbValid, (instr_id_done |=> wb_stage_i.g_writeback_stage.wb_valid_q))
+  `ASSERT(IbexWbDone, (wb_stage_i.g_writeback_stage.wb_valid_q |-> ##[0:5] wb_stage_i.g_writeback_stage.wb_done))
+  `ASSERT(IbexWbReady, (wb_stage_i.g_writeback_stage.wb_done |-> ready_wb))
 
-  // Make sure invalid/faulted instructions won't take effect
+  //
+  // Execution
+  //
+  
+  // Invalid/faulted instructions must nnt take effect
   logic instr_no_execute;
-  assign instr_no_execute = ~instr_valid_id | illegal_insn_id | instr_fetch_err | cheri_ex_err |
+  assign instr_no_execute = illegal_insn_id | instr_fetch_err | cheri_ex_err |
                             ~id_stage_i.controller_run | id_stage_i.controller_i.cheri_asr_err_d |
                             cheri_ex_err | id_stage_i.wb_exception;
 
   // No regfile write or LSU request if instruction bad or faulted
-  //`ASSERT(IbexRfWeNoIllegal, (illegal_insn_id |-> ~rf_we_id))
-  `ASSERT(IbexRfWeNoIllegal, (instr_no_execute |-> ~rf_we_id))
-  `ASSERT(IbexLsuReqNoIllegal, (instr_no_execute |-> ~lsu_req))
+  `ASSERT(IbexRfWeNoIllegal, ((~instr_valid_id | instr_no_execute) |-> ~rf_we_id))
+  `ASSERT(IbexLsuReqNoIllegal, ((~instr_valid_id | instr_no_execute) |-> ~lsu_req))
+  `ASSERT(IbexEnWbNoIllegal, ((~instr_valid_id | instr_no_execute) |-> ~en_wb))
 
   // No csr/scr write if instruction bad or faulted
-  `ASSERT(IbexCSRWeNoIllegal, (instr_no_execute |-> ~csr_op_en))
-  `ASSERT(IbexSCRWeNoIllegal, (instr_no_execute |-> ~cheri_csr_op_en))
+  `ASSERT(IbexCSRWeNoIllegal, ((~instr_valid_id | instr_no_execute) |-> ~csr_op_en))
+  `ASSERT(IbexSCRWeNoIllegal, ((~instr_valid_id | instr_no_execute) |-> ~cheri_csr_op_en))
 
-  // Functional coverage signals
-  `DV_FCOV_SIGNAL(logic, csr_read_only,
-      (u_ibex_core.csr_op == CSR_OP_READ) && u_ibex_core.csr_access && (csr_op_en || u_ibex_core.illegal_insn_id))
-  `DV_FCOV_SIGNAL(logic, csr_write,
-      cs_registers_i.csr_wr && u_ibex_core.csr_access && (csr_op_en || u_ibex_core.illegal_insn_id))
+  // Instructions are always either executed or faulted (assuming memory won't stall forever)
+  // Note 
+  // -- instr_id_done here includes ready_wb and instr_executing, so no exceptions
+  // -- also instr_id_done and flush_id can be both true (mret and dret)
+  // 
+  // div instruction takes a long time to finish, so need to override it in assumptions
+  // however still need to allow data memory wait states
+  logic instr_retire_id;
+  assign instr_retire_id = instr_id_done | id_stage_i.flush_id;
 
-  `DV_FCOV_SIGNAL_GEN_IF(logic, rf_ecc_err_a_id, gen_regfile_ecc.rf_ecc_err_a_id, u_ibex_core.RegFileECC)
-  `DV_FCOV_SIGNAL_GEN_IF(logic, rf_ecc_err_b_id, gen_regfile_ecc.rf_ecc_err_b_id, u_ibex_core.RegFileECC)
+`ifdef FORMAL
+  // in simulation div and memory access takes too long - will lead in assertion failure
+  `ASSERT(IbexInstrAlwaysRetireID, (instr_valid_id |-> ##[0:10] instr_retire_id))
+  `ASSERT(IbexInstrAlwayesClearID, (instr_retire_id |-> ##[0:5] instr_valid_clear))
+  //`ASSERT(IbexInstrRetireCondition, (instr_retire_id |-> instr_valid_id))
+`endif
+
+  `ASSERT(IbexInstrDone, (instr_id_done |-> (ready_wb & id_stage_i.instr_executing)))
+  
+  //
+  // PC advancing & Fetching
+  //
+
+  // should keep fetching if id stage is empty, as long as the core is not sleeping
+`ifdef FORMAL
+  // memory interface delay too long for formal
+  `ASSERT(IbexInstrWillFetch, ((~instr_valid_id && ctrl_busy) |-> ##[0:5] if_stage_i.instr_new_id_d))
+`endif
+
+  // prove that instruction fetch data path works correctly (based on pc_if)
+`ifdef FORMALX
+  logic [31:0] instr_addr_q;
+  logic [31:0] instr_data_assumed;
+  logic [15:0] instr_lsb, instr_lsb_exp;
+  logic [15:0] instr_msb, instr_msb_exp;
+  logic [31:0] pc_if, pc_if_p4;
+  logic        instr_lsb_good_if;
+  logic        instr_msb_good_if;
+
+
+  always @(posedge clk_i, negedge rst_ni) begin
+    if (~rst_ni) begin  
+      instr_addr_q <= 32'h0;
+    end else if (instr_req_o && instr_gnt_i) begin
+      instr_addr_q <= instr_addr_o;
+    end
+  end
+
+  assign pc_if     = if_stage_i.pc_if_o;
+  assign pc_if_p4  = pc_if + 32'h4; 
+
+  `ifdef FETCH_NO_RVC_FORMALX
+  // The code below does a proof all the way to instr_out from IF stage
+  // for un-compressed instructions only
+  
+  assign instr_data_assumed = instr_addr_q | 32'h0003_0003;
+  assign instr_lsb = if_stage_i.instr_out[15:0];
+  assign instr_msb = if_stage_i.instr_out[31:16];
+  // assign instr_lsb_exp = pc_if[1] ? (pc_if[31:16] |16'h3) : (pc_if[15:0] |16'h3);
+  assign instr_lsb_exp = pc_if[15:0]  | 16'h3;
+  assign instr_msb_exp = pc_if[31:16] | 16'h3;
+  `else 
+  // prove to the input point of ibex_compressed decoder (still covers alignment)
+  assign instr_data_assumed = instr_addr_q;
+  assign instr_lsb = if_stage_i.if_instr_rdata[15:0];      // before compresed decoder
+  assign instr_msb = if_stage_i.if_instr_rdata[31:16]; 
+  assign instr_lsb_exp = pc_if[1] ? (pc_if[31:16]) : (pc_if[15:0]);
+  assign instr_msb_exp = pc_if[1] ? (pc_if_p4[15:0]) : (pc_if[31:16]);
+  `endif
+
+  // next instructuion pushed to ID stage is considered valid
+  assign instr_lsb_good_if = if_stage_i.if_id_pipe_reg_we & if_stage_i.instr_valid_id_d;
+  assign instr_msb_good_if = if_stage_i.if_id_pipe_reg_we & if_stage_i.instr_valid_id_d & 
+                             ~u_ibex_core.if_stage_i.instr_is_compressed;
+  
+  // this can only be used with the assumption specified in ibexc_if.tcl  
+  `ASSERT(IbexFetchLsbGood, (instr_lsb_good_if |-> (instr_lsb == instr_lsb_exp )))
+  `ASSERT(IbexFetchMsbGood, (instr_msb_good_if |-> (instr_msb == instr_msb_exp )))
+`endif
 
 endmodule
 
