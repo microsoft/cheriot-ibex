@@ -677,7 +677,7 @@ module cheri_trvk_stage_dv_ext (
 
   `ASSERT(TrsvQueueChk, !trvk_err, clk_i, !rst_ni)
 `else
-  `ifdef TRVK_DLY4_FORMAL
+  `ifdef MEM_0DLY_FORMAL
     `ASSERT(TrsvAlwaysHandled0, (rf_trsv_en_i |-> ## 4 rf_trvk_en_o ))
     `ASSERT(TrsvAlwaysHandled1, (~rf_trsv_en_i |-> ## 4 ~rf_trvk_en_o ))
     TrskAddrCorrect: assert property (@(posedge clk_i) disable iff (!rst_ni | !rf_trsv_en_i) 
@@ -1021,10 +1021,6 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
             (load_store_unit_i.ls_fsm_ns == 0) || load_store_unit_i.cur_req_is_tbre))
     end
 
-    // only writes to regfile when wb_done
-    if (u_ibex_core.WritebackStage) begin
-      `ASSERT(CheriWrRegs, u_ibex_core.rf_we_wb |-> instr_done_wb, clk_i, !rst_ni)
-    end
   end
  
   // These assertions are in top-level as instr_valid_id required as the enable term
@@ -1043,28 +1039,44 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   // 
   // Writeback
   //
-  `ASSERT(IbexWbValid, (instr_id_done |=> wb_stage_i.g_writeback_stage.wb_valid_q))
-  `ASSERT(IbexWbDone, (wb_stage_i.g_writeback_stage.wb_valid_q |-> ##[0:5] wb_stage_i.g_writeback_stage.wb_done))
-  `ASSERT(IbexWbReady, (wb_stage_i.g_writeback_stage.wb_done |-> ready_wb))
+  if (u_ibex_core.WritebackStage) begin
+    `ASSERT(FvxIbexWbValid, (instr_id_done |=> wb_stage_i.g_writeback_stage.wb_valid_q))
+    `ifdef FORMAL
+      `ASSERT(FvxIbexWbDone, (wb_stage_i.g_writeback_stage.wb_valid_q |-> ##[0:5] instr_done_wb))
+    `endif
+    `ASSERT(FvxIbexWbReady, (wb_stage_i.g_writeback_stage.wb_done |-> ready_wb))
+
+    // instr_done_wb = wb_valid_q & wb_done
+    logic rf_we_wb_expected;
+    assign rf_we_wb_expected = instr_done_wb & 
+                               (wb_stage_i.g_writeback_stage.rf_we_wb_q | 
+                                wb_stage_i.g_writeback_stage.cheri_rf_we_q |
+                                (wb_stage_i.g_writeback_stage.wb_instr_type_q == WB_INSTR_LOAD) |
+                                wb_stage_i.g_writeback_stage.wb_cheri_load_q);
+
+    `ASSERT(FvxIbexWbWrRegs, u_ibex_core.rf_we_wb |-> rf_we_wb_expected, clk_i, !rst_ni)
+  end
 
   //
   // Execution
   //
   
-  // Invalid/faulted instructions must nnt take effect
-  logic instr_no_execute;
-  assign instr_no_execute = illegal_insn_id | instr_fetch_err | cheri_ex_err |
-                            ~id_stage_i.controller_run | id_stage_i.controller_i.cheri_asr_err_d |
-                            cheri_ex_err | id_stage_i.wb_exception;
+  // Invalid/faulted instructions must not take effect
+  logic instr_no_exec;
+  assign instr_no_exec = ~instr_valid_id | illegal_insn_id | instr_fetch_err |
+                         ~id_stage_i.controller_run | 
+                         id_stage_i.controller_i.cheri_asr_err_d | id_stage_i.wb_exception;
+ 
+  `ASSERT(FvxIbexNoExec, (id_stage_i.instr_executing |-> ~instr_no_exec))
 
   // No regfile write or LSU request if instruction bad or faulted
-  `ASSERT(IbexRfWeNoIllegal, ((~instr_valid_id | instr_no_execute) |-> ~rf_we_id))
-  `ASSERT(IbexLsuReqNoIllegal, ((~instr_valid_id | instr_no_execute) |-> ~lsu_req))
-  `ASSERT(IbexEnWbNoIllegal, ((~instr_valid_id | instr_no_execute) |-> ~en_wb))
+  `ASSERT(FvxIbexRfWeNoIllegal, (rf_we_id |-> id_stage_i.instr_executing))
+  `ASSERT(FvxIbexLsuReqNoIllegal, (lsu_req |-> id_stage_i.instr_executing))
+  `ASSERT(FvxIbexEnWbNoIllegal, (en_wb |-> id_stage_i.instr_executing))
 
   // No csr/scr write if instruction bad or faulted
-  `ASSERT(IbexCSRWeNoIllegal, ((~instr_valid_id | instr_no_execute) |-> ~csr_op_en))
-  `ASSERT(IbexSCRWeNoIllegal, ((~instr_valid_id | instr_no_execute) |-> ~cheri_csr_op_en))
+  `ASSERT(FvxIbexCSRWeNoIllegal, (csr_op_en |-> id_stage_i.instr_executing))
+  `ASSERT(FvxIbexSCRWeNoIllegal, (cheri_csr_op_en |-> id_stage_i.instr_executing))
 
   // Instructions are always either executed or faulted (assuming memory won't stall forever)
   // Note 
@@ -1073,30 +1085,37 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   // 
   // div instruction takes a long time to finish, so need to override it in assumptions
   // however still need to allow data memory wait states
-  logic instr_retire_id;
-  assign instr_retire_id = instr_id_done | id_stage_i.flush_id;
+  logic instr_terminate_id;
+  assign instr_terminate_id = instr_id_done | id_stage_i.flush_id;
 
 `ifdef FORMAL
-  // in simulation div and memory access takes too long - will lead in assertion failure
-  `ASSERT(IbexInstrAlwaysRetireID, (instr_valid_id |-> ##[0:10] instr_retire_id))
-  `ASSERT(IbexInstrAlwayesClearID, (instr_retire_id |-> ##[0:5] instr_valid_clear))
-  //`ASSERT(IbexInstrRetireCondition, (instr_retire_id |-> instr_valid_id))
+  // in simulation div and memory access takes too long - could lead in assertion failure
+  // note load/store could be delayed by TBRE arbitration & memory delay
+  `ASSERT(FvxIbexAlwaysTerminateID, (instr_valid_id |-> ##[0:15] instr_terminate_id))
+  `ASSERT(FvxIbexAlwaysClearID, (instr_terminate_id |-> ##[0:5] instr_valid_clear))
+  `ASSERT(FvxIbexInstrDone0, (instr_id_done |-> (ready_wb & id_stage_i.instr_executing)))
+  `ASSERT(FvxIbexInstrDone1, (id_stage_i.instr_executing |-> ##[0:15] instr_id_done))
 `endif
 
-  `ASSERT(IbexInstrDone, (instr_id_done |-> (ready_wb & id_stage_i.instr_executing)))
   
   //
   // PC advancing & Fetching
   //
 
   // should keep fetching if id stage is empty, as long as the core is not sleeping
+  // note IRQ handling could interrupt the fetching process and thus increase max fetch delay
 `ifdef FORMAL
   // memory interface delay too long for formal
-  `ASSERT(IbexInstrWillFetch, ((~instr_valid_id && ctrl_busy) |-> ##[0:5] if_stage_i.instr_new_id_d))
+  // causes for delay here:
+  //  - memory latency
+  //  - NMI since it keeps interrupting the fetch process
+  //  - IRQ
+  //  - unaligned instructions (single memory fetch may not get a valid instruction)
+  `ASSERT(FvxIbexInstrWillFetch, ((~instr_valid_id && ctrl_busy) |-> ##[0:15] if_stage_i.instr_new_id_d))
 `endif
 
   // prove that instruction fetch data path works correctly (based on pc_if)
-`ifdef FORMALX
+`ifdef FETCH_CORRECT_FORMAL  
   logic [31:0] instr_addr_q;
   logic [31:0] instr_data_assumed;
   logic [15:0] instr_lsb, instr_lsb_exp;
@@ -1118,22 +1137,22 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   assign pc_if_p4  = pc_if + 32'h4; 
 
   `ifdef FETCH_NO_RVC_FORMALX
-  // The code below does a proof all the way to instr_out from IF stage
-  // for un-compressed instructions only
-  
-  assign instr_data_assumed = instr_addr_q | 32'h0003_0003;
-  assign instr_lsb = if_stage_i.instr_out[15:0];
-  assign instr_msb = if_stage_i.instr_out[31:16];
-  // assign instr_lsb_exp = pc_if[1] ? (pc_if[31:16] |16'h3) : (pc_if[15:0] |16'h3);
-  assign instr_lsb_exp = pc_if[15:0]  | 16'h3;
-  assign instr_msb_exp = pc_if[31:16] | 16'h3;
+    // The code below does a proof all the way to instr_out from IF stage
+    // for un-compressed instructions only
+    
+    assign instr_data_assumed = instr_addr_q | 32'h0003_0003;
+    assign instr_lsb = if_stage_i.instr_out[15:0];
+    assign instr_msb = if_stage_i.instr_out[31:16];
+    // assign instr_lsb_exp = pc_if[1] ? (pc_if[31:16] |16'h3) : (pc_if[15:0] |16'h3);
+    assign instr_lsb_exp = pc_if[15:0]  | 16'h3;
+    assign instr_msb_exp = pc_if[31:16] | 16'h3;
   `else 
-  // prove to the input point of ibex_compressed decoder (still covers alignment)
-  assign instr_data_assumed = instr_addr_q;
-  assign instr_lsb = if_stage_i.if_instr_rdata[15:0];      // before compresed decoder
-  assign instr_msb = if_stage_i.if_instr_rdata[31:16]; 
-  assign instr_lsb_exp = pc_if[1] ? (pc_if[31:16]) : (pc_if[15:0]);
-  assign instr_msb_exp = pc_if[1] ? (pc_if_p4[15:0]) : (pc_if[31:16]);
+    // prove to the input point of ibex_compressed decoder (still covers alignment)
+    assign instr_data_assumed = instr_addr_q;
+    assign instr_lsb = if_stage_i.if_instr_rdata[15:0];      // before compresed decoder
+    assign instr_msb = if_stage_i.if_instr_rdata[31:16]; 
+    assign instr_lsb_exp = pc_if[1] ? (pc_if[31:16]) : (pc_if[15:0]);
+    assign instr_msb_exp = pc_if[1] ? (pc_if_p4[15:0]) : (pc_if[31:16]);
   `endif
 
   // next instructuion pushed to ID stage is considered valid
@@ -1141,9 +1160,9 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   assign instr_msb_good_if = if_stage_i.if_id_pipe_reg_we & if_stage_i.instr_valid_id_d & 
                              ~u_ibex_core.if_stage_i.instr_is_compressed;
   
-  // this can only be used with the assumption specified in ibexc_if.tcl  
-  `ASSERT(IbexFetchLsbGood, (instr_lsb_good_if |-> (instr_lsb == instr_lsb_exp )))
-  `ASSERT(IbexFetchMsbGood, (instr_msb_good_if |-> (instr_msb == instr_msb_exp )))
+  // this can only be used with the assumption specified in ibexc_if.tcl
+  `ASSERT(FvxIbexFetchLsbGood, (instr_lsb_good_if |-> (instr_lsb == instr_lsb_exp )))
+  `ASSERT(FvxIbexFetchMsbGood, (instr_msb_good_if |-> (instr_msb == instr_msb_exp )))
 `endif
 
 endmodule
@@ -1238,5 +1257,71 @@ module ibex_top_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
 
   `ASSERT_KNOWN(IbexDebugReqX, debug_req_i)
   `ASSERT_KNOWN(IbexFetchEnableX, fetch_enable_i)
+
+  //////////////////////////////////////////////////////////
+  // Assumptions defined for formal verification
+  //////////////////////////////////////////////////////////
+`ifdef FORMAL
+  // Constant tie-offs
+  AssumeCfgCheriMode:   assume property (cheri_pmode_i == 1'b1);
+  AssumeCfgTsafe:       assume property (cheri_tsafe_en_i == 1'b1);
+  AssumeCfgNotTestMode: assume property (test_en_i == 1'b0);
+  AssumeCfgBootAddr:    assume property (boot_addr_i == 32'h8000_0000);
+
+  AssumeFetchEnable: assume property (fetch_enable_i == 1'b1);
+
+  // NMI causes WillFetch to fail since it keeps interrupting the fetch process
+  AssumeNoNMI:  assume property (irq_nm_i == 1'b0);    
+
+  // model the data/instruction interface (gnt/rvalid always comes back after req)
+  `ifdef MEM_0DLY_FORMAL
+    AssumeDataIntfNoDly0: assume property (disable iff (~rst_ni) data_req_o |-> data_gnt_i);
+    AssumeDataIntfNoDly1: assume property (disable iff (~rst_ni) ~data_req_o |-> ~data_gnt_i);
+    AssumeDataIntfNoDly2: assume property (disable iff (~rst_ni) data_req_o |=> data_rvalid_i);
+    AssumeDataIntfNoDly3: assume property (disable iff (~rst_ni) ~data_req_o |=> ~data_rvalid_i);
+
+    AssumeInstrIntfNoDly0: assume property (disable iff (~rst_ni) instr_req_o |-> instr_gnt_i);
+    AssumeInstrIntfNoDly1: assume property (disable iff (~rst_ni) ~instr_req_o |-> ~instr_gnt_i);
+    AssumeInstrIntfNoDly2: assume property (disable iff (~rst_ni) instr_req_o |=> instr_rvalid_i);
+    AssumeInstrIntfNoDly3: assume property (disable iff (~rst_ni) ~instr_req_o |=> ~instr_rvalid_i);
+  `else 
+    // assume data_gnt can happen any time, don't constrain it.
+    // also note, ##2 also proves but run time is longer
+    AssumeDataIntf0: assume property (data_req_o  |-> ##[0:3] data_gnt_i);
+    AssumeDataIntf1: assume property (data_req_o & data_gnt_i |-> ##1 data_rvalid_i);
+    AssumeDataIntf2: assume property (~(data_req_o & data_gnt_i) |-> ##1 ~data_rvalid_i);
+
+    AssumeInstrIntf0: assume property (instr_req_o |-> ##[0:3] instr_gnt_i);
+    AssumeInstrIntf1: assume property (instr_req_o & instr_gnt_i |=> instr_rvalid_i);
+    AssumeInstrIntf2: assume property (~(instr_req_o & instr_gnt_i) |=> ~instr_rvalid_i);
+  `endif 
+
+  // for FvxIbexWbWrRegs (tell JPG that resp_valid can only happen if valid instruction in wb_stage)
+  AssumeWbValid: assume property (disable iff (~rst_ni) u_ibex_core.wb_stage_i.lsu_resp_valid_i |-> u_ibex_core.wb_stage_i.g_writeback_stage.wb_valid_q);
+
+  // for controller assertion IbexSetExceptionPCOnSpecialReqIfExpected
+  // enter_debug_mode is not covered by assertion logic right now. QQQ
+  // AssumeNoDebug: assume property (u_ibex_core.id_stage_i.controller_i.enter_debug_mode == 1'b0);
+  AssumeNoDebug: assume property (debug_req_i == 1'b0);
+
+  // stkz_stall is not fully understood by FV tool - need better constrains. QQQ 
+  AssumeStkzStall0: assume property (u_ibex_core.g_cheri_ex.u_cheri_ex.cpu_stkz_stall0 == 1'b0);
+  AssumeStkzStall1: assume property (u_ibex_core.g_cheri_ex.u_cheri_ex.cpu_stkz_stall1 == 1'b0);
+
+  // model tbre mmreg interface
+  AssumeMMreg0: assume property ($stable(u_ibex_core.cheri_tbre_wrapper_i.g_tbre.cheri_tbre_i.tbre_ctrl.start_addr));
+  AssumeMmreg1: assume property ($stable(u_ibex_core.cheri_tbre_wrapper_i.g_tbre.cheri_tbre_i.tbre_ctrl.end_addr));
+  AssumeMmreg2: assume property ($stable(u_ibex_core.cheri_tbre_wrapper_i.g_tbre.cheri_tbre_i.tbre_ctrl.add1wait));
+
+  // div instruction takes too long for the tool to converge 
+  // jasperGold complains about precondition unreachable for this, however without this assumption IbexInstrAlwaysRetireID won't prove
+  AssumeFastDiv: assume property (disable iff (~rst_ni) u_ibex_core.ex_block_i.gen_multdiv_fast.multdiv_i.div_en_i |-> u_ibex_core.ex_block_i.gen_multdiv_fast.multdiv_i.valid_o);
+
+
+  `ifdef FETCH_CORRECT_FORMAL  
+    AssumeFetchedInstr: assume property (instr_rdata_i == u_ibex_core.ibex_core_dv_ext_i.instr_data_assumed);
+  `endif
+ 
+`endif
 
 endmodule

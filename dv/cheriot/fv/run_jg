@@ -1,0 +1,2 @@
+ #wx run  -Ix -wl -r RAM/64000 x86_64 -- jg -fpv -allow_unsupported_OS
+wx run  -Ix -wl -r RAM/64000 x86_64 redhat7 -- jg -fpv -allow_unsupported_OS
