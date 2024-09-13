@@ -84,6 +84,8 @@ module cheri_ex import cheri_pkg::*; #(
   output logic [32:0]   lsu_wdata_o,
   output reg_cap_t      lsu_wcap_o,
   output logic          lsu_sign_ext_o,
+  output logic          cpu_stall_by_stkz_o,
+  output logic          cpu_grant_to_stkz_o,
 
   input  logic          addr_incr_req_i,
   input  logic [31:0]   addr_last_i,
@@ -1029,20 +1031,11 @@ module cheri_ex import cheri_pkg::*; #(
   //
   // muxing in cheri LSU signals with the rv32 signals
   //
-  logic cpu_stkz_stall0, cpu_stkz_stall1;
-  logic cpu_stkz_err;
+  assign lsu_req_o         = (instr_is_cheri_i ? cheri_lsu_req : rv32_lsu_req_i);
+  assign cpu_lsu_dec_o     = ((instr_is_cheri_i && is_cap) | instr_is_rv32lsu_i);  
 
-  if (CheriStkZ) begin
-    // load/store takes 1 cycle when stkz_active
-    assign lsu_req_o         = ~cpu_stkz_stall0 & (instr_is_cheri_i ? cheri_lsu_req : rv32_lsu_req_i);
-    assign cpu_lsu_dec_o     = ~cpu_stkz_stall1 & ((instr_is_cheri_i && is_cap) | instr_is_rv32lsu_i);  
-  end else begin
-    assign lsu_req_o         = (instr_is_cheri_i ? cheri_lsu_req : rv32_lsu_req_i);
-    assign cpu_lsu_dec_o     = ((instr_is_cheri_i && is_cap) | instr_is_rv32lsu_i);  
 
-  end
-
-  assign cpu_lsu_cheri_err = cpu_stkz_err | (instr_is_cheri_i ? cheri_lsu_err : rv32_lsu_err); 
+  assign cpu_lsu_cheri_err = instr_is_cheri_i ? cheri_lsu_err : rv32_lsu_err; 
   assign cpu_lsu_addr      = instr_is_cheri_i ? cheri_lsu_addr : rv32_lsu_addr_i;
   assign cpu_lsu_we        = instr_is_cheri_i ? cheri_lsu_we : rv32_lsu_we_i;
   assign cpu_lsu_wdata     = instr_is_cheri_i ? cheri_lsu_wdata : {1'b0, rv32_lsu_wdata_i};
@@ -1098,10 +1091,10 @@ module cheri_ex import cheri_pkg::*; #(
   //
 
   if (CheriStkZ) begin
-    logic lsu_addr_in_range, stkz_stall_q;
+    logic lsu_addr_in_stkz_range, stkz_stall_q;
 
-    assign lsu_addr_in_range = (cpu_lsu_addr[31:4] >= stkz_base_i[31:4]) && 
-                               (cpu_lsu_addr[31:2] < stkz_ptr_i[31:2]);
+    assign lsu_addr_in_stkz_range = cpu_lsu_dec_o && (cpu_lsu_addr[31:4] >= stkz_base_i[31:4]) && 
+                                    (cpu_lsu_addr[31:2] < stkz_ptr_i[31:2]);
 
     // cpu_lsu_dec_o is meant to be an early hint to help LSU to generate mux selects for 
     // address/ctrl/wdata (eventually to help timing on those output ports)
@@ -1117,26 +1110,20 @@ module cheri_ex import cheri_pkg::*; #(
     //   -- Also, since the cpu_lsu_addr only increments (clc/csc/unaligned) and stkz address
     //      only decrements, if lsu_addr_in_range = 0 for the 1st word, it will stay 0 for 2nd 
     //   -- Need to ensure stkz design meet those requirements
-    assign cpu_stkz_stall0 = (instr_first_cycle_i & stkz_active_i & lsu_addr_in_range) | stkz_stall_q; 
-    assign cpu_stkz_stall1 = ~instr_first_cycle_i & stkz_stall_q;
+    assign cpu_stall_by_stkz_o = stkz_active_i & lsu_addr_in_stkz_range; 
+    assign cpu_grant_to_stkz_o  = ~instr_first_cycle_i & stkz_stall_q;
 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
         stkz_stall_q <= 1'b0;
-        cpu_stkz_err <= 1'b0;
       end else begin
-        stkz_stall_q <= stkz_active_i & lsu_addr_in_range;
-        if (lsu_req_done_i)
-          cpu_stkz_err <= 1'b0;
-        else if (stkz_abort_i & lsu_addr_in_range & (cheri_lsu_req | rv32_lsu_req_i))
-          cpu_stkz_err <= 1'b1;
+        stkz_stall_q <= stkz_active_i & lsu_addr_in_stkz_range;
       end
     end
 
   end else begin
-    assign cpu_stkz_stall0 = 1'b0;
-    assign cpu_stkz_stall1 = 1'b0;
-    assign cpu_stkz_err    = 1'b0;
+    assign cpu_stall_by_stkz_o = 1'b0;
+    assign cpu_grant_to_stkz_o = 1'b0;
   end
 
   //

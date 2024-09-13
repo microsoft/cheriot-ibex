@@ -44,14 +44,11 @@ module cheri_stkz import cheri_pkg::*; (
   reg_cap_t     ztop_rcap, ztop_rcap_nxt;
   logic  [32:0] ztop_wtop33;
   logic  [31:0] ztop_wbase32;
-  logic         ptr_le_base, waddr_eq_base;
-  logic         cmd_new, cmd_avail, cmd_pending;
-  logic         cmd_go, cmd_go_null, cmd_go_good;
+  logic         waddr_eq_base;
   logic         cmd_cap_good;
-  logic         cmd_n2z;
-  logic         cmd_is_null, cmd_is_null_d, cmd_is_null_q;
-  reg_cap_t     cmd_wcap, cmd_wcap_q, cmd_wcap_untagged; 
-  logic [31:0]  cmd_wdata, cmd_wdata_q, cmd_wbase32, cmd_wbase32_q;
+  reg_cap_t     cmd_wcap; 
+  logic         cmd_new_cap, cmd_new_null;
+  logic         cmd_is_n2z;
 
   assign stkz_lsu_wdata_o  = 33'h0;
   assign stkz_lsu_is_cap_o = 1'b0;        // this means we are really writing 33'h0 to memory
@@ -59,9 +56,8 @@ module cheri_stkz import cheri_pkg::*; (
   assign stkz_lsu_req_o    = stkz_active;
   assign stkz_lsu_addr_o   = {stkz_ptrw_nxt, 2'h0};
 
-  // stkz_active needs to be asserted as soon as command pending (when ztop SCR write instruction done)
   assign stkz_active_o     = stkz_active;      
-  assign stkz_active       = (stkz_fsm_q == STKZ_ACTIVE) | cmd_pending;
+  assign stkz_active       = (stkz_fsm_q != STKZ_IDLE);
   assign stkz_abort_o      = (stkz_fsm_q == STKZ_ABORT);
 
   assign stkz_ptr_o        = {stkz_ptrw, 2'h0};
@@ -71,30 +67,18 @@ module cheri_stkz import cheri_pkg::*; (
   assign ztop_rcap_o  = ztop_rcap;
 
   assign ztop_wbase32 = ztop_wfcap_i.base32;
-
   assign ztop_wtop33  = ztop_wfcap_i.top33;
-
-  assign cmd_new       = ztop_wr_i & (cmd_cap_good | cmd_is_null_d);
-  assign cmd_avail     = cmd_new || cmd_pending;
-  assign cmd_go_null   = cmd_avail & cmd_is_null && (((stkz_fsm_q == STKZ_ACTIVE) && lsu_stkz_req_done_i) || 
-                                                     (stkz_fsm_q != STKZ_ACTIVE)); 
-  assign cmd_go_good   = cmd_avail & ~cmd_is_null && (stkz_fsm_q != STKZ_ACTIVE);
-  assign cmd_go        = cmd_go_null | cmd_go_good;
-
-  assign cmd_is_null   = cmd_new ? cmd_is_null_d : cmd_is_null_q;
-  assign cmd_wdata     = cmd_new ? ztop_wdata_i : cmd_wdata_q;
-  assign cmd_wcap      = cmd_new ? full2regcap(ztop_wfcap_i) : cmd_wcap_q;
-  assign cmd_wbase32   = cmd_new ? ztop_wbase32 : cmd_wbase32_q;
 
   assign cmd_cap_good  = ztop_wfcap_i.valid && (ztop_wtop33[32:2] >= ztop_wdata_i[31:2]) &&
                          ztop_wfcap_i.perms[PERM_SD];
-  assign cmd_is_null_d = (ztop_wfcap_i == NULL_FULL_CAP) && (ztop_wdata_i == 32'h0);
-  assign cmd_n2z       = cmd_wcap.valid & (cmd_wdata[31:2] == cmd_wbase32[31:2]);
+  assign cmd_is_n2z    = cmd_cap_good && (ztop_wdata_i[31:2] == ztop_wbase32[31:2]);
 
-  assign ptr_le_base   = (stkz_ptrw_nxt <= stkz_basew);
-  assign stkz_start    = cmd_go_good && (cmd_wdata[31:2] != cmd_wbase32[31:2]);
-  assign stkz_done     = lsu_stkz_req_done_i &&  (ptr_le_base || cmd_go_null);
-  assign stkz_stop     = lsu_stkz_req_done_i && (unmasked_intr_i) && ~ptr_le_base;
+  assign cmd_new_null  = ztop_wr_i && (ztop_wfcap_i == NULL_FULL_CAP) && (ztop_wdata_i == 32'h0);
+  assign cmd_new_cap   = ztop_wr_i && ~cmd_new_null;
+
+  assign stkz_start    = cmd_new_cap && cmd_cap_good && (ztop_wdata_i[31:2] > ztop_wbase32[31:2]);
+  assign stkz_done     = (stkz_ptrw_nxt <= stkz_basew);
+  assign stkz_stop     = unmasked_intr_i | cmd_new_null;
 
 
   always_comb begin
@@ -103,18 +87,20 @@ module cheri_stkz import cheri_pkg::*; (
  
     if ((stkz_fsm_q == STKZ_IDLE) && stkz_start)
       stkz_fsm_d = STKZ_ACTIVE;
-    else if ((stkz_fsm_q == STKZ_ACTIVE) & stkz_done)  // "normal" finish case (including sw-initiated stop)
+    else if ((stkz_fsm_q == STKZ_ACTIVE) & stkz_done & lsu_stkz_req_done_i)  // "normal" completion
       stkz_fsm_d = STKZ_IDLE;
-    else if ((stkz_fsm_q == STKZ_ACTIVE) & stkz_stop)  // have to abort asynchly due to interrupt
+    else if ((stkz_fsm_q == STKZ_ACTIVE) & stkz_stop & lsu_stkz_req_done_i)  // abort 
+      stkz_fsm_d = STKZ_IDLE;
+    else if ((stkz_fsm_q == STKZ_ACTIVE) & stkz_stop)  // pending abort, wait till lsu_req_done
       stkz_fsm_d = STKZ_ABORT;
-    else if (stkz_fsm_q == STKZ_ABORT) 
+    else if ((stkz_fsm_q == STKZ_ABORT) & lsu_stkz_req_done_i)
       stkz_fsm_d = STKZ_IDLE;    // self clear by any furtherload/store activity
     else
       stkz_fsm_d = stkz_fsm_q;
 
     // clear tag if writing an ztop value with address == base
-    cmd_wcap_untagged = cmd_wcap;
-    cmd_wcap_untagged.valid = 1'b0;
+    cmd_wcap = full2regcap(ztop_wfcap_i);
+    if (cmd_is_n2z) cmd_wcap.valid = 1'b0;
 
     // we are doing this in lieu of a full set_address.
     //   note we only start an zeroization if addr > base32 so no need for representability check
@@ -134,11 +120,6 @@ module cheri_stkz import cheri_pkg::*; (
       stkz_basew    <= 30'h0;
       stkz_err_o    <= 1'b0;
       ztop_rcap     <= NULL_REG_CAP;
-      cmd_pending   <= 1'b0;
-      cmd_is_null_q <= 1'b0;
-      cmd_wcap_q    <= NULL_REG_CAP;
-      cmd_wdata_q   <= 32'h0;
-      cmd_wbase32_q <= 32'h0;
     end else begin
 
       stkz_fsm_q <= stkz_fsm_d;
@@ -147,16 +128,15 @@ module cheri_stkz import cheri_pkg::*; (
       //   - if active
       //     - Readback return current progress 
       //     - allow writing NULL to stop (readback NULL in this case)
-      //       also allow writing a new tagged cap (to start next zerorization)
       //       
       //   - if not active, i
       //     - only allow writing tagged cap (legalized), which starts zeroization, however
       //     - speical case: write a tagged cap with addr == base will NOT start zeroization but 
       //       will clear tag on read
       //
-      if (cmd_go) begin
-        stkz_ptrw <= cmd_wdata[31:2];
-        ztop_rcap <= (cmd_go & cmd_n2z) ? cmd_wcap_untagged : cmd_wcap;
+      if (ztop_wr_i) begin
+        stkz_ptrw <= ztop_wdata_i[31:2];
+        ztop_rcap <= cmd_wcap;
       end else if (stkz_active && lsu_stkz_req_done_i) begin
         stkz_ptrw <= stkz_ptrw_nxt; 
         ztop_rcap <= ztop_rcap_nxt;
@@ -164,8 +144,8 @@ module cheri_stkz import cheri_pkg::*; (
 
       // this is the captured hardware zeroization context, only updated for valid zerioation runs
       if (stkz_start) begin
-        stkz_ptrw_nxt <= cmd_wdata[31:2] - 1;
-        stkz_basew    <= cmd_wbase32[31:2];
+        stkz_ptrw_nxt <= ztop_wdata_i[31:2] - 1;
+        stkz_basew    <= ztop_wbase32[31:2];
       end else if (stkz_active && lsu_stkz_req_done_i && ~(stkz_done | stkz_stop)) begin
         stkz_ptrw_nxt <= stkz_ptrw_nxt - 1;
       end
@@ -174,16 +154,6 @@ module cheri_stkz import cheri_pkg::*; (
         stkz_err_o <= 1'b0;
       else if (lsu_stkz_resp_valid_i && lsu_stkz_resp_err_i)
         stkz_err_o <= 1'b1;
-
-      if (cmd_go)
-        cmd_pending <= 1'b0;       // clear
-      else if (cmd_new)
-        cmd_pending <= 1'b1;       // latch command 
-
-      if (cmd_new) cmd_is_null_q  <= cmd_is_null_d;
-      if (cmd_new) cmd_wdata_q    <= ztop_wdata_i;
-      if (cmd_new) cmd_wcap_q     <= full2regcap(ztop_wfcap_i);
-      if (cmd_new) cmd_wbase32_q  <= ztop_wbase32;
 
     end
   end

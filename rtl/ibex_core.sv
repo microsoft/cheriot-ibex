@@ -491,7 +491,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic          lsu_tbre_sel, cpu_lsu_dec;
   logic          rf_trsv_en;
 
-  
+  logic          cpu_stall_by_stkz, cpu_grant_to_stkz;
 
 
   //////////////////////
@@ -931,6 +931,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .lsu_type_o           (lsu_type),
       .lsu_wdata_o          (lsu_wdata),
       .lsu_wcap_o           (lsu_wcap),
+      .cpu_stall_by_stkz_o  (cpu_stall_by_stkz),
+      .cpu_grant_to_stkz_o  (cpu_grant_to_stkz),
       .lsu_sign_ext_o       (lsu_sign_ext),
       .addr_incr_req_i      (lsu_addr_incr_req),
       .addr_last_i          (lsu_addr_last),
@@ -1166,6 +1168,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .lsu_wdata_i   (lsu_wdata),
     .lsu_wcap_i    (lsu_wcap),
     .lsu_sign_ext_i(lsu_sign_ext),
+    .cpu_stall_by_stkz_i  (cpu_stall_by_stkz),
+    .cpu_grant_to_stkz_i  (cpu_grant_to_stkz),
 
     .lsu_rdata_o      (rf_wdata_lsu),
     .lsu_rcap_o       (rf_wcap_lsu),

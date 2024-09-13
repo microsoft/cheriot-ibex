@@ -1113,17 +1113,18 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
     // addr/perm violations. this may cause either tag clearing or exception
     cp_cheri_vio: coverpoint {g_cheri_ex.u_cheri_ex.perm_vio_vec, g_cheri_ex.u_cheri_ex.addr_bound_vio}  iff 
                             (g_cheri_ex.u_cheri_ex.cheri_exec_id_i) {
-      wildcard bins bound = {10'b??_????_???1};
-      wildcard bins tag   = {10'b??_????_??1?};
-      wildcard bins seal  = {10'b??_????_?1??};
-      wildcard bins ex    = {10'b??_????_1???};
-      wildcard bins ld    = {10'b??_???1_????};
-      wildcard bins sd    = {10'b??_??1?_????};
-      wildcard bins sc    = {10'b??_?1??_????};
-      wildcard bins sr    = {10'b??_1???_????};
-      wildcard bins align = {10'b?1_????_????};
-      wildcard bins slc   = {10'b1?_????_????};
+      wildcard bins bound = {9'b?_????_???1};
+      wildcard bins tag   = {9'b?_????_??1?};
+      wildcard bins seal  = {9'b?_????_?1??};
+      wildcard bins ex    = {9'b?_????_1???};
+      wildcard bins ld    = {9'b?_???1_????};
+      wildcard bins sd    = {9'b?_??1?_????};
+      wildcard bins sc    = {9'b?_?1??_????};
+      wildcard bins sr    = {9'b?_1???_????};
+      wildcard bins align = {9'b1_????_????};
     }
+
+    cp_cheri_vio_slc: coverpoint {g_cheri_ex.u_cheri_ex.perm_vio_slc}  iff (g_cheri_ex.u_cheri_ex.cheri_exec_id_i);
 
     cp_tag_clear_cs1cd: coverpoint fcov_tag_clear_cs1cd iff 
                                          (g_cheri_ex.u_cheri_ex.cheri_exec_id_i);
@@ -1210,12 +1211,12 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
 
     cp_mshwm_set: coverpoint g_cheri_ex.u_cheri_ex.csr_mshwm_set_o;
 
-    cp_stkz_stall1: coverpoint g_cheri_ex.u_cheri_ex.cpu_stkz_stall1 iff
+    cp_stkz_stall1: coverpoint g_cheri_ex.u_cheri_ex.cpu_grant_to_stkz_o iff
                                (g_cheri_ex.u_cheri_ex.cheri_ex_dv_ext_i.fcov_cpu_lsu_req);
-    cp_stkz_stall0: coverpoint g_cheri_ex.u_cheri_ex.cpu_stkz_stall0 iff
+    cp_stkz_stall0: coverpoint g_cheri_ex.u_cheri_ex.cpu_stall_by_stkz_o iff
                                (g_cheri_ex.u_cheri_ex.cheri_ex_dv_ext_i.fcov_cpu_lsu_req);
 
-    cp_sktz_err: coverpoint g_cheri_ex.u_cheri_ex.cpu_stkz_err;       // abort error (exception)
+    // cp_sktz_err: coverpoint g_cheri_ex.u_cheri_ex.cpu_stkz_err;       // abort error (exception)
 
     cp_clsc_mem_err: coverpoint  load_store_unit_i.lsu_dv_ext_i.fcov_clsc_mem_err {
       illegal_bins illegal = {7};        // rsvd value
@@ -1421,6 +1422,11 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
     cp_setboundsimm_cases: coverpoint fcov_setboundsimm_cases {
       wildcard ignore_bins igonroe0 = {5'b???11};
       wildcard ignore_bins igonroe1 = {5'b?11??};
+    }
+
+    cp_rs2_req_len: coverpoint g_cheri_ex.u_cheri_ex.rf_rdata_b {
+      bins little[] = {[0:8]};
+      bins other   = {[9:$]};
     }
 
     cp_rs1_bitsize: coverpoint fcov_rs1_bitsize;
@@ -1864,7 +1870,8 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       bins bin1 = {1'b1};
     }
     
-    cheriot_instr_clc_cross0: cross cp_cs1_tag, cp_cs1_sealed, cp_cs1_perms_load, cp_clc_mem_cap_perms, cp_instr_clc; 
+    // QQQ - this is needs to be delayed/crossed with cp_clc_mem_cap*
+    cheriot_instr_clc_cross0: cross cp_cs1_tag, cp_cs1_sealed, cp_cs1_perms_load, cp_instr_clc; 
     cheriot_instr_clc_cross1: cross cp_cs1_tag, cp_clsc_bound_cases, cp_cheri_imm12, cp_clsc_addr_lsb, cp_instr_clc; 
     
     // CSC
@@ -1913,6 +1920,11 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
                            ((!binsof(cp_cs1_exp) intersect {24}) && (binsof(cp_setbounds_cases) with (cp_setbounds_cases %2 == 1)));
     }
    
+    cheriot_instr_csetbounds_cross1: cross cp_cs1_tag, cp_setbounds_cases, cp_rs2_req_len, cp_cs1_exp, cp_cd_tag, cp_instr_csetbounds {
+      ignore_bins ignore = (binsof(cp_cs1_tag) intersect {1'b0}) ||
+                           ((!binsof(cp_cs1_exp) intersect {24}) && (binsof(cp_setbounds_cases) with (cp_setbounds_cases %2 == 1)));
+    }
+
     // CSetboundsexact
     cp_instr_csetboundsexact: coverpoint cheri_ops[CSET_BOUNDS_EX]  iff (g_cheri_ex.u_cheri_ex.cheri_exec_id_i) {
       bins bin1 = {1'b1};

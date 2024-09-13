@@ -347,7 +347,7 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; import cheriot_d
   input  logic         pmp_err_q,
   input  logic         data_pmp_err_i,
   input  logic         cheri_err_q,
-  input  logic         resp_is_tbre_q,
+  input  logic         req_is_tbre_q,
   input  cap_rx_fsm_t  cap_rx_fsm_q,
   input  logic         data_we_q,  
   input  logic         cap_lsw_err_q,
@@ -462,10 +462,12 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; import cheriot_d
 
   `ASSERT(IbexLsuFsmIdle, (((ls_fsm_cs == IDLE) && lsu_req_i)  |->
           (cap_rx_fsm_q==CRX_IDLE) | (cap_rx_fsm_q==CRX_WAIT_RESP2)))
+
+  // `ASSERT(IbexLsuMisc1, (req_is_tbre_q == resp_is_tbre_q))
 endmodule
 
 
-////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////
 // cheri_ex
 ////////////////////////////////////////////////////////////////
 
@@ -875,7 +877,8 @@ module cheri_stkz_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic          ztop_wr_i,
   input  logic [31:0]   ztop_wdata_i,
   input  full_cap_t     ztop_wfcap_i,
-  input  logic          cmd_new,
+  input  logic          cmd_new_null,
+  input  logic          cmd_new_cap,
   input  logic          cmd_cap_good,
   input  logic          lsu_stkz_req_done_i
   );
@@ -971,20 +974,18 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
 
   logic outstanding_load_id;
   logic outstanding_store_id;
-  logic cheri_intl_clbc;
 
   assign outstanding_load_id  = (id_stage_i.instr_executing & (id_stage_i.lsu_req_dec & ~id_stage_i.lsu_we)) |
                                 (cheri_exec_id & cheri_operator[CLOAD_CAP]);
   assign outstanding_store_id = (id_stage_i.instr_executing & id_stage_i.lsu_req_dec & id_stage_i.lsu_we) |
                                 (cheri_exec_id & cheri_operator[CSTORE_CAP]);
-  assign cheri_intl_clbc = cheri_operator[CLOAD_CAP] & ~u_ibex_core.CheriPPLBC & cheri_tsafe_en_i;
 
   if (u_ibex_core.WritebackStage) begin : gen_wb_stage
     // When the writeback stage is present a load/store could be in ID or WB. A Load/store in ID can
     // see a response before it moves to WB when it is unaligned otherwise we should only see
     // a response when load/store is in WB.
     assign outstanding_load_resp  = outstanding_load_wb |
-      (outstanding_load_id  & (load_store_unit_i.split_misaligned_access | cheri_intl_clbc));
+      (outstanding_load_id  & load_store_unit_i.split_misaligned_access );
 
     assign outstanding_store_resp = outstanding_store_wb |
       (outstanding_store_id & load_store_unit_i.split_misaligned_access);
@@ -1091,10 +1092,21 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
 `ifdef FORMAL
   // in simulation div and memory access takes too long - could lead in assertion failure
   // note load/store could be delayed by TBRE arbitration & memory delay
-  `ASSERT(FvxIbexAlwaysTerminateID, (instr_valid_id |-> ##[0:15] instr_terminate_id))
+  `ifndef MODEL_STKZ_STALL_FORMAL
+    // -- use [0:15] if no STKZ stall
+    `ASSERT(FvxIbexAlwaysTerminateID, (instr_valid_id |-> ##[0:15] instr_terminate_id))
+    `ASSERT(FvxIbexInstrIdDone1, (id_stage_i.instr_executing |-> ##[0:15] instr_id_done))
+  `else
+    `ASSERT(FvxIbexAlwaysTerminateID, (instr_valid_id |-> ##[0:25] instr_terminate_id))
+    // worst case -> cpu cload stalled by stkz_active, then an tbre_req (which gets in since
+    // there is a 1 cycle gap betwen end of stkz stalling and cpu reclaiming memory interface
+    // (since cheri_ex is using stall_q to optimize memory address timing)
+    // use [0:15] if no STKZ
+    `ASSERT(FvxIbexInstrIdDone1, (id_stage_i.instr_executing |-> ##[0:20] instr_id_done))
+  `endif 
+
   `ASSERT(FvxIbexAlwaysClearID, (instr_terminate_id |-> ##[0:5] instr_valid_clear))
   `ASSERT(FvxIbexInstrDone0, (instr_id_done |-> (ready_wb & id_stage_i.instr_executing)))
-  `ASSERT(FvxIbexInstrDone1, (id_stage_i.instr_executing |-> ##[0:15] instr_id_done))
 `endif
 
   
@@ -1262,7 +1274,9 @@ module ibex_top_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   // Assumptions defined for formal verification
   //////////////////////////////////////////////////////////
 `ifdef FORMAL
+  //
   // Constant tie-offs
+  //
   AssumeCfgCheriMode:   assume property (cheri_pmode_i == 1'b1);
   AssumeCfgTsafe:       assume property (cheri_tsafe_en_i == 1'b1);
   AssumeCfgNotTestMode: assume property (test_en_i == 1'b0);
@@ -1270,58 +1284,92 @@ module ibex_top_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
 
   AssumeFetchEnable: assume property (fetch_enable_i == 1'b1);
 
+  //
+  // NMI/debug I/O, etc.
+  //
   // NMI causes WillFetch to fail since it keeps interrupting the fetch process
   AssumeNoNMI:  assume property (irq_nm_i == 1'b0);    
 
+  // for controller assertion IbexSetExceptionPCOnSpecialReqIfExpected
+  // enter_debug_mode is not covered by assertion logic right now. QQQ
+  AssumeNoDebug: assume property (debug_req_i == 1'b0);
+
+  //
+  // Memory interface I/O assumptions
+  //
+  logic data_rvalid_exp, instr_rvalid_exp;
+
+  always @(posedge clk_i, negedge rst_ni) begin
+    if (~rst_ni)  begin
+      data_rvalid_exp  <= 1'b0;
+      instr_rvalid_exp <= 1'b0;
+    end else begin
+      data_rvalid_exp  <= data_req_o & data_gnt_i;
+      instr_rvalid_exp <= instr_req_o & instr_gnt_i;
+    end
+  end
+
   // model the data/instruction interface (gnt/rvalid always comes back after req)
   `ifdef MEM_0DLY_FORMAL
-    AssumeDataIntfNoDly0: assume property (disable iff (~rst_ni) data_req_o |-> data_gnt_i);
-    AssumeDataIntfNoDly1: assume property (disable iff (~rst_ni) ~data_req_o |-> ~data_gnt_i);
-    AssumeDataIntfNoDly2: assume property (disable iff (~rst_ni) data_req_o |=> data_rvalid_i);
-    AssumeDataIntfNoDly3: assume property (disable iff (~rst_ni) ~data_req_o |=> ~data_rvalid_i);
+    AssumeDataGntNoDly0:   assume property (data_req_o |-> data_gnt_i);
+    AssumeDataGntNoDly1:   assume property (~data_req_o |-> ~data_gnt_i);
+    //AssumeDataValidNoDly0: assume property (data_req_o |=> data_rvalid_i);
+    //AssumeDataValidNoDly1: assume property (~data_req_o |=> ~data_rvalid_i);
+    AssumeDataValid: assume property (data_rvalid_i == data_rvalid_exp);
 
-    AssumeInstrIntfNoDly0: assume property (disable iff (~rst_ni) instr_req_o |-> instr_gnt_i);
-    AssumeInstrIntfNoDly1: assume property (disable iff (~rst_ni) ~instr_req_o |-> ~instr_gnt_i);
-    AssumeInstrIntfNoDly2: assume property (disable iff (~rst_ni) instr_req_o |=> instr_rvalid_i);
-    AssumeInstrIntfNoDly3: assume property (disable iff (~rst_ni) ~instr_req_o |=> ~instr_rvalid_i);
+    AssumeInstrGntNoDly0:   assume property (instr_req_o |-> instr_gnt_i);
+    AssumeInstrGntNoDly1:   assume property (~instr_req_o |-> ~instr_gnt_i);
+    // AssumeInstrValidNoDly0: assume property (instr_req_o |=> instr_rvalid_i);
+    // AssumeInstrValidNoDly1: assume property (~instr_req_o |=> ~instr_rvalid_i);
+    AssumeInstrValid: assume property (instr_rvalid_i == instr_rvalid_exp);
   `else 
     // assume data_gnt can happen any time, don't constrain it.
     // also note, ##2 also proves but run time is longer
-    AssumeDataIntf0: assume property (data_req_o  |-> ##[0:3] data_gnt_i);
-    AssumeDataIntf1: assume property (data_req_o & data_gnt_i |-> ##1 data_rvalid_i);
-    AssumeDataIntf2: assume property (~(data_req_o & data_gnt_i) |-> ##1 ~data_rvalid_i);
+    AssumeDataGnt0:  assume property (data_req_o |-> ##[0:2] data_gnt_i);
+    AssumeDataGnt1:  assume property ((~rst_ni|~data_req_o) |-> ~data_gnt_i);
+    AssumeDataValid: assume property (data_rvalid_i == data_rvalid_exp);
+    //AssumeDataIntf3: assume property (##1 data_rvalid_i == ~rst_ni & $past (data_req_o & data_gnt_i));
+    //AssumeDataIntf4: assume property (~rst_ni |-> ~data_rvalid_i);
+    
+    //`ASSERT(x1, (data_rvalid_i == data_rvalid_exp))
 
-    AssumeInstrIntf0: assume property (instr_req_o |-> ##[0:3] instr_gnt_i);
-    AssumeInstrIntf1: assume property (instr_req_o & instr_gnt_i |=> instr_rvalid_i);
-    AssumeInstrIntf2: assume property (~(instr_req_o & instr_gnt_i) |=> ~instr_rvalid_i);
+    AssumeInstrGnt0: assume property (instr_req_o |-> ##[0:3] instr_gnt_i);
+    AssumeInstrGnt1: assume property ((~rst_ni | ~instr_req_o) |-> ~instr_gnt_i);
+    AssumeInstrValid: assume property (instr_rvalid_i == instr_rvalid_exp);
+    //AssumeInstrValid0: assume property ((instr_req_o & instr_gnt_i) |=> instr_rvalid_i);
+    //AssumeInstrValid1: assume property (~(instr_req_o & instr_gnt_i) |=> ~instr_rvalid_i);
   `endif 
 
-  // for FvxIbexWbWrRegs (tell JPG that resp_valid can only happen if valid instruction in wb_stage)
-  AssumeWbValid: assume property (disable iff (~rst_ni) u_ibex_core.wb_stage_i.lsu_resp_valid_i |-> u_ibex_core.wb_stage_i.g_writeback_stage.wb_valid_q);
-
-  // for controller assertion IbexSetExceptionPCOnSpecialReqIfExpected
-  // enter_debug_mode is not covered by assertion logic right now. QQQ
-  // AssumeNoDebug: assume property (u_ibex_core.id_stage_i.controller_i.enter_debug_mode == 1'b0);
-  AssumeNoDebug: assume property (debug_req_i == 1'b0);
-
-  // stkz_stall is not fully understood by FV tool - need better constrains. QQQ 
-  AssumeStkzStall0: assume property (u_ibex_core.g_cheri_ex.u_cheri_ex.cpu_stkz_stall0 == 1'b0);
-  AssumeStkzStall1: assume property (u_ibex_core.g_cheri_ex.u_cheri_ex.cpu_stkz_stall1 == 1'b0);
-
-  // model tbre mmreg interface
+  `ifdef FETCH_CORRECT_FORMAL  
+    AssumeFetchedInstr: assume property (instr_rdata_i == u_ibex_core.ibex_core_dv_ext_i.instr_data_assumed);
+  `endif
+ 
+  //
+  // Model tbre mmreg i/o interface
+  //
   AssumeMMreg0: assume property ($stable(u_ibex_core.cheri_tbre_wrapper_i.g_tbre.cheri_tbre_i.tbre_ctrl.start_addr));
   AssumeMmreg1: assume property ($stable(u_ibex_core.cheri_tbre_wrapper_i.g_tbre.cheri_tbre_i.tbre_ctrl.end_addr));
   AssumeMmreg2: assume property ($stable(u_ibex_core.cheri_tbre_wrapper_i.g_tbre.cheri_tbre_i.tbre_ctrl.add1wait));
+
+  //
+  // Internal signal assumptions
+  //
+
+  `ifndef MODEL_STKZ_STALL_FORMAL
+    AssumeStkzStall0: assume property (u_ibex_core.g_cheri_ex.u_cheri_ex.cpu_stall_by_stkz_o == 1'b0);
+    AssumeStkzStall1: assume property (u_ibex_core.g_cheri_ex.u_cheri_ex.cpu_grant_to_stkz_o == 1'b0);
+  `else
+    `ifdef FAST_STKZ_FORMAL
+      AssumeStkzFast0: assume property (u_ibex_core.cheri_tbre_wrapper_i.g_stkz.cheri_stkz_i.ztop_wdata_i <= u_ibex_core.cheri_tbre_wrapper_i.g_stkz.cheri_stkz_i.ztop_wfcap_i.base32 + 4);
+      AssumeStkzData1: assume property (u_ibex_core.cheri_tbre_wrapper_i.g_stkz.cheri_stkz_i.ztop_wfcap_i.base32 < 32'hfff_fffc);
+    `endif
+  `endif
 
   // div instruction takes too long for the tool to converge 
   // jasperGold complains about precondition unreachable for this, however without this assumption IbexInstrAlwaysRetireID won't prove
   AssumeFastDiv: assume property (disable iff (~rst_ni) u_ibex_core.ex_block_i.gen_multdiv_fast.multdiv_i.div_en_i |-> u_ibex_core.ex_block_i.gen_multdiv_fast.multdiv_i.valid_o);
 
 
-  `ifdef FETCH_CORRECT_FORMAL  
-    AssumeFetchedInstr: assume property (instr_rdata_i == u_ibex_core.ibex_core_dv_ext_i.instr_data_assumed);
-  `endif
- 
 `endif
 
 endmodule
