@@ -243,7 +243,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .MHPMCounterWidth (MHPMCounterWidth),
     .RV32E            (RV32E),
     .RV32M            (RV32M),
-    .RV32B            (RV32BNone),
+    .RV32B            (RV32B),
     .BranchTargetALU  (1'b1),
     .ICache           (1'b0),
     .ICacheECC        (1'b0),
