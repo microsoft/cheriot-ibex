@@ -195,7 +195,6 @@ module cheri_ex import cheri_pkg::*; #(
 
   full_cap_t     setaddr1_outcap, setbounds_outcap;
   logic  [15:0]  cheri_wb_err_info_q, cheri_wb_err_info_d;
-  logic  [11:0]  cheri_ex_err_info_q, cheri_ex_err_info_d;
   logic          set_bounds_done;
 
   logic   [4:0]  cheri_err_cause, rv32_err_cause;
@@ -1015,7 +1014,6 @@ module cheri_ex import cheri_pkg::*; #(
     if (!rst_ni) begin
       cheri_wb_err_q      <= 1'b0;
       cheri_wb_err_info_q <= 'h0;
-      cheri_ex_err_info_q <= 'h0;
     end else begin
       // Simple flop here works since
       //  -- cheri_wb_err is gated by cheri_exec_id/ex_valid
@@ -1024,7 +1022,6 @@ module cheri_ex import cheri_pkg::*; #(
       //  -- faulted non-load/store instruction can only stay 1 cycle in wb_stage
       cheri_wb_err_q      <= cheri_wb_err_d; 
       cheri_wb_err_info_q <= cheri_wb_err_info_d;
-      cheri_ex_err_info_q <= cheri_ex_err_info_d;
     end
   end
 

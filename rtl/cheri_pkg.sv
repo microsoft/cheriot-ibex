@@ -858,14 +858,14 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
   // permission violations
   parameter int unsigned W_PVIO = 8;
 
-  parameter logic [3:0] PVIO_TAG   = 4'h0;
-  parameter logic [3:0] PVIO_SEAL  = 4'h1;
-  parameter logic [3:0] PVIO_EX    = 4'h2;
-  parameter logic [3:0] PVIO_LD    = 4'h3;
-  parameter logic [3:0] PVIO_SD    = 4'h4;
-  parameter logic [3:0] PVIO_SC    = 4'h5;
-  parameter logic [3:0] PVIO_ASR   = 4'h6;
-  parameter logic [3:0] PVIO_ALIGN = 4'h7;
+  parameter logic [2:0] PVIO_TAG   = 3'h0;
+  parameter logic [2:0] PVIO_SEAL  = 3'h1;
+  parameter logic [2:0] PVIO_EX    = 3'h2;
+  parameter logic [2:0] PVIO_LD    = 3'h3;
+  parameter logic [2:0] PVIO_SD    = 3'h4;
+  parameter logic [2:0] PVIO_SC    = 3'h5;
+  parameter logic [2:0] PVIO_ASR   = 3'h6;
+  parameter logic [2:0] PVIO_ALIGN = 3'h7;
   
 
   function automatic logic [4:0] vio_cause_enc (logic bound_vio, logic[W_PVIO-1:0] perm_vio_vec);
