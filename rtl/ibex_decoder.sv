@@ -240,6 +240,7 @@ module ibex_decoder import cheri_pkg::*; #(
     //                            (rf_raddr_b_o[4] & (alu_op_b_mux_sel_o == OP_B_REG_B)) |
     assign illegal_reg_rv32e = ((rf_raddr_a_o[4] & rf_ren_a_o) |
                                 (rf_raddr_b_o[4] & rf_ren_b_o) |
+                                (instr_rs3[4] & use_rs3_d & rf_ren_a_o) | 
                                 (rf_waddr_o[4]   & rf_we_or_load));
   end else begin : gen_rv32e_reg_check_inactive
     assign illegal_reg_rv32e = 1'b0;
@@ -249,6 +250,7 @@ module ibex_decoder import cheri_pkg::*; #(
     assign illegal_reg_cheri = cheri_pmode_i & 
                                ((raddr_a[4]  & rf_ren_a_o) |
                                 (raddr_b[4]  & rf_ren_b_o) |
+                                (instr_rs3[4] & use_rs3_d & rf_ren_a_o) | 
                                 (instr_rd[4] & rf_we_or_load ));
   end else begin : gen_cheri_reg_check_inactive
     assign illegal_reg_cheri = 1'b0;
