@@ -1714,9 +1714,9 @@ end
   logic            rvfi_ext_stage_debug_req    [RVFI_STAGES+1];
   logic [63:0]     rvfi_ext_stage_mcycle       [RVFI_STAGES];
 
-
-
   logic        rvfi_stage_valid_d   [RVFI_STAGES];
+  
+  logic        insn_c_hint;
 
   assign rvfi_valid     = rvfi_stage_valid    [RVFI_STAGES-1];
   assign rvfi_order     = rvfi_stage_order    [RVFI_STAGES-1];
@@ -1734,7 +1734,6 @@ end
   assign rvfi_rs1_rcap  = rvfi_stage_rs1_rcap [RVFI_STAGES-1];
   assign rvfi_rs2_rcap  = rvfi_stage_rs2_rcap [RVFI_STAGES-1];
   assign rvfi_rs3_rdata = rvfi_stage_rs3_rdata[RVFI_STAGES-1];
-  assign rvfi_rd_addr   = rvfi_stage_rd_addr  [RVFI_STAGES-1];
   assign rvfi_rd_wdata  = rvfi_stage_rd_wdata [RVFI_STAGES-1];
   assign rvfi_rd_wcap   = rvfi_stage_rd_wcap  [RVFI_STAGES-1];
   assign rvfi_pc_rdata  = rvfi_stage_pc_rdata [RVFI_STAGES-1];
@@ -1747,6 +1746,24 @@ end
   assign rvfi_mem_is_cap = rvfi_stage_mem_is_cap[RVFI_STAGES-1];
   assign rvfi_mem_rcap  = rvfi_stage_mem_rcap[RVFI_STAGES-1];
   assign rvfi_mem_wcap  = rvfi_stage_mem_wcap[RVFI_STAGES-1];
+
+  // for HINT instructions like c.srai64/c.slli64, force rvfi_rd_addr output to 0 to match sail implementation
+  assign rvfi_rd_addr   = insn_c_hint ? 0 : rvfi_stage_rd_addr [RVFI_STAGES-1];
+
+  always_comb begin
+    if ((rvfi_insn[1:0] == 2'b01) && (rvfi_insn[15:13] == 3'b100) && (rvfi_insn[11:10] == 2'b00) &&      // c.srli64
+       ({rvfi_insn[12], rvfi_insn[6:2]} == 6'h0) &&
+        (rvfi_rs1_addr == rvfi_rd_addr) && (rvfi_rs1_rdata == rvfi_rd_wdata))
+      insn_c_hint = 1'b1;
+    else if ((rvfi_insn[1:0] == 2'b01) && (rvfi_insn[15:13] == 3'b100) && (rvfi_insn[11:10] == 2'b01) && // c.srai64
+       ({rvfi_insn[12], rvfi_insn[6:2]} == 6'h0) &&
+        (rvfi_rs1_addr == rvfi_rd_addr) && (rvfi_rs1_rdata == rvfi_rd_wdata))
+      insn_c_hint = 1'b1;
+    else 
+      insn_c_hint = 1'b0;
+   
+     
+  end 
 
   assign rvfi_rd_addr_wb  = rf_waddr_wb;
   assign rvfi_rd_wdata_wb = rf_we_wb ? rf_wdata_wb : rf_wdata_lsu; // this doesn't look right but ok
