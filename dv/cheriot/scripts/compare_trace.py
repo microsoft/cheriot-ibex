@@ -125,7 +125,7 @@ def parse_ibex_cap(cap_val, addr_val):
         top_cor = -1;
 
     if addrmi9 < base9 :
-      base_cor = -1;
+      base_cor = 1;
     else :
       base_cor = 0;
 
@@ -134,7 +134,7 @@ def parse_ibex_cap(cap_val, addr_val):
       base = (base9 << exp);
     else:
       top  = (top9 << exp)  + (((addr_val >> (exp+9)) + top_cor)  << (exp+9));
-      base = (base9 << exp) + (((addr_val >> (exp+9)) + base_cor) << (exp+9));
+      base = (base9 << exp) + (((addr_val >> (exp+9)) - base_cor) << (exp+9));
 
     top  &= 0x1ffffffff    # convert to unsigned
     base &= 0xffffffff

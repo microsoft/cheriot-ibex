@@ -118,7 +118,7 @@ package cheriot_dv_pkg;
     full_cap_t result_cap;
 
     logic [EXP_W-1:0] tmp5;
-    logic [3:0]  tmp4;
+    logic [2:0]  tmp3;
     logic [CPERMS_W-1:0] cperms_mem;
     logic [BOT_W-1:0]    addrmi9;
     logic                valid_in;
@@ -137,9 +137,9 @@ package cheriot_dv_pkg;
     cperms_mem      = msw[CPERMS_LO+:CPERMS_W];
     regcap.cperms   = cperms_mem;
     addrmi9         = BOT_W'({1'b0, addr33[31:0]} >> regcap.exp); // ignore the tag valid bit
-    tmp4            = update_temp_fields(regcap.top, regcap.base, addrmi9);
-    regcap.top_cor  = tmp4[3:2];
-    regcap.base_cor = tmp4[1:0];
+    tmp3            = update_temp_fields(regcap.top, regcap.base, addrmi9);
+    regcap.top_cor  = tmp3[2:1];
+    regcap.base_cor = tmp3[0];
 
     regcap.rsvd     = msw[RSVD_LO];
 

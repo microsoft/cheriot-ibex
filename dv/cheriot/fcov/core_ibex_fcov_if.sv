@@ -859,14 +859,14 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
 
     cp_cs1_sealed: coverpoint ((g_cheri_ex.u_cheri_ex.rf_fullcap_a.otype != 0) & (g_cheri_ex.u_cheri_ex.rf_fullcap_a.valid));
 
-    cp_cs1_cor: coverpoint {g_cheri_ex.u_cheri_ex.rf_fullcap_a.base_cor, 
+    cp_cs1_cor: coverpoint {g_cheri_ex.u_cheri_ex.rf_fullcap_a.base_cor,
                             g_cheri_ex.u_cheri_ex.rf_fullcap_a.top_cor} {
-      bins bin0 = {4'b0000}; 
-      bins bin1 = {4'b0001}; 
-      // bins bin2 = {4'b0011}; // base_cor = 0, top_cor = -1, impossible case
-      bins bin3 = {4'b1100}; 
-      // bins bin4 = {4'b1101};    // impossible case
-      bins bin5 = {4'b1111};
+      bins bin0 = {3'b000}; 
+      bins bin1 = {3'b001}; 
+      // bins bin2 = {3'b011}; // base_cor = 0, top_cor = -1, impossible case
+      bins bin3 = {3'b100}; 
+      // bins bin4 = {3'b101};    // impossible case
+      bins bin5 = {3'b111};
     }
 
     cp_cs1_top: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_a.top {
@@ -999,14 +999,14 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
 
     cp_cs2_sealed: coverpoint ((g_cheri_ex.u_cheri_ex.rf_fullcap_b.otype != 0) & (g_cheri_ex.u_cheri_ex.rf_fullcap_b.valid));
 
-    cp_cs2_cor: coverpoint {g_cheri_ex.u_cheri_ex.rf_fullcap_b.base_cor, 
+    cp_cs2_cor: coverpoint {g_cheri_ex.u_cheri_ex.rf_fullcap_b.base_cor,
                             g_cheri_ex.u_cheri_ex.rf_fullcap_b.top_cor} {
-      bins bin0 = {4'b0000}; 
-      bins bin1 = {4'b0001}; 
-      // bins bin2 = {4'b0011}; // base_cor = 0, top_cor = -1, impossible case
-      bins bin3 = {4'b1100}; 
-      // bins bin4 = {4'b1101};    // impossible case
-      bins bin5 = {4'b1111};    
+      bins bin0 = {3'b000};
+      bins bin1 = {3'b001};
+      // bins bin2 = {3'b011}; // base_cor = 0, top_cor = -1, impossible case
+      bins bin3 = {3'b100};
+      // bins bin4 = {3'b101}; // impossible case
+      bins bin5 = {3'b111};
     }
 
     cp_cs2_top: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_b.top {
@@ -1080,14 +1080,14 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       bins bin[] = {[0:7]};    // including reserved values for coverage
     }
 
-    cp_cd_cor: coverpoint {g_cheri_ex.u_cheri_ex.result_cap_o.base_cor, 
+    cp_cd_cor: coverpoint {g_cheri_ex.u_cheri_ex.result_cap_o.base_cor,
                            g_cheri_ex.u_cheri_ex.result_cap_o.top_cor} {
-      bins bin0 = {4'b0000}; 
-      bins bin1 = {4'b0001}; 
-      // bins bin2 = {4'b0011}; 
-      bins bin3 = {4'b1100}; 
-      // bins bin4 = {4'b1101}; 
-      bins bin5 = {4'b1111}; 
+      bins bin0 = {3'b000};
+      bins bin1 = {3'b001};
+      // bins bin2 = {3'b011};
+      bins bin3 = {3'b100};
+      // bins bin4 = {3'b101};
+      bins bin5 = {3'b111};
     }
 
    cp_cd_top: coverpoint g_cheri_ex.u_cheri_ex.result_cap_o.top {
@@ -1253,15 +1253,15 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       bins bin2 = {24};
     }
 
-    cp_clc_mem_cap_cor: coverpoint {load_store_unit_i.lsu_dv_ext_i.fcov_clc_mem_cap.top_cor,  
-                                    load_store_unit_i.lsu_dv_ext_i.fcov_clc_mem_cap.base_cor} iff
+    cp_clc_mem_cap_cor: coverpoint {load_store_unit_i.lsu_dv_ext_i.fcov_clc_mem_cap.base_cor,
+                                    load_store_unit_i.lsu_dv_ext_i.fcov_clc_mem_cap.top_cor} iff
                             (~load_store_unit_i.data_we_q & load_store_unit_i.lsu_resp_valid_o) {
-      bins bin0 = {4'b0000}; 
-      bins bin1 = {4'b0001}; 
-      // bins bin2 = {4'b0011}; // base_cor = 0, top_cor = -1, impossible case
-      bins bin3 = {4'b1100}; 
-      // bins bin4 = {4'b1101};    // impossible case
-      bins bin5 = {4'b1111};    
+      bins bin0 = {3'b000};
+      bins bin1 = {3'b001};
+      // bins bin2 = {3'b011}; // base_cor = 0, top_cor = -1, impossible case
+      bins bin3 = {3'b100};
+      // bins bin4 = {3'b101}; // impossible case
+      bins bin5 = {3'b111};
     }
 
     cp_cheri_fetch_tag_vio: coverpoint id_stage_i.instr_fetch_cheri_acc_vio_i iff
