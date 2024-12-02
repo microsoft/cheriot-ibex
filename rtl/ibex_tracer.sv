@@ -1362,6 +1362,7 @@ module ibex_tracer import cheri_pkg::*; # (
         INSN_CHINCADDRIMM: decode_cheri_cd_cs1_imm_insn("CH.cincaddrimm");
         INSN_CHSETBOUNDS:  decode_cheri_cd_cs1_rs2_insn("CH.csetbounds");
         INSN_CHSETBOUNDSEX:  decode_cheri_cd_cs1_rs2_insn("CH.csetboundsexact");
+        INSN_CHSETBOUNDSRNDN: decode_cheri_cd_cs1_rs2_insn("CH.csetboundsrounddown");
 
         INSN_CHSETBOUNDSIMM: decode_cheri_cd_cs1_imm_insn("CH.csetboundsimm");
         INSN_CHCLEARTAG:     decode_cheri_cd_cs1_insn("CH.ccleartag");

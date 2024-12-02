@@ -55,6 +55,7 @@ module cheri_decoder import cheri_pkg::*; # (
     cheri_operator_o[CCSR_RW]         = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h01);
     cheri_operator_o[CSET_BOUNDS]     = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h08);
     cheri_operator_o[CSET_BOUNDS_EX]  = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h09);
+    cheri_operator_o[CSET_BOUNDS_RNDN]= cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h0a);
     cheri_operator_o[CSEAL]           = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h0b);
     cheri_operator_o[CUNSEAL]         = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h0c);
     cheri_operator_o[CAND_PERM]       = cheri_opcode_en_i && (func3_op==0) && (func7_op==7'h0d);
@@ -81,6 +82,7 @@ module cheri_decoder import cheri_pkg::*; # (
 
     cheri_operator_o[CINC_ADDR_IMM]   = cheri_opcode_en_i && (func3_op == 1);
     cheri_operator_o[CSET_BOUNDS_IMM] = cheri_opcode_en_i && (func3_op == 2);
+
 
     cheri_operator_o[CAUIPCC]         = cheri_auipcc_en_i;
     cheri_operator_o[CAUICGP]         = cheri_auicgp_en_i;

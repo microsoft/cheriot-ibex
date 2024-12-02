@@ -12,7 +12,7 @@ package cheri_pkg;
   parameter int unsigned EXP_W     = 5;
   parameter int unsigned OTYPE_W   = 3;
   parameter int unsigned CPERMS_W  = 6;
-  parameter int unsigned PERMS_W   = 13;
+  parameter int unsigned PERMS_W   = 12;
 
   parameter int unsigned REGCAP_W  = 38;
 
@@ -21,7 +21,7 @@ package cheri_pkg;
   parameter bit    [3:0] RESETCEXP = 15;
 
   // bit index of PERMS field
-  // U1 U0 SE US EX SR MC LD SL LM SD LG GL
+  // U0 SE US EX SR MC LD SL LM SD LG GL
   parameter int unsigned PERM_GL =  0;     // global flag
   parameter int unsigned PERM_LG =  1;     // load global
   parameter int unsigned PERM_SD =  2;     // store
@@ -34,7 +34,6 @@ package cheri_pkg;
   parameter int unsigned PERM_US =  9;     // unseal
   parameter int unsigned PERM_SE = 10;     // seal
   parameter int unsigned PERM_U0 = 11;     //
-  parameter int unsigned PERM_U1 = 12;     //
 //  parameter int unsigned PERM_U2 = 13;     // temp workaround
 
   parameter logic [2:0] OTYPE_SENTRY_IE_BKWD = 3'd5;
@@ -89,6 +88,9 @@ package cheri_pkg;
     logic [32:0]      top33req;
     logic [EXP_W-1:0] exp1;
     logic [EXP_W-1:0] exp2;
+    logic [EXP_W:0]   explen;
+    logic [EXP_W:0]   expb;   // this can be 32 so must be 6-bit
+    logic             in_bound;
   } bound_req_t;
 
   parameter reg_cap_t  NULL_REG_CAP  = '{0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -332,16 +334,43 @@ package cheri_pkg;
     return out_cap;
   endfunction
 
+  //
+  // utility functions
+  //
 
-  // utility function
   // return the size (bit length) of input number without leading zeros
   function automatic logic [5:0] get_size(logic [31:0] din);
     logic  [5:0] count;
-    logic [31:0] a32, b32;
+    logic [31:0] a32;
     int i;
 
     a32 = {din[31], 31'h0};
     for (i = 30; i >=  0; i--) a32[i] = a32[i+1] | din[i];
+    count = thermo_dec32(a32);
+
+    return count;
+  endfunction
+
+  // return the exp of a 32-bit input (by count trailing zeros)
+  function automatic logic [5:0] count_tz (logic [31:0] din);
+    logic  [5:0] count;
+    logic [31:0] a32, b32;
+    int i;
+
+    a32 = {31'h0, din[0]};
+    for (i = 1; i < 32; i++) a32[i] = a32[i-1] | din[i];
+    // count = a32[31] ? thermo_dec32(~a32) : 0;       // if input all zero, return 0
+    count = thermo_dec32(~a32);       // if input all zero, return 32
+
+    return count;
+  endfunction
+
+  // this simply count the number of 1's in a thermoeter-encoded input vector
+  //    (32-N zeros followed by N ones)
+  // 
+  function automatic logic [5:0] thermo_dec32(logic [31:0] a32);
+    logic  [5:0] count;
+    logic [31:0] b32;
 
     if (a32[31]) count = 32;
     else begin
@@ -363,16 +392,23 @@ package cheri_pkg;
   // set bounds (top/base/exp/addr) of a capability
 
   // break up into 2 parts to enable 2-cycle option
-  function automatic bound_req_t prep_bound_req (logic [31:0] addr, logic [31:0] length);
+  function automatic bound_req_t prep_bound_req (full_cap_t in_cap, logic [31:0] addr, logic [31:0] length);
     bound_req_t result;
     logic [5:0] size_result;
 
     result.top33req = {1'b0, addr} + {1'b0, length};    // "requested" 33-bit top
+    result.expb     = count_tz(addr);
+    result.explen   = get_size({9'h0, length[31:9]});        // length exp without saturation
 
-    size_result     = get_size({9'h0, length[31:9]});
+    size_result     = result.explen;
     result.exp1     = (size_result >= 6'(RESETCEXP)) ? EXP_W'(RESETEXP) : EXP_W'(size_result);
+
     size_result     += 1;
     result.exp2     = (size_result >= 6'(RESETCEXP)) ? EXP_W'(RESETEXP) : EXP_W'(size_result);
+
+    // move this to prep_bound_req to share with set_bounds_rndown 
+    //   should be ok to fit this in cycle 1 since it is a straight compare
+    result.in_bound = ~((result.top33req > in_cap.top33) || (addr < in_cap.base32)); 
 
     return result;
   endfunction
@@ -381,19 +417,21 @@ package cheri_pkg;
                                             bound_req_t bound_req, logic req_exact);
     full_cap_t       out_cap;
 
-    logic [EXP_W-1:0] exp1, exp2, expr;
+    logic [EXP_W-1:0] exp1, exp2;
     logic [32:0]      top33req;
     logic [BOT_W:0]   base1, base2, top1, top2, len1, len2;
     logic [32:0]      mask1, mask2;
     logic             ovrflw, topoff1, topoff2, topoff;
     logic             baseoff1, baseoff2, baseoff;
     logic             tophi1, tophi2, tophi;
+    logic             in_bound;
 
     out_cap  = in_cap;
 
     top33req = bound_req.top33req;
     exp1     = bound_req.exp1;
     exp2     = bound_req.exp2;
+    in_bound = bound_req.in_bound;
 
     // 1st path
     mask1    = {33{1'b1}} << exp1;
@@ -455,11 +493,61 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     // also compare address >= old base 32 to handle exp=24 case
     //   exp = 24 case: can have addr < base (not covered by representibility checking);
     //   other exp cases: always addr >= base when out_cap.tag == 1
-    if ((top33req > in_cap.top33) || (addr < in_cap.base32)) 
+    if (~in_bound) 
       out_cap.valid = 1'b0;
 
     return out_cap;
   endfunction
+
+
+  function automatic full_cap_t set_bounds_rndn (full_cap_t in_cap, logic[31:0] addr,
+                                                 bound_req_t bound_req);
+    full_cap_t       out_cap;
+
+    logic [EXP_W:0]  explen, expb, exp_final;
+    logic [32:0]     top33req;
+    logic            in_bound;
+    logic            el_gt_eb, el_gt_14, eb_gt_14; 
+    logic            tophi;
+
+    out_cap  = in_cap;
+
+    top33req = bound_req.top33req;
+    explen   = bound_req.explen;
+    expb     = bound_req.expb;
+    in_bound = bound_req.in_bound;
+
+    el_gt_eb = (explen > expb);
+    el_gt_14 = (explen > 14);
+    eb_gt_14 = (expb   > 14);
+    
+    // final exp =  min(14, e_l, e_b)
+    exp_final = (el_gt_eb & !eb_gt_14) ? expb : (el_gt_14 ? 14 : explen);
+
+    // if (el_gt_eb & eb_gt_14) exp_final = 14;       //  min(14, min(e_l, e_b)), el > eb, eb > 14
+    // else if (el_gt_eb)       exp_final = expb;     //  min(14, min(e_l, e_b)), el > eb, eb <= 14
+    // else if (el_gt_14)       exp_final = 14;       //  min(14, min(e_l, e_b)), el <= eb, el > 14
+    // else                     exp_final = explen;   //  e_l,                    el <= eb, el <= 14
+
+    out_cap.exp  = exp_final;
+    out_cap.base = (BOT_W)'(addr >> exp_final);
+
+    out_cap.top = (el_gt_eb | el_gt_14) ? ((BOT_W)'(out_cap.base-1)) : 
+                                          ((BOT_W)'(top33req >> exp_final));
+
+    if (~in_bound) out_cap.valid = 1'b0;
+
+    // top/base correction values
+    //   Note the new base == addr >> exp, so addr_hi == FALSE, thus base_cor == 0
+    //   as such, top_cor can only be either either 0 or +1;
+    tophi = (out_cap.top >= out_cap.base);
+    out_cap.top_cor  = tophi ? 2'b00 : 2'b01;
+    out_cap.base_cor = 2'b00;  
+
+    return out_cap;
+  endfunction
+
+
 
   // seal/unseal related functions
   function automatic full_cap_t seal_cap (full_cap_t in_cap, logic [OTYPE_W-1:0] new_otype);
@@ -807,38 +895,39 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
   parameter int OPDW = 36;      // Must >= number of cheri operator/instructions we support
 
   typedef enum logic [5:0] {
-    CGET_PERM       = 6'h00,
-    CGET_TYPE       = 6'h01,
-    CGET_BASE       = 6'h02,
-    CGET_LEN        = 6'h03,
-    CGET_TAG        = 6'h04,
-    CGET_TOP        = 6'h05,
-    CGET_HIGH       = 6'h06,
-    CGET_ADDR       = 6'h07,
-    CSEAL           = 6'h08,
-    CUNSEAL         = 6'h09,
-    CAND_PERM       = 6'h0a,
-    CSET_ADDR       = 6'h0b,
-    CINC_ADDR       = 6'h0c,
-    CINC_ADDR_IMM   = 6'h0d,
-    CSET_BOUNDS     = 6'h0e,
-    CSET_BOUNDS_EX  = 6'h0f,
-    CSET_BOUNDS_IMM = 6'h10,
-    CIS_SUBSET      = 6'h11,
-    CIS_EQUAL       = 6'h12,
-    CMOVE_CAP       = 6'h13,
-    CSUB_CAP        = 6'h14,
-    CCLEAR_TAG      = 6'h15,
-    CLOAD_CAP       = 6'h16,
-    CSET_HIGH       = 6'h17,
-    CSTORE_CAP      = 6'h18,
-    CCSR_RW         = 6'h19,
-    CJALR           = 6'h1a,
-    CJAL            = 6'h1b,
-    CAUIPCC         = 6'h1c,
-    CAUICGP         = 6'h1d,
-    CRRL            = 6'h1e,
-    CRAM            = 6'h1f
+    CGET_PERM        = 6'h00,
+    CGET_TYPE        = 6'h01,
+    CGET_BASE        = 6'h02,
+    CGET_LEN         = 6'h03,
+    CGET_TAG         = 6'h04,
+    CGET_TOP         = 6'h05,
+    CGET_HIGH        = 6'h06,
+    CGET_ADDR        = 6'h07,
+    CSEAL            = 6'h08,
+    CUNSEAL          = 6'h09,
+    CAND_PERM        = 6'h0a,
+    CSET_ADDR        = 6'h0b,
+    CINC_ADDR        = 6'h0c,
+    CINC_ADDR_IMM    = 6'h0d,
+    CSET_BOUNDS      = 6'h0e,
+    CSET_BOUNDS_EX   = 6'h0f,
+    CSET_BOUNDS_IMM  = 6'h10,
+    CIS_SUBSET       = 6'h11,
+    CIS_EQUAL        = 6'h12,
+    CMOVE_CAP        = 6'h13,
+    CSUB_CAP         = 6'h14,
+    CCLEAR_TAG       = 6'h15,
+    CLOAD_CAP        = 6'h16,
+    CSET_HIGH        = 6'h17,
+    CSTORE_CAP       = 6'h18,
+    CCSR_RW          = 6'h19,
+    CJALR            = 6'h1a,
+    CJAL             = 6'h1b,
+    CAUIPCC          = 6'h1c,
+    CAUICGP          = 6'h1d,
+    CRRL             = 6'h1e,
+    CRAM             = 6'h1f,
+    CSET_BOUNDS_RNDN = 6'h20
   } cheri_op_e;
 
   typedef enum logic [4:0] {

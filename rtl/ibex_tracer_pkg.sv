@@ -359,6 +359,7 @@ package ibex_tracer_pkg;
   parameter logic [31:0] INSN_CHINCADDRIMM    = {12'h?, 5'h?,  3'b001, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHSETBOUNDS     = {7'h08, 10'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHSETBOUNDSEX   = {7'h09, 10'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
+  parameter logic [31:0] INSN_CHSETBOUNDSRNDN = {7'h0a, 10'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHSETBOUNDSIMM  = {12'h?, 5'h?,  3'b010, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHCLEARTAG      = {7'h7f, 5'hb, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };
   parameter logic [31:0] INSN_CHCRRL          = {7'h7f, 5'h8, 5'h?, 3'b000, 5'h?, {OPCODE_CHERI} };

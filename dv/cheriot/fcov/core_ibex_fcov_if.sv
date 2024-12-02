@@ -152,7 +152,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
         id_instr_category = InstrCategoryCheriSCR;
       cheri_ops[CSET_ADDR], cheri_ops[CINC_ADDR], cheri_ops[CINC_ADDR_IMM], cheri_ops[CAUICGP],cheri_ops[CAUIPCC]:
         id_instr_category = InstrCategoryCheriAddr;
-      cheri_ops[CSET_BOUNDS_IMM], cheri_ops[CSET_BOUNDS], cheri_ops[CSET_BOUNDS_EX], cheri_ops[CRRL], cheri_ops[CRAM]:
+      cheri_ops[CSET_BOUNDS_IMM], cheri_ops[CSET_BOUNDS], cheri_ops[CSET_BOUNDS_EX], cheri_ops[CSET_BOUNDS_RNDN],cheri_ops[CRRL], cheri_ops[CRAM]:
         id_instr_category = InstrCategoryCheriBounds;
       cheri_ops[CCLEAR_TAG], cheri_ops[CMOVE_CAP], cheri_ops[CSEAL], cheri_ops[CUNSEAL], cheri_ops[CAND_PERM],
       cheri_ops[CSUB_CAP], cheri_ops[CIS_SUBSET], cheri_ops[CIS_EQUAL], cheri_ops[CSET_HIGH]:
