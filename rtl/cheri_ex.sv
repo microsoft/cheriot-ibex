@@ -1137,26 +1137,26 @@ module cheri_ex import cheri_pkg::*; #(
   // debug signal for FPGA only
   //
   logic [15:0] dbg_status;
-  logic [67:0] dbg_cs1_vec, dbg_cs2_vec, dbg_cd_vec;
+  logic [66:0] dbg_cs1_vec, dbg_cs2_vec, dbg_cd_vec;
 
   assign dbg_status = {4'h0,
                        instr_is_rv32lsu_i, rv32_lsu_req_i, rv32_lsu_we_i,  rv32_lsu_err,
                        cheri_exec_id_i, cheri_lsu_err, rf_fullcap_a.valid, result_cap_o.valid,
                        addr_bound_vio, perm_vio, addr_bound_vio_rv32, perm_vio_rv32};
 
-  assign dbg_cs1_vec = {rf_fullcap_a.top_cor, rf_fullcap_a.base_cor, // 67:64
+  assign dbg_cs1_vec = {rf_fullcap_a.top_cor, rf_fullcap_a.base_cor, // 66:64
                         rf_fullcap_a.exp,                            // 63:59
                         rf_fullcap_a.top, rf_fullcap_a.base,         // 58:41
                         rf_fullcap_a.otype, rf_fullcap_a.cperms,     // 40:32
                         rf_rdata_a};                                 // 31:0
 
-  assign dbg_cs2_vec = {rf_fullcap_b.top_cor, rf_fullcap_b.base_cor, // 67:64
+  assign dbg_cs2_vec = {rf_fullcap_b.top_cor, rf_fullcap_b.base_cor, // 66:64
                         rf_fullcap_b.exp,                            // 63:59
                         rf_fullcap_b.top, rf_fullcap_b.base,         // 58:41
                         rf_fullcap_b.otype, rf_fullcap_b.cperms,     // 40:32
                         rf_rdata_b};                                 // 31:0
 
-  assign dbg_cd_vec = {result_cap_o.top_cor, result_cap_o.base_cor,  // 67:64
+  assign dbg_cd_vec = {result_cap_o.top_cor, result_cap_o.base_cor,  // 66:64
                         result_cap_o.exp,                            // 63:59
                         result_cap_o.top, result_cap_o.base,         // 58:41
                         result_cap_o.otype, result_cap_o.cperms,     // 40:32

@@ -82,7 +82,7 @@ module cheri_stkz import cheri_pkg::*; (
 
 
   always_comb begin
-    logic [3:0] tmp4;
+    logic [2:0] tmp3;
     logic [8:0] addrmi9;
  
     if ((stkz_fsm_q == STKZ_IDLE) && stkz_start)
@@ -106,9 +106,9 @@ module cheri_stkz import cheri_pkg::*; (
     //   note we only start an zeroization if addr > base32 so no need for representability check
     ztop_rcap_nxt = ztop_rcap;
     addrmi9 = {stkz_ptrw_nxt, 2'b00} >> ztop_rcap.exp;
-    tmp4    = update_temp_fields(ztop_rcap.top, ztop_rcap.base, addrmi9);
-    ztop_rcap_nxt.top_cor  = tmp4[3:2];
-    ztop_rcap_nxt.base_cor = tmp4[1:0];
+    tmp3    = update_temp_fields(ztop_rcap.top, ztop_rcap.base, addrmi9);
+    ztop_rcap_nxt.top_cor  = tmp3[2:1];
+    ztop_rcap_nxt.base_cor = tmp3[0];
     ztop_rcap_nxt.valid    = ztop_rcap.valid & ~stkz_done;
   end
   
