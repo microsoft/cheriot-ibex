@@ -241,7 +241,7 @@ package cheri_pkg;
   endfunction
 
   // obtain 32-bit representation of top
-  function automatic logic[32:0] get_top33(logic [TOP_W-1:0] top, logic [1:0]  cor,
+  function automatic logic[32:0] get_bound33(logic [TOP_W-1:0] top, logic [1:0]  cor,
                                            logic [EXP_W-1:0] exp, logic [31:0] addr);
     logic [32:0] t1, t2, mask, cor_val;
 
@@ -260,12 +260,6 @@ package cheri_pkg;
 
     return t1;
 
-  endfunction
-
-  // obtain 32-bit representation of base
-  function automatic logic[31:0] get_base32(logic [TOP_W-1:0] base, logic cor,
-                                            logic [EXP_W-1:0] exp, logic [31:0] addr);
-    return 32'(get_top33(base, cor ? 2'b11 : 2'b00, exp, addr));
   endfunction
 
   // this implementation give slightly better timing/area results
@@ -609,8 +603,8 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     full_cap.cperms   = reg_cap.cperms;
     full_cap.rsvd     = reg_cap.rsvd;
 
-    full_cap.top33  = get_top33(reg_cap.top, reg_cap.top_cor, reg_cap.exp, addr);
-    full_cap.base32 = get_base32(reg_cap.base, reg_cap.base_cor, reg_cap.exp, addr);
+    full_cap.top33  = get_bound33(reg_cap.top, reg_cap.top_cor, reg_cap.exp, addr);
+    full_cap.base32 = get_bound33(reg_cap.base, {2{reg_cap.base_cor}}, reg_cap.exp, addr);
     // full_cap  = update_bounds(full_cap, addr);   // for some reason this increases area 
 
     full_cap.maska    = 0;
