@@ -1,0 +1,320 @@
+
+
+hsp_encr_level:
+  pinlist:
+  - input               hspclk_i
+  - input               hsp_reset_nai
+  - input               por_reset_nai
+
+  - input               gpio_hsp_uart_sin_i
+  - output              hsp_gpio_uart_sout_o
+
+  - output              hsp_gpio_i2c_scl_oe_o
+  - output              hsp_gpio_i2c_sda_oe_o
+  - input               gpio_hsp_i2c_scl_i
+  - input               gpio_hsp_i2c_sda_i
+
+  - output              irq_o
+  - output              fiq_o
+  - output              irqx0_o
+  - output              irqx1_o
+
+  - input               sys_eth_irq_i
+
+  - input  [31:0]       gpio_in
+  - output [31:0]       gpio_out
+  - output [31:0]       gpio_oen
+
+  - input               tbre_done_i
+  - output [64:0]       tbre_ctrl_vec_o
+
+  - input               dma_completion_intc_i
+
+#  - output              cheri_pmode_o
+#  - output              cheri_tsafe_en_o
+
+  - axibus:
+      prefix: hsp_axi_mst_ 
+      dir: output
+      idwidth: 4
+      awidth: 64
+      dwidth: 64
+      len: 8
+      swidth: 8
+      uwidth: 12
+      case: lower
+
+  - axibus:
+      name: _m_ibex
+      dir: input
+      idwidth: 4
+      awidth: 32
+      dwidth: 32
+      len: 8
+      swidth: 4
+      uwidth: 12
+      case: lower
+
+  file_list:
+    - "-f $PROJECT_PATH/$PROJECT_NAME/ip/vendor/uart/DW_apb_uart.lst"  
+    - "-f $PROJECT_PATH/$PROJECT_NAME/ip/vendor/i2c/DW_apb_i2c.lst"
+#    - "-f $PROJECT_PATH/$PROJECT_NAME/ip/vendor/spi/DWC_ssi.lst"
+
+  defines:
+    - AXI_MST_ID_SP  0
+    - AXI_MST_ID_RP  1
+    - AXI_MST_ID_CCS 2
+    - AXI_MST_ID_SHA 3
+    - AXI_MST_ID_PKA 4
+    - AXI_MST_ID_AES 5
+    - AXI_MST_ID_MSB 6
+  
+    - HSP_GFC_APB_ADDR_WIDTH  15
+
+    - DMB_EXT_AWIDTH 64
+    - DMB_EXT_AWIDTH 64
+    - HSP_DMB_CFG_BEGIN           32'h8F0F0000
+    - HSP_DMB_CFG_SIZE            4096
+    - HSP_DMB_CFG_END             32'h8F0F1000
+    - HSP_DMB_CFG_AWIDTH          12
+    - HSP_DMB_CFG_DWIDTH          32
+    - HSP_DMB_CFG_VALID_SEGMENTS  32'hfffc0000
+    - HSP_DMB_BEGIN               32'h90000000
+    - HSP_DMB_SIZE                32'h70000000
+    - HSP_DMB_END                 33'h100000000
+    - HSP_DMB_AWIDTH              32
+    - HSP_DMB_DWIDTH              32
+  
+    - SERIOW  4
+    - DFS_W  5
+    - SSIC_MAX_XFER_SIZE 32
+    - SSIC_ADDR_SLICE_LHS 7
+    - SSIC_REG_DATA_WIDTH 32
+    - CTRLR0_RS 20
+    - SPI_CTRLR0_RS 17
+    - SSIC_NUM_SLAVES 1
+
+  instances:
+
+    hsp_encr_axi_fabric:
+      bus:
+        id_width: 4
+        addr_width: 32
+        data_width: 32
+        len_width: 8 
+        type: axi
+
+        mgrs: 
+          m_ibex:
+        subs:
+          s_creg:        
+            address: 0x8f000000:0x8f010000
+          s_sram:
+            address: 0x8f020000:0x8f020800
+          s_dmb:      
+            address: 0x8f0f0000:0xffffffff
+
+      inst_parameters:
+        - AXI_USER_WIDTH 12
+      inst_pre_code:
+        - "assign clk = hspclk;"
+        - "assign rstn = hsp_reset_nai;"
+
+    hsp_encr_apb_fabric:
+      bus:
+        id_width: 5
+        addr_width: 32
+        data_width: 32
+        len_width: 8
+        apb_ext: m_creg
+        axi_ext: s_creg
+        type: axi2apb
+
+        subs:
+          tbre:
+            address:
+              - 32'h8f00_0000 32'h8f00_0100
+          intc: 
+            address:
+              - 32'h8f00_0600 32'h8f00_0640
+          tmr0: 
+            address:
+              - 32'h8f00_0800 32'h8f00_0840
+          tmr1: 
+            address:
+              - 32'h8f00_0840 32'h8f00_0880
+          uart:
+            address:
+              - 32'h8f00_b000 32'h8f00_c000
+          spi:
+            address:
+              - 32'h8f00_c000 32'h8f00_d000
+          i2c:
+            address:
+              - 32'h8f00_d000 32'h8f00_e000
+          gpio:
+            address:
+              - 32'h8f00_f000 32'h8f01_0000
+
+
+    creg_intc:
+      module: msftDvIp_creg_intc
+      rtl: ip/dvip/rtl/Intc/verilog/msftDvIp_creg_intc.sv
+      inst_pre_code:
+        - "assign irqs[15:0] = 16'h0000;"
+        - "assign irqs[16] = sys_eth_irq;"
+        - "assign irqs[17] = tmr_irq0 | tmr_irq1;"
+        - "assign irqs[18] = dma_completion_intc_i;"
+        - "assign irqs[31:19] = 13'h0000;"
+      pin_sub:
+        - "psel  psel_intc"
+        - "penable penable_m_creg"
+        - "paddr paddr_m_creg"
+        - "pwdata pwdata_m_creg"
+        - "pwrite pwrite_m_creg"
+        - "prdata prdata_intc"
+        - "pready pready_intc"
+        - "pslverr psuberr_intc"
+
+    creg_timer0:
+      module: msftDvIp_creg_timer
+      rtl: ip/dvip/rtl/Timer/verilog/msftDvIp_creg_timer.sv
+      pin_sub:
+        - "psel  psel_tmr0"
+        - "penable penable_m_creg"
+        - "paddr paddr_m_creg"
+        - "pwdata pwdata_m_creg"
+        - "pwrite pwrite_m_creg"
+        - "prdata prdata_tmr0"
+        - "pready pready_tmr0"
+        - "pslverr psuberr_tmr0"
+        - "irq tmr_irq0"
+        - "err tmr_err0"
+        - "sticky_err tmr_sticky_err0"
+
+    creg_timer1:
+      module: msftDvIp_creg_timer
+      rtl: ip/dvip/rtl/Timer/verilog/msftDvIp_creg_timer.sv
+      pin_sub:
+        - "psel  psel_tmr1"
+        - "penable penable_m_creg"
+        - "paddr paddr_m_creg"
+        - "pwdata pwdata_m_creg"
+        - "pwrite pwrite_m_creg"
+        - "prdata prdata_tmr1"
+        - "pready pready_tmr1"
+        - "pslverr psuberr_tmr1"
+        - "irq tmr_irq1"
+        - "err tmr_err1"
+        - "sticky_err tmr_sticky_err1"
+
+    DW_apb_uart_wrapper:
+      rtl: ip/vendor/uart/DW_apb_uart_wrapper.v
+      pin_sub:
+        - "pclk clk"
+        - "presetn rstn"
+        - "sin  gpio_hsp_uart_sin"
+        - "sout  hsp_gpio_uart_sout"
+        - "scan_mode 1'b0"
+        - "pslverr_uart psuberr_uart"
+
+    DW_apb_i2c_wrapper:
+      rtl: ip/vendor/i2c/DW_apb_i2c_wrapper.v
+      pin_sub:
+        - "pclk clk"
+        - "presetn rstn"
+        - "ic_clk clk"
+        - "ic_rst_n rstn"
+        - "psel psel_i2c"
+        - "penable penable_m_creg"
+        - "pwrite pwrite_m_creg"
+        - "paddr paddr_m_creg"
+        - "pwdata pwdata_m_creg"
+        - "prdata prdata_i2c"
+        - "pready pready_i2c"
+        - "pslverr psuberr_i2c"
+        - "ic_en "
+        - "ic_clk_in_a gpio_hsp_i2c_scl_i"
+        - "ic_data_in_a gpio_hsp_i2c_sda_i"
+        - "ic_clk_oe hsp_gpio_i2c_scl_oe"
+        - "ic_data_oe hsp_gpio_i2c_sda_oe"
+      
+#    DWC_ssi_wrapper:
+#      rtl: ip/vendor/spi/DWC_ssi_wrapper.v
+#      pin_sub:
+#        - "pclk clk"
+#        - "presetn rstn"
+#        - "psel psel_ssi"
+
+    dmb:
+      rtl: ip/dmb/verilog/dmb.v
+      pin_sub:
+        - "dmb_axi_slv_awid awid_s_dmb[3:0]"
+        - "dmb_axi_slv_awlock awlock_s_dmb[0]"
+        - "dmb_axi_slv_aruser 12'h0"
+        - "dmb_axi_slv_awuser 12'h0"
+        #- "dmb_axi_slv_bid bid_s_dmb[3:0]"
+        - "dmb_axi_slv_arid arid_s_dmb[3:0]"
+        - "dmb_axi_slv_arlock arlock_s_dmb[0]"
+        #- "dmb_axi_slv_rid rid_s_dmb[3:0]"
+        - "dmb_ext_mst_awlock hsp_axi_mst_awlock[0]"
+        - "dmb_ext_mst_arlock hsp_axi_mst_arlock[0]"
+        - "r%dmb_axi_slv_(\\S+)  \\1_s_dmb"
+        - "r%dmb_ext_mst_(\\S+)  hsp_axi_mst_\\1"
+        - "hsp_reset_na hsp_reset_nai"
+        - "dmb_w_allowed 1'b1"
+
+    shared_ram:
+      pin_sub:
+        - "s_axi_clk  hspclk"
+        - "s_axi_rst_n hsp_reset_nai"
+        - "r%s_axi_(\\S+)  \\1_s_sram"
+      module: msftDvIp_axi_mem_bit_write
+      inst_parameters:
+        - AXI_ADDR_WIDTH 32
+        - AXI_DATA_WIDTH 32
+        - AXI_ID_WIDTH 5
+        - AXI_LEN_WIDTH 8
+        - AXI_LOCK_WIDTH 2
+        - "MEM_SIZE 'h200000"
+      rtl: ip/dvip/rtl/Memories/msftDvIp_axi_mem_bit_write.sv
+
+#    cheri_por:
+#      rtl: subsystem/cheri0/verif/tb/rtl/cheri_por.sv
+#      pin_sub:
+#        - "psel  psel_por"
+#        - "penable penable_m_creg"
+#        - "paddr paddr_m_creg"
+#        - "pwdata pwdata_m_creg"
+#        - "pwrite pwrite_m_creg"
+#        - "prdata prdata_por"
+#        - "pready pready_por"
+#        - "pslverr pslverr_por"
+
+    msftDvIp_gpio:
+      rtl: ip/dvip/rtl/Gpio/verilog/msftDvIp_gpio.sv
+      pin_sub:
+        - "pclk hspclk"
+        - "prstn hsp_reset_nai"
+        - "psel  psel_gpio"
+        - "penable penable_m_creg"
+        - "paddr paddr_m_creg"
+        - "pwdata pwdata_m_creg"
+        - "pwrite pwrite_m_creg"
+        - "prdata prdata_gpio"
+        - "pready pready_gpio"
+        - "pslverr psuberr_gpio"
+
+    tbreRegs:
+      rtl: ip/dvip/rtl/tbreRegs/verilog/tbreRegs.sv
+      pin_sub:
+        - "pclk hspclk"
+        - "prstn hsp_reset_nai"
+        - "psel  psel_tbre"
+        - "penable penable_m_creg"
+        - "paddr paddr_m_creg"
+        - "pwdata pwdata_m_creg"
+        - "pwrite pwrite_m_creg"
+        - "prdata prdata_tbre"
+        - "pready pready_tbre"
+        - "pslverr psuberr_tbre"

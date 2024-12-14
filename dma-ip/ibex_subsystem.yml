@@ -1,0 +1,137 @@
+
+
+
+ibex_subsystem:
+  pinlist:
+  - input clk_i
+  - input rstn_i
+  - input [3:0]       fetch_enable_i
+  - input             test_en_i
+  - input             cheri_pmode_i
+  - input             cheri_tsafe_en_i
+
+  - axibus:
+      name: _m_ibex
+      dir: output
+      idwidth: 4
+      awidth: 32
+      dwidth: 32
+      len: 8
+      swidth: 4
+      uwidth: 12
+      case: lower
+
+#  - apbbus:
+#      name: _apb
+#      dir: output
+#      awidth: 32
+#      dwidth: 32
+#      case: lower
+
+  - output          txd_o
+  - input           rxd_i
+
+  - input  [31:0]   curr_PC_i
+  - input           inst_val_i
+  - input  [31:0]   inst_reg_i
+
+  - output [31:0]   out0_o
+  - output [31:0]   out1_o
+  - output [31:0]   out2_o
+  - input  [31:0]   in0_i
+
+  - output [31:0]   dbg_gp_out_o
+  - input  [31:0]   dbg_gp_in_i
+
+  - input           TRSTn_o
+  - input           TCK_o
+  - input           TMS_o
+  - input           TDI_i
+  - output          TDO_o
+  - output          TDOoen_o
+
+  - input             irq_external_i
+  - input             irq_timer_i
+  - input [14:0]      irq_fast_i 
+  - input             irq_nm_i
+
+  - output            tbre_done_o
+  - input  [64:0]     tbre_ctrl_vec_i
+
+  - output            dma_completion_intc_o
+
+  include_list:
+    - "$PROJECT_PATH/$PROJECT_NAME/ip/dvp/ibex/tb"
+
+  file_list:
+
+  #bus:
+  #  ibex_ss_axi_fabric:
+  #    id_width: 4
+  #    addr_width: 32
+  #    data_width: 32
+  #    len_width: 8 
+  #    type: axi
+#
+#      masters: 
+#        m_ibex:
+#      slaves:
+#        s_creg:        
+#          address: 0x87000000:0x88000000
+#        s_sram:
+#          address: 0x8f020000:0x8f020800
+#        s_dmb:      
+#          address: 0x8f0f0000:0xffffffff
+#
+#    ss_apb:
+#      id_width: 4
+#      addr_width: 32
+#      data_width: 32
+#      len_width: 8
+#      apb_ext: m_creg
+#      axi_ext: s_creg
+#      type: axi2apb
+#
+#      slaves:
+#        uart:
+#          address:
+#            - 32'h8f00_b000 32'h8f00_c000
+#        spi:
+#          address:
+#            - 32'h8f00_c000 32'h8f00_d000
+#        i2c:
+#          address:
+#            - 32'h8f00_d000 32'h8f00_e000
+
+  instances:
+#    dv_ohg_riscv_wrapper:
+#      rtl: ip/dv_subsystem/ip/riscv/rtl/riscv_wrapper/dv_ohg_riscv_wrapper.sv
+#    ibex_ss_axi_fabric:
+#      inst_parameters: 
+#      yml: ./ibex_ss_axi_fabric.yml
+#
+#    ss_apb:
+#      yml: ./ss_apb.yml
+
+    ibex_memory:
+      rtl: ip/dvp/ibexc/memory/ibex_memory.sv
+
+#    dvp_dmb:
+#      rtl: ip/dv_subsystem/ip/dvp/rtl/dvp_dmb/dvp_dmb.sv
+#
+#    dv_periph_wrapper:
+#      pin_sub:
+#        - "r%axi_(\\S+)_[io] dv_axi_\\1"
+#      rtl: ip/dv_subsystem/ip/dvp/rtl/dv_periph_wrapper/dv_periph_wrapper.sv
+
+#    ibex_periph:
+#      yml: ip/dvp/ibexc/yml/ibex_periph.yml
+
+    dvp_ibex_wrapper:
+      yml: ip/dvp/ibexc/yml/dvp_ibex_wrapper.yml
+      pin_sub:
+        - "r%^AW(\\S+)  aw\\1_m_ibex tolower"
+        - "r%^W(\\S+)   w\\1_m_ibex tolower"
+        - "r%^B(\\S+)   b\\1_m_ibex tolower"
+        - "r%^AR(\\S+)  ar\\1_m_ibex tolower"
+        - "r%^R(\\S+)   r\\1_m_ibex tolower"
