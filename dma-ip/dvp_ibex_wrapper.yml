@@ -1,0 +1,175 @@
+
+dvp_ibex_wrapper:
+  pinlist:
+  - input             clk_i
+  - input             rstn_i
+  - input [3:0]       fetch_enable_i
+  - input             test_en_i
+  - input             cheri_pmode_i
+  - input             cheri_tsafe_en_i
+
+  - input             TCK_i
+  - input             TMS_i
+  - input             TDI_i
+  - input             TRSTn_i
+  - output            TDO_o
+  - output            TDOoen_o
+
+  - output            IROM_EN_o
+  - output [31:0]     IROM_ADDR_o
+  - output [32:0]     IROM_WDATA_o
+  - output            IROM_WE_o
+  - output [3:0]      IROM_BE_o
+  - input  [32:0]     IROM_RDATA_i
+  - input             IROM_READY_i
+  - input             IROM_ERROR_i
+
+  - output            IRAM_EN_o
+  - output [31:0]     IRAM_ADDR_o
+  - output [32:0]     IRAM_WDATA_o
+  - output            IRAM_WE_o
+  - output [3:0]      IRAM_BE_o
+  - input [32:0]      IRAM_RDATA_i
+  - input             IRAM_READY_i
+  - input             IRAM_ERROR_i
+
+  - output            DRAM_EN_o
+  - output [31:0]     DRAM_ADDR_o
+  - output [32:0]     DRAM_WDATA_o
+  - output            DRAM_WE_o
+  - output [3:0]      DRAM_BE_o
+  - input [32:0]      DRAM_RDATA_i
+  - input             DRAM_READY_i
+  - input             DRAM_ERROR_i
+
+  - output [3:0]      AWID_o
+  - output [31:0]     AWADDR_o
+  - output [7:0]      AWLEN_o
+  - output [2:0]      AWSIZE_o
+  - output [1:0]      AWBURST_o
+  - output [1:0]      AWLOCK_o
+  - output [2:0]      AWPROT_o
+  - output            AWVALID_o
+  - output [3:0]      AWCACHE_o
+  - output [11:0]     AWUSER_o
+  - input             AWREADY_i
+
+  - output [31:0]     WDATA_o
+  - output [3:0]      WSTRB_o
+  - output            WLAST_o
+  - output            WVALID_o
+  - input             WREADY_i
+
+  - input [3:0]       BID_i
+  - input [1:0]       BRESP_i
+  - input             BVALID_i
+  - output            BREADY_o
+
+  - output [3:0]      ARID_o
+  - output [31:0]     ARADDR_o
+  - output [7:0]      ARLEN_o
+  - output [2:0]      ARSIZE_o
+  - output [1:0]      ARBURST_o
+  - output [1:0]      ARLOCK_o
+  - output [2:0]      ARPROT_o
+  - output [3:0]      ARCACHE_o
+  - output [11:0]     ARUSER_o
+  - output            ARVALID_o
+  - input             ARREADY_i
+  
+  - input [3:0]       RID_i
+  - input [31:0]      RDATA_i
+  - input             RLAST_i
+  - input [1:0]       RRESP_i
+  - input             RVALID_i
+  - output            RREADY_o
+
+  - output            dvp_pclk_o
+  - output            dvp_presetn_o
+  - output            dvp_psel_o
+  - output            dvp_penable_o
+  - output [31:0]     dvp_paddr_o
+  - input  [31:0]     dvp_prdata_i
+  - output [31:0]     dvp_pwdata_o
+  - output            dvp_pwrite_o
+  - output [3:0]      dvp_pstrb_o
+  - input             dvp_pready_i
+  - input             dvp_pslverr_i 
+
+  - input             intctrl_irq_i
+  - input             irq_external_i
+  - input             irq_timer_i
+  - input [14:0]      irq_fast_i 
+  - input             irq_nm_i
+
+  - output            tsmap_cs_o 
+  - output [15:0]     tsmap_addr_o 
+  - input  [31:0]     tsmap_rdata_i
+  - output            dma_tsmap_cs_o 
+  - output [15:0]     dma_tsmap_addr_o 
+  - input  [31:0]     dma_tsmap_rdata_i
+  - input             tsmap_is_occupied_i
+  - output            tbre_done_o
+  - input  [64:0]     tbre_ctrl_vec_i
+
+  - input             snooped_tsmap_cs_i
+  - input  [15:0]     snooped_tsmap_addr_i
+  - input  [31:0]     snooped_tsmap_rdata_i
+  
+  - output            dma_completion_intc_o
+
+  include_list:
+
+  file_list:
+    - "-f $PROJECT_PATH/$PROJECT_NAME/ip/dvp/ibexc/verilog/ibexc.f"
+    - "$PROJECT_PATH/$PROJECT_NAME/ip/dvp/memory/fpga_block_ram_byte_wr_model_dvp.sv"
+    - "$PROJECT_PATH/$PROJECT_NAME/ip/dvp/memory/fpga_block_ram_model_dvp.sv"
+    - "$PROJECT_PATH/$PROJECT_NAME/ip/dvp/memory/fpga_block_ram_2port_model_dvp.sv"
+
+#    - "$PROJECT_PATH/$PROJECT_NAME/ip/dvp/riscv_msftdbg/rom/msftDv_debug_rom.sv"
+#    - "$PROJECT_PATH/$PROJECT_NAME/ip/dvp/riscv_msftdbg/verilog/msftDvIp_riscv_dmibus.sv"
+    
+
+#   - "$PROJECT_PATH/$PROJECT_NAME/ip/dvp/riscv-dbg/src/dm_pkg.sv"
+#   - "$PROJECT_PATH/$PROJECT_NAME/ip/dvp/riscv-dbg/src/dm_csrs.sv"
+#    - "$PROJECT_PATH/$PROJECT_NAME/ip/dvp/riscv-dbg/src/dmi_cdc.sv"
+#   - "$PROJECT_PATH/$PROJECT_NAME/ip/dvp/riscv-dbg/src/dmi_intf.sv"
+#   - "$PROJECT_PATH/$PROJECT_NAME/ip/dvp/riscv-dbg/src/dmi_jtag_tap.sv"
+#   - "$PROJECT_PATH/$PROJECT_NAME/ip/dvp/riscv-dbg/src/dmi_test.sv"
+
+  instances:
+    dvp_ibex_core_wrapper:
+      inst_pre_code:
+        - "assign rstn_ibex = rstn & ~hartrst;"
+      inst_parameters:
+        - "DmHaltAddr       32'h0000_0800"
+        - "DmExceptionAddr  32'h0000_0808"
+      rtl: ip/dvp/ibexc/wrapper/dvp_ibex_core_wrapper.sv
+      pin_sub:
+        - "rstn rstn_ibex"
+        - "hart_id 32'h0000_0000"
+        - "boot_addr 32'h2000_0000"
+
+        - "irq_software 1'b0"
+#        - "irq_external 1'b0"
+#        - "irq_fast 15'h0000"
+#        - "irq_nm 1'b0"
+
+        - "scramble_key_valid 1'b0"
+        - "scramble_key 128'h0"
+        - "scramble_nonce 64'h0"
+        - "scan_rst  1'b0"
+
+        - "instr_err 1'b0"
+        - "data_err  1'b0"
+        - "instr_rdata_intg   7'h0"
+        - "data_rdata_intg   7'h0"
+
+    ibexc_obimux3w0:
+      rtl: ip/dvp/ibexc/ss_verilog/ibexc_obimux3w0.sv
+
+    msftDvIp_riscv_debug:
+      yml: ip/dvp/riscv_msftdbg/yml/msftDvIp_riscv_debug.yml
+  
+    dma:
+      rtl: ip/dvip/rtl/DMA/dma-v4.sv 
