@@ -4,13 +4,13 @@
 
 module cheri_ex import cheri_pkg::*; #(
   parameter bit          WritebackStage = 1'b0,
-  parameter bit          MemCapFmt = 1'b0,
-  parameter int unsigned HeapBase,
-  parameter int unsigned TSMapBase,
-  parameter int unsigned TSMapSize,
-  parameter bit          CheriPPLBC  = 1'b1,
-  parameter bit          CheriSBND2  = 1'b0,
-  parameter bit          CheriStkZ   = 1'b1
+  parameter bit          MemCapFmt      = 1'b0,
+  parameter int unsigned HeapBase       = 32'h2001_0000,
+  parameter int unsigned TSMapBase      = 32'h2002_f000,
+  parameter int unsigned TSMapSize      = 1024,
+  parameter bit          CheriPPLBC     = 1'b1,
+  parameter bit          CheriSBND2     = 1'b0,
+  parameter bit          CheriStkZ      = 1'b1
 )(
    // Clock and Reset
   input  logic          clk_i,

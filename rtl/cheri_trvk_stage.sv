@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 module cheri_trvk_stage #(
-  parameter int unsigned HeapBase,
-  parameter int unsigned TSMapSize
+  parameter int unsigned HeapBase  = 32'h2001_0000,
+  parameter int unsigned TSMapSize = 1024
 ) (
    // Clock and Reset
   input  logic                clk_i,
