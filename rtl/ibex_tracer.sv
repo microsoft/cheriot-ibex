@@ -746,8 +746,13 @@ module ibex_tracer import cheri_pkg::*; # (
         // C.LWSP
         imm = {rvfi_insn[3:2], rvfi_insn[12], rvfi_insn[6:4], 2'b00};
       end
-      data_accessed = CS1 | RD | MEM;
-      decoded_str = $sformatf("%s\tx%0d,%0d(c%0d)", mnemonic, rvfi_rd_addr, imm, rvfi_rs1_addr);
+      if (cheri_pmode_i) begin
+        data_accessed = CS1 | RD | MEM;
+        decoded_str = $sformatf("%s\tx%0d,%0d(c%0d)", mnemonic, rvfi_rd_addr, imm, rvfi_rs1_addr);
+      end else begin
+        data_accessed = RS1 | RD | MEM;
+        decoded_str = $sformatf("%s\tx%0d,%0d(x%0d)", mnemonic, rvfi_rd_addr, imm, rvfi_rs1_addr);
+      end
     end
   endfunction
 
@@ -773,8 +778,13 @@ module ibex_tracer import cheri_pkg::*; # (
         // C.SWSP
         imm = {rvfi_insn[8:7], rvfi_insn[12:9], 2'b00};
       end
-      data_accessed = CS1 | RS2 | MEM;
-      decoded_str = $sformatf("%s\tx%0d,%0d(c%0d)", mnemonic, rvfi_rs2_addr, imm, rvfi_rs1_addr);
+      if (cheri_pmode_i) begin
+        data_accessed = CS1 | RS2 | MEM;
+        decoded_str = $sformatf("%s\tx%0d,%0d(c%0d)", mnemonic, rvfi_rs2_addr, imm, rvfi_rs1_addr);
+      end else begin
+        data_accessed = RS1 | RS2 | MEM;
+        decoded_str = $sformatf("%s\tx%0d,%0d(x%0d)", mnemonic, rvfi_rs2_addr, imm, rvfi_rs1_addr);
+      end
     end
   endfunction
 
@@ -967,7 +977,11 @@ module ibex_tracer import cheri_pkg::*; # (
     // We cannot use rvfi_pc_wdata for conditional jumps.
     imm = rvfi_insn[31:12];
     data_accessed =  CD;
-    decoded_str = $sformatf("%s\tc%0d, 0x%0x", "CH.auipcc", rvfi_rd_addr, imm);
+    if (cheri_pmode_i) begin
+      decoded_str = $sformatf("%s\tc%0d,0x%0x", "CH.auipcc", rvfi_rd_addr, imm);
+    end else begin
+      decoded_str = $sformatf("%s\tx%0d,0x%0x", "auipc", rvfi_rd_addr, imm);
+    end
 
   endfunction
 
@@ -978,7 +992,7 @@ module ibex_tracer import cheri_pkg::*; # (
     // We cannot use rvfi_pc_wdata for conditional jumps.
     imm = rvfi_insn[31:12];
     data_accessed =  CD | CS1;
-    decoded_str = $sformatf("%s\tc%0d, 0x%0x", "CH.auicgp", rvfi_rd_addr, imm);
+    decoded_str = $sformatf("%s\tc%0d,0x%0x", "CH.auicgp", rvfi_rd_addr, imm);
   endfunction
 
 
