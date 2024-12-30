@@ -6,9 +6,11 @@ package cheri_pkg;
 
   // bit field widths
   parameter int unsigned ADDR_W    = 32;
-  parameter int unsigned TOP_W     = 9;
+  parameter int unsigned TOP_W     = 9;    
+  parameter int unsigned TOP8_W    = 8;   // IT8 encoding only
   parameter int unsigned BOT_W     = 9;
   parameter int unsigned CEXP_W    = 4;
+  parameter int unsigned CEXP5_W   = 5;   // IT8 encoding only
   parameter int unsigned EXP_W     = 5;
   parameter int unsigned OTYPE_W   = 3;
   parameter int unsigned CPERMS_W  = 6;
@@ -18,7 +20,7 @@ package cheri_pkg;
 
   parameter bit    [4:0] RESETEXP  = 24;
   parameter int unsigned UPPER_W   = 24;
-  parameter bit    [3:0] RESETCEXP = 15;
+  parameter bit    [4:0] RESETCEXP = 15;   // only used in non-IT8 encoding
 
   // bit index of PERMS field
   // U0 SE US EX SR MC LD SL LM SD LG GL
@@ -34,7 +36,6 @@ package cheri_pkg;
   parameter int unsigned PERM_US =  9;     // unseal
   parameter int unsigned PERM_SE = 10;     // seal
   parameter int unsigned PERM_U0 = 11;     //
-//  parameter int unsigned PERM_U2 = 13;     // temp workaround
 
   parameter logic [2:0] OTYPE_SENTRY_IE_BKWD = 3'd5;
   parameter logic [2:0] OTYPE_SENTRY_ID_BKWD = 3'd4;
@@ -412,6 +413,27 @@ package cheri_pkg;
 
     return result;
   endfunction
+  
+  function automatic bound_req_t prep_bound_req_it8 (full_cap_t in_cap, logic [31:0] addr, logic [31:0] length);   // IT8 encoding 
+    bound_req_t result;
+    logic [4:0] size_result;
+    logic       gt24;
+    logic [4:0] limit24_mask;
+
+    result.top33req = {1'b0, addr} + {1'b0, length};    // "requested" 33-bit top
+    result.expb     = count_tz(addr);
+    result.explen   = get_size({9'h0, length[31:9]});   // length exp without saturation, max 23
+
+    // since explen <= 23, exp1 and exp must be <= 24. No need for saturation logic
+    result.exp1     = result.explen;   
+    result.exp2     = result.explen + 1;
+
+    // move this to prep_bound_req to share with set_bounds_rndown 
+    //   should be ok to fit this in cycle 1 since it is a straight compare
+    result.in_bound = ~((result.top33req > in_cap.top33) || (addr < in_cap.base32)); 
+
+    return result;
+  endfunction
 
   function automatic full_cap_t set_bounds (full_cap_t in_cap, logic[31:0] addr,
                                             bound_req_t bound_req, logic req_exact);
@@ -499,7 +521,6 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     return out_cap;
   endfunction
 
-
   function automatic full_cap_t set_bounds_rndn (full_cap_t in_cap, logic[31:0] addr,
                                                  bound_req_t bound_req);
     full_cap_t       out_cap;
@@ -534,6 +555,45 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
     out_cap.top = (el_gt_eb | el_gt_14) ? ((BOT_W)'(out_cap.base-1)) : 
                                           ((BOT_W)'(top33req >> exp_final));
+
+    if (~in_bound) out_cap.valid = 1'b0;
+
+    // top/base correction values
+    //   Note the new base == addr >> exp, so addr_hi == FALSE, thus base_cor == 0
+    //   as such, top_cor can only be either either 0 or +1;
+    tophi = (out_cap.top >= out_cap.base);
+    out_cap.top_cor  = tophi ? 2'b00 : 2'b01;
+    out_cap.base_cor = 2'b00;  
+
+    return out_cap;
+  endfunction
+
+
+  function automatic full_cap_t set_bounds_rndn_it8 (full_cap_t in_cap, logic[31:0] addr,         // IT8 encoding 
+                                                     bound_req_t bound_req);
+    full_cap_t       out_cap;
+
+    logic [EXP_W:0]  explen, expb, exp_final;
+    logic [32:0]     top33req;
+    logic            in_bound;
+    logic            el_gt_eb; 
+    logic            tophi;
+
+    out_cap  = in_cap;
+
+    top33req = bound_req.top33req;
+    explen   = bound_req.explen;
+    expb     = bound_req.expb;
+    in_bound = bound_req.in_bound;
+
+    el_gt_eb = (explen > expb);
+    
+    exp_final = (el_gt_eb) ? expb :  explen;
+
+    out_cap.exp  = exp_final;
+    out_cap.base = (BOT_W)'(addr >> exp_final);
+
+    out_cap.top = (el_gt_eb) ? ((BOT_W)'(out_cap.base-1)) : ((BOT_W)'(top33req >> exp_final));
 
     if (~in_bound) out_cap.valid = 1'b0;
 
@@ -696,10 +756,12 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
   localparam integer RSVD_LO   = 31;
   localparam integer CPERMS_LO = 25;
   localparam integer OTYPE_LO  = 22;
-  localparam integer CEXP_LO   = 18;
+  localparam integer CEXP_LO   = 18;   
+  localparam integer CEXP5_LO  = 17;   // IT8 encoding only
   localparam integer TOP_LO    = 9;
   localparam integer BASE_LO   = 0;
-
+ 
+  // mem2reg, cap meta data, original cap bound encoding, memfmt0 
   function automatic reg_cap_t mem2regcap_fmt0 (logic [32:0] msw, logic [32:0] addr33, logic [3:0] clrperm);
     reg_cap_t regcap;
     logic [EXP_W-1:0] tmp5;
@@ -734,6 +796,64 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
   endfunction
 
+  // mem2reg, cap meta data, IT8 encoding, memfmt0 
+  function automatic reg_cap_t mem2regcap_it8_fmt0 (logic [32:0] msw, logic [32:0] addr33, logic [3:0] clrperm);   // IT8
+    reg_cap_t regcap;
+    logic [EXP_W-1:0] cexp;
+    logic [TOP_W-2:0] top8, base8;
+    logic [TOP_W-1:0] top9, base9;
+    logic             denorm, ltop, btop, ttop, tcin; 
+    logic             top_hi, addr_hi;
+    logic [2:0]       res3;
+
+    logic [CPERMS_W-1:0] cperms_mem;
+    logic [BOT_W-1:0]    addrmi9;
+    logic                sealed;
+    logic                valid_in;
+
+    valid_in      = msw[32] & addr33[32];
+    regcap.valid  = valid_in & ~clrperm[3];   
+
+    cexp          = msw[CEXP5_LO+:CEXP5_W];
+    denorm        = (cexp == 0);
+
+    btop          = msw[BASE_LO+BOT_W-1];
+    base8         = msw[BASE_LO+:(BOT_W-1)];
+    top8          = msw[TOP_LO+:(TOP_W-1)];
+
+    tcin          = (top8 < base8);           // can actually merge it with t_hi in update_temp_fields QQQ
+    ltop          = ~denorm;
+    ttop          = ltop ^ tcin ^ btop;
+
+    regcap.exp    = cexp ^ {5{~denorm}};      // this is the ^0b11111 part
+    top9          = {ttop, top8};
+    base9         = {btop, base8};
+    regcap.top    = top9;
+    regcap.base   = base9;
+
+    regcap.otype  = msw[OTYPE_LO+:OTYPE_W];
+
+    sealed = (regcap.otype != OTYPE_UNSEALED);
+    cperms_mem      = msw[CPERMS_LO+:CPERMS_W];
+    regcap.cperms   = mask_clcperms(cperms_mem, clrperm, regcap.valid, sealed);
+    addrmi9         = BOT_W'({1'b0, addr33[31:0]} >> regcap.exp); // ignore the tag valid bit
+
+    // update temp fields
+    // tmp3            = update_temp_fields(regcap.top, regcap.base, addrmi9);
+    // top_hi   = (top < base);
+    top_hi   = (btop ^ ttop) ? ~ttop : tcin; 
+    addr_hi  = (addrmi9 < base9);
+
+    regcap.top_cor  = (top_hi == addr_hi)? 2'b00 : ((top_hi && (!addr_hi))? 2'b01 : 2'b11);
+    regcap.base_cor = (addr_hi) ? 1'b1 : 1'b0;
+
+    regcap.rsvd     = msw[RSVD_LO];
+
+    return regcap;
+
+  endfunction
+
+  // reg to mem, meta data, original cap bound encoding, memfmt0
   function automatic logic[32:0] reg2memcap_fmt0 (reg_cap_t regcap);
 
     logic [32:0] msw;
@@ -751,11 +871,40 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
   endfunction
 
+  // reg to mem, meta data, IT8 encoding, memfmt0
+  function automatic logic[32:0] reg2memcap_it8_fmt0 (reg_cap_t regcap);         // IT8
+
+    logic [32:0] msw;
+    logic        denorm, ltop, cor;
+    logic  [9:0] top10, base10, len10;
+
+    cor    = (regcap.top_cor == {2{regcap.base_cor}}); 
+    top10  = {~cor, regcap.top};
+    base10 = {1'b0, regcap.base};
+    len10  = top10 - base10; 
+    ltop   = len10[9] | len10[8];
+
+    denorm = (regcap.exp == 0) && ~ltop;
+
+    msw[32] = regcap.valid;
+
+    msw[CEXP5_LO+:CEXP5_W]   = regcap.exp ^ {5{~denorm}};
+    msw[TOP_LO+:(TOP_W-1)]   = regcap.top[7:0];
+    msw[BASE_LO+:BOT_W]      = regcap.base  ;
+    msw[OTYPE_LO+:OTYPE_W]   = regcap.otype ;
+    msw[CPERMS_LO+:CPERMS_W] = regcap.cperms;
+    msw[RSVD_LO]             = regcap.rsvd;
+
+    return msw;
+
+  endfunction
+
   //
   // pack/unpack the cap+addr between reg and memory
-  // format 1: lsw32 = GL+ EXP+B+T+A addr, msw33 = rest of the fields
+  // format 1: lsw32 = RSVD+EXP+T+B+A9, msw32 = CPERMS+OTYPE+A23
   //
 
+  // mem to reg, meta data, original cap bound encoding, memfmt1
   function automatic reg_cap_t mem2regcap_fmt1 (logic [32:0] msw, logic [32:0] lsw, logic [3:0] clrperm);
     reg_cap_t regcap;
     logic [2:0]  tmp3;
@@ -788,28 +937,91 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
   endfunction
 
-  function automatic logic[32:0] mem2regaddr_fmt1 (logic [32:0] msw, logic [32:0] lsw, reg_cap_t reg_cap);
+ 
+  // mem to reg, meta data, IT8 encoding, memfmt1
+  function automatic reg_cap_t mem2regcap_it8_fmt1 (logic [32:0] msw, logic [32:0] lsw, logic [3:0] clrperm);   // xyz
+    reg_cap_t regcap;
+    logic [EXP_W-1:0] cexp;
+    logic [TOP_W-2:0] top8, base8;
+    logic [TOP_W-1:0] top9, base9;
+    logic             denorm, ltop, btop, ttop, tcin; 
+    logic             top_hi, addr_hi;
+    logic [2:0]       res3;
+
+    logic        sealed;
+    logic [8:0]  addrmi9;
+    logic [CPERMS_W-1:0] cperms_mem;
+    logic        valid_in;
+
+
+    // lsw is now EXP+T+B+A
+    valid_in      = msw[32] & lsw[32];
+    regcap.valid  = valid_in & ~clrperm[3];  
+
+    cexp          = lsw[30:26];
+    denorm        = (cexp == 0);
+
+    btop          = lsw[17];
+    base8         = lsw[16:9];
+    top8          = lsw[25:18];
+
+    tcin          = (top8 < base8);           // can actually merge it with t_hi in update_temp_fields QQQ
+    ltop          = ~denorm;
+    ttop          = ltop ^ tcin ^ btop;
+
+    regcap.exp    = cexp ^ {5{~denorm}};      // this is the ^0b11111 part
+    top9          = {ttop, top8};
+    base9         = {btop, base8};
+    regcap.top    = top9;
+    regcap.base   = base9;
+
+    // (regcap.exp >= RESETEXP);
+    addrmi9       = (regcap.exp[4] & regcap.exp[3]) ? {1'b0, lsw[8:1]} : lsw[8:0];
+
+    regcap.otype  = msw[25:23];
+    sealed        = (regcap.otype != OTYPE_UNSEALED);
+
+    // cperms_mem = {lsw[31], msw[31:26]};
+    cperms_mem    = msw[31:26];
+    regcap.cperms = mask_clcperms(cperms_mem, clrperm, regcap.valid, sealed);
+    regcap.rsvd   = lsw[31];
+
+    // tmp3 = update_temp_fields(regcap.top, regcap.base, addrmi9);
+    top_hi   = (btop ^ ttop) ? ~ttop : tcin; 
+    addr_hi  = (addrmi9 < base9);
+
+    regcap.top_cor  = (top_hi == addr_hi)? 2'b00 : ((top_hi && (!addr_hi))? 2'b01 : 2'b11);
+    regcap.base_cor = (addr_hi) ? 1'b1 : 1'b0;
+
+    return regcap;
+
+  endfunction
+
+  // mem to reg, addr32, both original and IT8 encoding, memfmt1
+  function automatic logic[32:0] mem2regaddr_fmt1 (logic [32:0] msw, logic [32:0] lsw, reg_cap_t regcap);    // xyz
     logic [32:0] addr33;
     logic [31:0] addrmi, addrhi, addrlo;
     logic [31:0] mask1, mask2;
 
-    if (reg_cap.exp == RESETEXP) begin
+    // (regcap.exp >= RESETEXP)
+    if (regcap.exp[4] & regcap.exp[3]) begin
       addrhi   = 32'h0;
       addrmi   = {lsw[8:0], 23'h0};
       addrlo   = {9'h0, msw[22:0]};
     end else begin
-      addrmi   = {23'h0, lsw[8:0]} << reg_cap.exp;
-      mask1    = {32{1'b1}} << reg_cap.exp;
+      addrmi   = {23'h0, lsw[8:0]} << regcap.exp;
+      mask1    = {32{1'b1}} << regcap.exp;
       mask2    = mask1 << 9;
       addrhi   = ({9'h0, msw[22:0]} << 9) & mask2;
       addrlo   = {9'h0, msw[22:0]} & (~mask1);
     end
 
-    addr33 = {lsw[32], addrhi | addrmi |addrlo};
+    addr33 = {lsw[32], addrhi | addrmi | addrlo};
 
     return addr33;
   endfunction
 
+  // reg to mem, original cap bound encoding, memfmt1
   function automatic logic[65:0] reg2mem_fmt1 (reg_cap_t reg_cap, logic[31:0] addr);
 
     logic [32:0] msw, lsw;
@@ -834,6 +1046,46 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
       msw[22:0]  = 23'((addr & ~mask1) | ((addr & mask2) >> 9));
       lsw[30:27] = reg_cap.exp[CEXP_W-1:0];
       lsw[8:0]   = 9'(addr >> reg_cap.exp);
+    end
+
+    return {msw, lsw};
+
+  endfunction
+
+  // reg to mem, IT8 encoding, memfmt1
+  function automatic logic[65:0] reg2mem_it8_fmt1 (reg_cap_t regcap, logic[31:0] addr);        // xyz
+
+    logic [32:0] msw, lsw;
+    logic [31:0] mask1, mask2;
+    logic        denorm, ltop, cor;
+    logic  [9:0] top10, base10, len10;
+
+    cor    = (regcap.top_cor == {2{regcap.base_cor}}); 
+    top10  = {~cor, regcap.top};
+    base10 = {1'b0, regcap.base};
+    len10  = top10-base10; 
+    ltop   = len10[9] | len10[8];
+
+    denorm = (regcap.exp == 0) && ~ltop;
+
+    msw[32]    = regcap.valid;
+    msw[31:26] = regcap.cperms[5:0];
+    msw[25:23] = regcap.otype;
+    lsw[32]    = regcap.valid ;
+    lsw[31]    = regcap.rsvd;
+    lsw[30:26] = regcap.exp ^ {5{~denorm}} ;
+    lsw[25:18] = regcap.top[7:0];
+    lsw[17:9]  = regcap.base;
+
+    // (regcap.exp >= RESETEXP) 
+    if (regcap.exp[4] & regcap.exp[3]) begin
+      msw[22:0]  = addr[22:0];
+      lsw[8:0]   = addr[31:23];
+    end else begin
+      mask1    = {32{1'b1}} << regcap.exp;
+      mask2    = mask1 << 9;
+      msw[22:0]  = 23'((addr & ~mask1) | ((addr & mask2) >> 9));
+      lsw[8:0]   = 9'(addr >> regcap.exp);
     end
 
     return {msw, lsw};

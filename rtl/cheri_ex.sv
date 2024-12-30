@@ -10,7 +10,8 @@ module cheri_ex import cheri_pkg::*; #(
   parameter int unsigned TSMapSize      = 1024,
   parameter bit          CheriPPLBC     = 1'b1,
   parameter bit          CheriSBND2     = 1'b0,
-  parameter bit          CheriStkZ      = 1'b1
+  parameter bit          CheriStkZ      = 1'b1,
+  parameter bit          CheriCapIT8    = 1'b0
 )(
    // Clock and Reset
   input  logic          clk_i,
@@ -354,8 +355,10 @@ module cheri_ex import cheri_pkg::*; #(
       cheri_operator_i[CGET_HIGH]:
         begin
           logic [65:0] tmp66;
-          tmp66 = MemCapFmt ? reg2mem_fmt1(rf_rcap_a, rf_rdata_a) : 
-                              {reg2memcap_fmt0(rf_rcap_a), 1'b0, rf_rdata_a[31:0]};
+          tmp66 = MemCapFmt ? (CheriCapIT8 ? reg2mem_it8_fmt1(rf_rcap_a, rf_rdata_a) : 
+                                             reg2mem_fmt1(rf_rcap_a, rf_rdata_a)) :
+                              (CheriCapIT8 ? {reg2memcap_it8_fmt0(rf_rcap_a), 1'b0, rf_rdata_a[31:0]} :
+                                             {reg2memcap_fmt0(rf_rcap_a), 1'b0, rf_rdata_a[31:0]});
           result_data_o       = tmp66[64:33];
           result_cap_o        = NULL_REG_CAP;
           cheri_rf_we_raw     = 1'b1;
@@ -397,7 +400,8 @@ module cheri_ex import cheri_pkg::*; #(
         begin
           // this only works for memcap_fmt0 for now QQQ
           result_data_o      = rf_rdata_a;
-          result_cap_o       = mem2regcap_fmt0({1'b0, rf_rdata_b}, {1'b0, rf_rdata_a}, 4'h0);
+          result_cap_o       = CheriCapIT8 ? mem2regcap_it8_fmt0({1'b0, rf_rdata_b}, {1'b0, rf_rdata_a}, 4'h0) :
+                                             mem2regcap_fmt0({1'b0, rf_rdata_b}, {1'b0, rf_rdata_a}, 4'h0);
           cheri_rf_we_raw    = 1'b1;
           cheri_ex_valid_raw = 1'b1;
         end
@@ -746,11 +750,13 @@ module cheri_ex import cheri_pkg::*; #(
       tmp_addr  = 0;
     end
 
-    bound_req1 = prep_bound_req (tfcap3, tmp_addr, newlen);
+    bound_req1 = CheriCapIT8 ? prep_bound_req_it8 (tfcap3, tmp_addr, newlen) :
+                               prep_bound_req (tfcap3, tmp_addr, newlen);
 
     setbounds_outcap = set_bounds(tfcap3, tmp_addr, bound_req2, req_exact);
 
-    setbounds_rndn_outcap = set_bounds_rndn(tfcap3, tmp_addr, bound_req2);
+    setbounds_rndn_outcap = CheriCapIT8 ? set_bounds_rndn_it8(tfcap3, tmp_addr, bound_req2) :
+                                          set_bounds_rndn(tfcap3, tmp_addr, bound_req2);
   end
 
   if (CheriSBND2) begin

@@ -21,7 +21,8 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   parameter int unsigned TSMapSize        = 1024,          // in words
   parameter int unsigned MMRegDinW        = 128,
   parameter int unsigned MMRegDoutW       = 64,
-  parameter int unsigned DataWidth        = 33      // this enables testbench to use defparam to override
+  parameter int unsigned DataWidth        = 33,     // this enables testbench to use defparam to override
+  parameter bit          CheriCapIT8      = 1'b0
 ) (
   // Clock and Reset
   input  logic                         clk_i,
@@ -160,7 +161,8 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
     .CheriTBRE        (CheriTBRE),
     .CheriStkZ        (CheriStkZ),
     .MMRegDinW        (MMRegDinW),
-    .MMRegDoutW       (MMRegDoutW)
+    .MMRegDoutW       (MMRegDoutW),
+    .CheriCapIT8      (CheriCapIT8)
   ) u_ibex_top (
     .clk_i,
     .rst_ni,
@@ -267,7 +269,8 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
 
 `ifdef RVFI
   ibex_tracer #(
-    .DataWidth        (DataWidth)
+    .DataWidth        (DataWidth),
+    .CheriCapIT8      (CheriCapIT8)
   ) u_ibex_tracer (
     .clk_i,
     .rst_ni,

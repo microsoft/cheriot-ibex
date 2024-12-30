@@ -40,7 +40,8 @@
  */
 
 module ibex_tracer import cheri_pkg::*; # (
-  parameter int unsigned DataWidth = 32
+  parameter int unsigned DataWidth = 32,
+  parameter bit CheriCapIT8        = 1'b0
 ) (
   input logic        clk_i,
   input logic        rst_ni,
@@ -133,6 +134,7 @@ module ibex_tracer import cheri_pkg::*; # (
   function automatic void printbuffer_dumpline();
     string rvfi_insn_str;
     string disp_str;
+    logic [32:0] tmp33;
 
     if (file_handle == 32'h0) begin
       string file_name_base = "trace_core";
@@ -164,13 +166,15 @@ module ibex_tracer import cheri_pkg::*; # (
       $fwrite(file_handle, " %s:0x%08x", reg_addr_to_str(rvfi_rs1_addr), rvfi_rs1_rdata);
     end
     if ((data_accessed & CS1) != 0) begin
-      $fwrite(file_handle, " %s:0x%08x+0x%09x", reg_addr_to_str(rvfi_rs1_addr), rvfi_rs1_rdata, reg2memcap_fmt0(rvfi_rs1_rcap));
+      tmp33 = CheriCapIT8 ? reg2memcap_it8_fmt0(rvfi_rs1_rcap) : reg2memcap_fmt0(rvfi_rs1_rcap);
+      $fwrite(file_handle, " %s:0x%08x+0x%09x", reg_addr_to_str(rvfi_rs1_addr), rvfi_rs1_rdata, tmp33);
     end
     if ((data_accessed & RS2) != 0) begin
       $fwrite(file_handle, " %s:0x%08x", reg_addr_to_str(rvfi_rs2_addr), rvfi_rs2_rdata);
     end
     if ((data_accessed & CS2) != 0) begin
-      $fwrite(file_handle, " %s:0x%08x+0x%09x", reg_addr_to_str(rvfi_rs2_addr), rvfi_rs2_rdata, reg2memcap_fmt0(rvfi_rs2_rcap));
+      tmp33 = CheriCapIT8 ?  reg2memcap_it8_fmt0(rvfi_rs2_rcap) :  reg2memcap_fmt0(rvfi_rs2_rcap);
+      $fwrite(file_handle, " %s:0x%08x+0x%09x", reg_addr_to_str(rvfi_rs2_addr), rvfi_rs2_rdata, tmp33);
     end
     if ((data_accessed & RS3) != 0) begin
       $fwrite(file_handle, " %s:0x%08x", reg_addr_to_str(rvfi_rs3_addr), rvfi_rs3_rdata);
@@ -180,7 +184,8 @@ module ibex_tracer import cheri_pkg::*; # (
     end
 
     if ((data_accessed & CD) != 0) begin
-      $fwrite(file_handle, " %s=0x%08x+0x%09x", reg_addr_to_str(rvfi_rd_addr), rvfi_rd_wdata, reg2memcap_fmt0(rvfi_rd_wcap));
+      tmp33 = CheriCapIT8 ? reg2memcap_it8_fmt0(rvfi_rd_wcap) : reg2memcap_fmt0(rvfi_rd_wcap);
+      $fwrite(file_handle, " %s=0x%08x+0x%09x", reg_addr_to_str(rvfi_rd_addr), rvfi_rd_wdata, tmp33);
     end
 
     if ((data_accessed & MEM) != 0) begin
@@ -200,10 +205,13 @@ module ibex_tracer import cheri_pkg::*; # (
     if ((data_accessed & MEMC) != 0) begin
       $fwrite(file_handle, " PA:0x%08x", rvfi_mem_addr);
 
-      if (rvfi_mem_wmask != 0)        
-        $fwrite(file_handle, " store:0x%09x+0x%09x", rvfi_mem_wdata, reg2memcap_fmt0(rvfi_mem_wcap));
-       else
-        $fwrite(file_handle, " load:0x%09x+0x%09x", rvfi_mem_rdata, reg2memcap_fmt0(rvfi_mem_rcap));
+      if (rvfi_mem_wmask != 0) begin        
+        tmp33 = CheriCapIT8 ? reg2memcap_it8_fmt0(rvfi_mem_wcap) : reg2memcap_fmt0(rvfi_mem_wcap);
+        $fwrite(file_handle, " store:0x%09x+0x%09x", rvfi_mem_wdata, tmp33);
+      end else begin
+        tmp33 = CheriCapIT8 ? reg2memcap_it8_fmt0(rvfi_mem_rcap) : reg2memcap_fmt0(rvfi_mem_rcap);
+        $fwrite(file_handle, " load:0x%09x+0x%09x", rvfi_mem_rdata, tmp33);
+      end
     end
 
     $fwrite(file_handle, "\n");

@@ -59,7 +59,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   parameter bit          CheriTBRE         = 1'b1,
   parameter bit          CheriStkZ         = 1'b1,
   parameter int unsigned MMRegDinW         = 128,
-  parameter int unsigned MMRegDoutW        = 64
+  parameter int unsigned MMRegDoutW        = 64,
+  parameter bit          CheriCapIT8       = 1'b0
 ) (
   // Clock and Reset
   input  logic                         clk_i,
@@ -878,7 +879,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .TSMapSize            (TSMapSize),
       .CheriPPLBC           (CheriPPLBC),
       .CheriSBND2           (CheriSBND2),
-      .CheriStkZ            (CheriStkZ)
+      .CheriStkZ            (CheriStkZ),
+      .CheriCapIT8          (CheriCapIT8)
     ) u_cheri_ex (
       .clk_i                (clk_i),
       .rst_ni               (rst_ni),
@@ -1142,7 +1144,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   ibex_load_store_unit #(
     .CHERIoTEn(CHERIoTEn),
     .MemCapFmt(MemCapFmt),
-    .CheriTBRE(CheriTBRE)
+    .CheriTBRE(CheriTBRE),
+    .CheriCapIT8(CheriCapIT8)
     ) load_store_unit_i (
     .clk_i (clk_i),
     .rst_ni(rst_ni),

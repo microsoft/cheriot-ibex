@@ -19,9 +19,10 @@
 `include "dv_fcov_macros.svh"
 
 module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
-  parameter bit CHERIoTEn = 1'b1,
-  parameter bit MemCapFmt = 1'b0,
-  parameter bit CheriTBRE = 1'b0
+  parameter bit CHERIoTEn   = 1'b1,
+  parameter bit MemCapFmt   = 1'b0,
+  parameter bit CheriTBRE   = 1'b0,
+  parameter bit CheriCapIT8 = 1'b0
 )(
   input  logic         clk_i,
   input  logic         rst_ni,
@@ -217,7 +218,8 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   if (~MemCapFmt) begin : gen_memcap_wr_fmt0
     always_comb begin
       if (CHERIoTEn & cheri_pmode_i & lsu_is_cap_i && (ls_fsm_cs == CTX_WAIT_GNT2))
-        data_wdata = reg2memcap_fmt0(lsu_wcap_i);
+        data_wdata = CheriCapIT8 ? reg2memcap_it8_fmt0(lsu_wcap_i): 
+                                   reg2memcap_fmt0(lsu_wcap_i);
       else if (CHERIoTEn & cheri_pmode_i & lsu_is_cap_i)
         data_wdata = lsu_wdata_i;
       else begin
@@ -232,7 +234,8 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
     end
   end else begin : gen_memcap_wr_fmt1
     logic [65:0] mem_capaddr;
-    assign mem_capaddr = reg2mem_fmt1(lsu_wcap_i, lsu_wdata_i);
+    assign mem_capaddr = CheriCapIT8 ? reg2mem_it8_fmt1(lsu_wcap_i, lsu_wdata_i) : 
+                                       reg2mem_fmt1(lsu_wcap_i, lsu_wdata_i);
 
     always_comb begin
       if (CHERIoTEn & lsu_is_cap_i && (ls_fsm_cs == CTX_WAIT_GNT2))
@@ -713,11 +716,13 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   if (CHERIoTEn & ~MemCapFmt) begin : gen_memcap_rd_fmt0
     assign lsu_rdata_o = (cheri_pmode_i & resp_is_cap_q) ? cap_lsw_q : data_rdata_ext;
     assign lsu_rcap_o  = (resp_is_cap_q && data_rvalid_i && (cap_rx_fsm_q == CRX_WAIT_RESP2) && (~data_or_pmp_err)) ?
-                         mem2regcap_fmt0(data_rdata_i, cap_lsw_q, resp_lc_clrperm_q) : NULL_REG_CAP;
+                         (CheriCapIT8 ? mem2regcap_it8_fmt0(data_rdata_i, cap_lsw_q, resp_lc_clrperm_q) :
+                                        mem2regcap_fmt0(data_rdata_i, cap_lsw_q, resp_lc_clrperm_q)) : NULL_REG_CAP;
   end else if (CHERIoTEn) begin : gen_memcap_rd_fmt1
     assign lsu_rdata_o = (cheri_pmode_i & resp_is_cap_q) ? mem2regaddr_fmt1(data_rdata_ext, cap_lsw_q, lsu_rcap_o): data_rdata_ext;
     assign lsu_rcap_o  = (resp_is_cap_q && data_rvalid_i && (cap_rx_fsm_q == CRX_WAIT_RESP2) && (~data_or_pmp_err)) ?
-                         mem2regcap_fmt1(data_rdata_i, cap_lsw_q, resp_lc_clrperm_q) : NULL_REG_CAP;
+                         (CheriCapIT8 ?  mem2regcap_it8_fmt1(data_rdata_i, cap_lsw_q, resp_lc_clrperm_q) :
+                                         mem2regcap_fmt1(data_rdata_i, cap_lsw_q, resp_lc_clrperm_q)) : NULL_REG_CAP;
   end else begin : gen_no_cap_rd
     assign lsu_rdata_o = data_rdata_ext;
     assign lsu_rcap_o  = NULL_REG_CAP;
