@@ -274,6 +274,7 @@ module ibex_id_stage import cheri_pkg::*; #(
   logic        rf_we_dec, rf_we_raw;
   logic        rf_ren_a, rf_ren_b;
   logic        rf_ren_a_dec, rf_ren_b_dec;
+  logic        rf_we_or_load;
 
   // Read enables should only be asserted for valid and legal instructions
   assign rf_ren_a = instr_valid_i & ~instr_fetch_err_i & ~illegal_insn_o & rf_ren_a_dec;
@@ -511,6 +512,7 @@ module ibex_id_stage import cheri_pkg::*; #(
     // register file
     .rf_wdata_sel_o(rf_wdata_sel),
     .rf_we_o       (rf_we_dec),
+    .rf_we_or_load_o(rf_we_or_load),
 
     .rf_raddr_a_o(rf_raddr_a_o),
     .rf_raddr_b_o(rf_raddr_b_o),
@@ -1113,14 +1115,14 @@ module ibex_id_stage import cheri_pkg::*; #(
 
     assign stall_ld_hz = outstanding_load_wb_i & (rf_rd_a_hz | rf_rd_b_hz);
 
-    logic rf_we_valid;
-    assign rf_we_valid = rf_we_dec & instr_valid_i & ~instr_fetch_err_i & ~illegal_insn_o;
+    logic rf_we_or_load_valid;
+    assign rf_we_or_load_valid = rf_we_or_load & instr_valid_i & ~instr_fetch_err_i & ~illegal_insn_o;
    
 
     assign stall_cheri_trvk = (CHERIoTEn & cheri_pmode_i & CheriPPLBC) ? 
                                ((rf_ren_a && ~rf_reg_rdy_i[rf_raddr_a_o]) |
                                 (rf_ren_b && ~rf_reg_rdy_i[rf_raddr_b_o]) |
-                                (rf_we_valid && ~rf_reg_rdy_i[rf_waddr_id_o])) :
+                                (rf_we_or_load_valid && ~rf_reg_rdy_i[rf_waddr_id_o])) :
                                1'b0;
 
     assign instr_type_wb_o = ~lsu_req_dec ? WB_INSTR_OTHER :

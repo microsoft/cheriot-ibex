@@ -1140,6 +1140,16 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
     return is_equal;
 
   endfunction
+ 
+  // clear tag of a regcap if needed, otherwise simply pass through
+  function automatic reg_cap_t and_regcap_tag (reg_cap_t in_cap, logic tag_mask);
+    reg_cap_t out_cap;
+
+    out_cap = in_cap;
+    out_cap.valid = in_cap.valid & tag_mask;
+    return out_cap;
+
+  endfunction
 
   // parameters and constants
 

@@ -92,14 +92,18 @@ module cheri_regfile import cheri_pkg::*; #(
     
     if (RegFileECC) begin : g_reg_par
       logic [6:0] wdata_par;
+      logic       trvk_clr_we;
       
-      assign wdata_par = wdata_a_i[DataWidth-1:DataWidth-7];
+      assign trvk_clr_we = CheriPPLBC & trvk_dec[i] & trvk_en_i & trvk_clrtag_i;      
+      assign wdata_par   = wdata_a_i[DataWidth-1:DataWidth-7];
       
       // split reset of data and parity to detect spurious reset (fault protection)
       always_ff @(posedge clk_i or negedge par_rst_ni) begin
         if (!par_rst_ni) begin
           rf_reg_par_q[i] <= DefParBits[i];
-        end else if (RegFileECC & CheriPPLBC & trvk_dec[i] & trvk_en_i & trvk_clrtag_i) begin
+        end else if (trvk_clr_we && we_a_dec[i]) begin
+          rf_reg_par_q[i] <= wdata_par ^ TrvkParIncr;
+        end else if (trvk_clr_we) begin
           // update parity bits
           rf_reg_par_q[i] <= rf_reg_par_q[i] ^ TrvkParIncr;
         end else if (we_a_dec[i]) begin
@@ -130,12 +134,18 @@ module cheri_regfile import cheri_pkg::*; #(
 
   // capability meta data (MSW)
   for (genvar i = 1; i < NCAPS; i++) begin : g_cap_flops
+    logic trvk_clr_we;
+      
+    assign trvk_clr_we = CheriPPLBC & trvk_dec[i] & trvk_en_i & trvk_clrtag_i;      
+ 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
         rf_cap_q[i] <= NULL_REG_CAP;
-      end else if (CheriPPLBC & trvk_dec[i] & trvk_en_i & trvk_clrtag_i) begin
+      end else if (trvk_clr_we && we_a_dec[i]) begin
+        rf_cap_q[i] <= and_regcap_tag(wcap_a_i, 1'b1);
+      end else if (trvk_clr_we) begin
         // prioritize revocation (later in pipeline)
-        rf_cap_q[i].valid <= 1'b0;
+        rf_cap_q[i].valid <= and_regcap_tag(rf_cap_q[i], 1'b1);
       end else if (we_a_dec[i]) begin
         rf_cap_q[i] <= wcap_a_i;
       end

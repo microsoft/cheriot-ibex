@@ -67,6 +67,7 @@ module ibex_decoder import cheri_pkg::*; #(
   // register file
   output ibex_pkg::rf_wd_sel_e rf_wdata_sel_o,   // RF write data selection
   output logic                 rf_we_o,          // write enable for regfile
+  output logic                 rf_we_or_load_o,
   output logic [4:0]           rf_raddr_a_o,
   output logic [4:0]           rf_raddr_b_o,
   output logic [4:0]           rf_waddr_o,
@@ -234,6 +235,8 @@ module ibex_decoder import cheri_pkg::*; #(
   // rf_we from decoder doesn't cover memory load case (where regfile write signal comes from LSU response)
   logic rf_we_or_load;
   assign rf_we_or_load = rf_we | (opcode == OPCODE_LOAD);
+
+  assign rf_we_or_load_o = rf_we_or_load;
  
   if (RV32E) begin : gen_rv32e_reg_check_active
     //assign illegal_reg_rv32e = ((rf_raddr_a_o[4] & (alu_op_a_mux_sel_o == OP_A_REG_A)) |

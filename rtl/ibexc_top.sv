@@ -26,6 +26,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   parameter int unsigned MHPMCounterWidth = 40,
   parameter bit          RV32E            = 1'b0,
   parameter rv32b_e      RV32B            = RV32BNone,
+  parameter rv32m_e      RV32M            = RV32MFast, 
   parameter bit          WritebackStage   = 1'b1,
   parameter bit          BranchPredictor  = 1'b0,
   parameter bit          SecureIbex       = 1'b0,   // placeholder for TB compatbility
@@ -241,7 +242,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .MHPMCounterNum   (MHPMCounterNum  ),
     .MHPMCounterWidth (MHPMCounterWidth),
     .RV32E            (RV32E),
-    .RV32M            (RV32MFast),
+    .RV32M            (RV32M),
     .RV32B            (RV32BNone),
     .BranchTargetALU  (1'b1),
     .ICache           (1'b0),
