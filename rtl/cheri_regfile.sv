@@ -142,10 +142,10 @@ module cheri_regfile import cheri_pkg::*; #(
       if (!rst_ni) begin
         rf_cap_q[i] <= NULL_REG_CAP;
       end else if (trvk_clr_we && we_a_dec[i]) begin
-        rf_cap_q[i] <= and_regcap_tag(wcap_a_i, 1'b1);
+        rf_cap_q[i] <= and_regcap_tag(wcap_a_i, 1'b0);
       end else if (trvk_clr_we) begin
         // prioritize revocation (later in pipeline)
-        rf_cap_q[i].valid <= and_regcap_tag(rf_cap_q[i], 1'b1);
+        rf_cap_q[i] <= and_regcap_tag(rf_cap_q[i], 1'b0);
       end else if (we_a_dec[i]) begin
         rf_cap_q[i] <= wcap_a_i;
       end
