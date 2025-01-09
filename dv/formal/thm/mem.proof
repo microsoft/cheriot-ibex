@@ -1,0 +1,212 @@
+# Copyright lowRISC contributors.
+# Copyright 2024 University of Oxford, see also CREDITS.md.
+# Licensed under the Apache License, Version 2.0 (see LICENSE for details).
+# Original Author: Louis-Emile Ploix
+# SPDX-License-Identifier: Apache-2.0
+
+lemma mem
+  MemNotWFI: have (wbexc_exists && wbexc_is_mem_instr |-> ~wbexc_is_wfi)
+  MemFin: have (finishing_executed && wbexc_is_mem_instr && ~wbexc_err |-> data_rvalid_i)
+
+  RespWait: have (wbexc_exists && wbexc_is_mem_instr && ~wbexc_err && ~data_rvalid_i |-> `LSU.ls_fsm_cs == `LSU.IDLE && ~`LSU.lsu_req_i)
+
+  CapResp: have (`LSU.ls_fsm_cs != `LSU.IDLE || (outstanding_mem & ~wbexc_err) || data_rvalid_i |->
+    ((wbexc_exists && ~wbexc_err && (`IS_LOADCAPIMM | `IS_STORECAPIMM)) || (`LSU.ls_fsm_cs != `LSU.IDLE && ex_is_mem_cap_instr)) == `LSU.resp_is_cap_q
+  )
+  CapLSWErr: have (~`LSU.cap_lsw_err_q)
+  
+  EarlyLSUCtrlMatch: have (
+    `LSU.ls_fsm_cs != `LSU.IDLE & spec_post_wX_en & mem_gnt_fst_q |->
+    `LSU.rdata_offset_q == `LSU.data_offset && `LSU.data_type_q == `LSU.lsu_type_i && `LSU.data_sign_ext_q == `LSU.lsu_sign_ext_i && `LSU.data_we_q == `LSU.lsu_we_i
+  )
+
+  HadSndReqCap: have (instr_will_progress & ex_is_mem_cap_instr & ~ex_err & ~`LSU.lsu_cheri_err_i |=> wbexc_mem_had_snd_req)
+  HadSndReqNotCap: have (instr_will_progress & ex_is_mem_instr & ~ex_is_mem_cap_instr & ~ex_err & ~`LSU.lsu_cheri_err_i |=> wbexc_mem_had_snd_req == $past(`LSU.split_misaligned_access))
+
+  LateLSUCheriErr: have (wbexc_exists & wbexc_is_load_instr & ~wbexc_err & wbexc_post_wX_en |-> ~`LSU.cheri_err_q)
+
+  PMPErr: have (~`LSU.pmp_err_q)
+
+  NonCapFSM: have (~ex_is_mem_cap_instr |-> `LSU.ls_fsm_cs != `LSU.CTX_WAIT_GNT1 && `LSU.ls_fsm_cs != `LSU.CTX_WAIT_GNT2 && `LSU.ls_fsm_cs != `LSU.CTX_WAIT_RESP)
+
+  MisStates: have (`LSU.ls_fsm_cs == `LSU.WAIT_GNT_MIS || `LSU.ls_fsm_cs == `LSU.WAIT_RVALID_MIS || `LSU.ls_fsm_cs == `LSU.WAIT_RVALID_MIS_GNTS_DONE |-> `LSU.split_misaligned_access)
+
+
+  CapFsm: graph_induction
+    cond (ex_is_mem_cap_instr && (`LSU.ls_fsm_cs != `LSU.IDLE || (`CR.lsu_req && ~`CR.lsu_cheri_err)))
+
+    entry (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.lsu_req && ~`CR.lsu_cheri_err) -> idle_active
+
+    node idle_active (`LSU.cap_rx_fsm_q == CRX_IDLE || (`LSU.cap_rx_fsm_q == CRX_WAIT_RESP2 && data_rvalid_i)) (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.lsu_req && ~`CR.lsu_cheri_err)
+    edge idle_active => wait_gnt1 wait_gnt2 wait_gnt2_done
+
+    node wait_gnt1 (`LSU.cap_rx_fsm_q == CRX_WAIT_RESP1 && ~`CR.lsu_cheri_err) (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_GNT1)
+    edge wait_gnt1 => wait_gnt1 wait_gnt2 wait_gnt2_done
+
+    node wait_gnt2 (~`CR.lsu_cheri_err) (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_GNT2 && `LSU.cap_rx_fsm_d == CRX_WAIT_RESP1)
+    edge wait_gnt2 => wait_gnt2 wait_gnt2_done wait_resp
+    edge wait_gnt2 -> step
+
+    # waitgnt2done step is bound dependent (Hp (12))
+    node wait_gnt2_done (~`CR.lsu_cheri_err) (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_GNT2 && `LSU.cap_rx_fsm_d == CRX_WAIT_RESP2)
+    edge wait_gnt2_done => wait_gnt2_done
+    edge wait_gnt2_done -> step
+
+    node wait_resp (~`CR.lsu_cheri_err && `LSU.cap_rx_fsm_q == CRX_WAIT_RESP1) (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_RESP)
+    edge wait_resp => wait_resp
+    edge wait_resp -> step
+
+    node step (`LSU.cap_rx_fsm_d == CRX_WAIT_RESP2) (`LSU.lsu_req_done_o && ~`CR.lsu_cheri_err) +exit
+
+  MemSpec: graph_induction +rev
+    cond (ex_is_mem_instr && (`LSU.ls_fsm_cs != `LSU.IDLE || (`CR.lsu_req && ~`CR.lsu_cheri_err)))
+
+    inv fst_req (mem_req_fst_d && fst_mem_cmp && ~mem_gnt_fst_q && ~`CR.lsu_cheri_err)
+    inv fst_req_1 (mem_req_fst_d && fst_mem_cmp && ~mem_gnt_fst_q && ~`CR.lsu_cheri_err && ~spec_mem_read_snd && ~spec_mem_write_snd)
+    inv fst_req_2 (mem_req_fst_d && fst_mem_cmp && ~mem_gnt_fst_q && ~`CR.lsu_cheri_err && (spec_mem_read_snd | spec_mem_write_snd))
+    inv snd_req (mem_req_snd_d && snd_mem_cmp && ~`CR.lsu_cheri_err && (spec_mem_read_snd | spec_mem_write_snd))
+    inv req_done (~data_req_o && ~`CR.lsu_cheri_err && mem_gnt_snd_q && (spec_mem_read_snd | spec_mem_write_snd))
+
+    entry (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.lsu_req && ~`CR.lsu_cheri_err) -> idle_active
+
+    node idle_active fst_req (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.lsu_req && ~`CR.lsu_cheri_err)
+    edge idle_active => wait_rvalid_mis wait_gnt_mis wait_gnt wait_gnt1 wait_gnt2
+    edge idle_active -> step
+    
+    node wait_gnt_mis fst_req_2 (`LSU.ls_fsm_cs == `LSU.WAIT_GNT_MIS)
+    edge wait_gnt_mis => wait_gnt_mis wait_rvalid_mis
+    
+    node wait_rvalid_mis snd_req (`LSU.ls_fsm_cs == `LSU.WAIT_RVALID_MIS)
+    edge wait_rvalid_mis => wait_rvalid_mis wait_rvalid_mis_gnts_done wait_gnt_split
+    edge wait_rvalid_mis -> step
+    
+    node wait_gnt_split snd_req (`LSU.ls_fsm_cs == `LSU.WAIT_GNT && `LSU.split_misaligned_access)
+    edge wait_gnt_split => wait_gnt_split
+    edge wait_gnt_split -> step
+
+    node wait_gnt fst_req_1 (`LSU.ls_fsm_cs == `LSU.WAIT_GNT && ~`LSU.split_misaligned_access)
+    edge wait_gnt => wait_gnt
+    edge wait_gnt -> step
+    
+    node wait_rvalid_mis_gnts_done req_done (`LSU.ls_fsm_cs == `LSU.WAIT_RVALID_MIS_GNTS_DONE)
+    edge wait_rvalid_mis_gnts_done => wait_rvalid_mis_gnts_done
+    edge wait_rvalid_mis_gnts_done -> step
+
+    node wait_gnt1 fst_req_2 (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_GNT1)
+    edge wait_gnt1 => wait_gnt1 wait_gnt2
+    edge wait_gnt1 -> step
+
+    node wait_gnt2 snd_req (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_GNT2)
+    edge wait_gnt2 => wait_gnt2 wait_resp
+    edge wait_gnt2 -> step
+
+    node wait_resp req_done (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_RESP)
+    edge wait_resp => wait_resp
+    edge wait_resp -> step
+
+    node step (1) (`LSU.lsu_req_done_o && ~`CR.lsu_cheri_err) +exit
+  /
+  LSULateRespFinishing: have (late_resp |-> wbexc_finishing || wbexc_err)
+  LSUEarlyRequestSplit: have (early_resp |-> has_snd_req)
+  LSUHold: have (data_req_o & ~data_gnt_i |=> data_addr_o == $past(data_addr_o) && data_we_o == $past(data_we_o))
+  LSUHoldWrite: have (data_req_o & ~data_gnt_i & data_we_o |=> data_be_o == $past(data_be_o) && data_wdata_o == $past(data_wdata_o))
+  LSUMaxTwoReqs: have (mem_gnt_snd_q |-> ~data_gnt_i)
+  LSU2ndReqStep: have (data_req_o & $past(data_gnt_i) & ~$past(instr_will_progress) |-> data_we_o == $past(data_we_o) && data_addr_o == $past(data_addr_o) + 4)
+  LSUInternalHold: have (`LSU.data_req_o && ~data_gnt_i && ~`LSU.pmp_err_q |=> $stable(data_addr_o))
+
+  NoMem: have (~ex_is_mem_instr & instr_will_progress |-> ~mem_gnt_fst_d)
+
+  AltLSUVeryEarly: have (`LSU.ls_fsm_cs != `LSU.IDLE & spec_post_wX_en & ~lsu_had_first_resp |-> alas(spec_post_wX, revoke(alt_lsu_very_early_res, spec_mem_revoke_en & spec_mem_revoke)))
+  ExceptionMaintain: have (`LSU.lsu_req_i && ~spec_mem_read & ~spec_mem_write |-> instr_will_progress ##1 wbexc_err)
+  FastErrSignalCap: have (finishing_executed & ~wbexc_illegal & wbexc_err & (`IS_LOADCAPIMM | `IS_STORECAPIMM) |->
+    ($past(`CE.is_load_cap, 2) | $past(`CE.is_store_cap, 2)) & $past(`CE.cheri_lsu_err, 2) & $past(`CE.cheri_exec_id_i, 2)
+  )
+  FastErrSignalNoCap: have (finishing_executed & ~wbexc_illegal & wbexc_err & wbexc_is_mem_instr & ~(`IS_LOADCAPIMM | `IS_STORECAPIMM) |->
+    $past(`CE.rv32_lsu_req_i, 2) & $past(`CE.rv32_lsu_err, 2)
+  )
+  FinalCapAltLSUVeryEarly: have (
+    `LSU.ls_fsm_cs != `LSU.IDLE && ex_is_clc && ~lsu_had_first_resp |->
+    onlySealingPerms(revoke(spec_mem_read_cap, `LSU.resp_lc_clrperm_q[3]))
+      == onlySealingPerms(alt_lsu_very_early_res)
+  )
+  /
+  PCMaintainEx: have (`ID.instr_valid_i & ex_is_mem_instr & ~ex_err & ~ex_kill |-> pre_nextpc == post_pc)
+  AltLSUEarly: have (`LSU.ls_fsm_cs != `LSU.IDLE & spec_post_wX_en & lsu_had_first_resp |-> alas(spec_post_wX, revoke(alt_lsu_early_res, spec_mem_revoke_en & spec_mem_revoke)))
+  ClrPerm: have (`LSU.ls_fsm_cs != `LSU.IDLE |-> `CE.cheri_lsu_lc_clrperm == `LSU.resp_lc_clrperm_q)
+  FinalCapAltLSUEarly: have (
+    `LSU.ls_fsm_cs != `LSU.IDLE && ex_is_clc && lsu_had_first_resp |->
+    onlySealingPerms(revoke(spec_mem_read_cap, `LSU.resp_lc_clrperm_q[3]))
+      == onlySealingPerms(alt_lsu_early_res)
+  )
+  /
+  AltLSU: have (wbexc_exists & wbexc_is_load_instr & ~wbexc_err & wbexc_post_wX_en |-> alas(wbexc_post_wX, revoke(alt_lsu_late_res, wbexc_spec_mem_revoke_en & wbexc_spec_mem_revoke)))
+  CSRMaintain: have (wbexc_exists & wbexc_is_mem_instr & ~wbexc_err |-> csrs_match)
+  CSRNoChange: have (wbexc_exists & wbexc_is_mem_instr & ~wbexc_err |-> csrs_didnt_change)
+  PCNoChangeNoBranch: have (wbexc_exists & wbexc_is_mem_instr & ~wbexc_err & ~ex_has_branched_d |-> (`ID.instr_valid_i ? pre_pc : `CR.pc_if) == wbexc_dut_post_pc)
+  PCNoChangeBranch: have (wbexc_exists & wbexc_is_mem_instr & ~wbexc_err & ex_has_branched_d |-> pre_pc == wbexc_dut_post_pc)
+  PCMaintainWb: have (wbexc_exists & wbexc_is_mem_instr & ~wbexc_err |-> wbexc_post_pc == wbexc_dut_post_pc)
+  LoadAddrMaintain: have (wbexc_exists & wbexc_is_load_instr & ~wbexc_err |-> wbexc_post_wX_en && `WBG.rf_waddr_wb_q == wbexc_post_wX_addr)
+  StoreAddrMaintain: have (wbexc_exists & wbexc_is_store_instr & ~wbexc_err |-> ~wbexc_post_wX_en & ~`WBG.rf_we_wb_q & ~`WBG.cheri_rf_we_q)
+
+  ReadOrWrite: have (`ID.instr_valid_i & ex_is_mem_instr & ~ex_kill & (spec_mem_read | spec_mem_write) |-> ~`IDC.illegal_insn_d)
+
+  RevokeEnCheckPasses: have (
+    wbexc_exists & `IS_LOADCAPIMM & ~wbexc_err |->
+    wbexc_spec_mem_revoke_en == (
+      wbexc_spec_mem_read_cap.tag &
+      ~`LSU.resp_lc_clrperm_q[3] &
+      ~(wbexc_spec_mem_read_cap.permit_seal | wbexc_spec_mem_read_cap.permit_unseal | wbexc_spec_mem_read_cap.perm_user0)
+    )
+  )
+  RevokeAddrMatch: have (
+    wbexc_exists & `IS_LOADCAPIMM & wbexc_spec_mem_revoke_en |->
+    wbexc_spec_mem_revoke_addr == (wbexc_spec_mem_read_cap_bounds.base & ~32'b111)
+  )
+  RevokeRangeCheck: have (
+    wbexc_exists & `IS_LOADCAPIMM & wbexc_spec_mem_revoke_en & wbexc_spec_mem_revoke |->
+    (wbexc_spec_mem_revoke_addr - HeapBase) >> 8 < TSMapSize
+  )
+
+  FinalCapAltLSU: have (
+    wbexc_exists & ~wbexc_err & `IS_LOADCAPIMM |->
+    onlySealingPerms(revoke(wbexc_spec_mem_read_cap, `LSU.resp_lc_clrperm_q[3]))
+      == onlySealingPerms(alt_lsu_late_res)
+  )
+  /
+  RevokeMatch: have (
+    `IS_LOADCAPIMM & wbexc_finishing & ~wbexc_err |-> ##3
+    `RF.trvk_en_i &&
+    `RF.trvk_clrtag_i == ($past(wbexc_spec_mem_revoke_en, 3) & $past(wbexc_spec_mem_revoke, 3))
+  )
+
+lemma load
+  cond (ex_is_load_instr)
+
+  NoWe: have (spec_mem_read |-> ~data_we_o)
+  En: have (data_req_o |-> spec_mem_read)
+  /
+  SndEn: have (mem_req_snd_d |-> spec_mem_read_snd)
+  /
+  FstAddr: have (mem_req_fst_d |-> spec_mem_read_fst_addr == data_addr_o)
+  SndAddr: have (mem_req_snd_d |-> spec_mem_read_snd_addr == data_addr_o)
+  /
+  End: in (instr_will_progress)
+    Fst: have (spec_mem_read |-> mem_gnt_fst_d)
+    Snd: have (spec_mem_read_snd |-> mem_gnt_snd_d)
+
+lemma store
+  cond (ex_is_store_instr)
+
+  We: have (spec_mem_write |-> data_we_o)
+  En: have (data_req_o |-> spec_mem_write)
+  /
+  SndEn: have (mem_req_snd_d |-> spec_mem_write_snd)
+  /
+  FstAddr: have (mem_req_fst_d |-> spec_mem_write_fst_addr == data_addr_o)
+  FstWData: have (mem_req_fst_d |-> (spec_mem_write_fst_wdata & fst_mask) == (data_wdata_o & fst_mask))
+  SndAddr: have (mem_req_snd_d |-> spec_mem_write_snd_addr == data_addr_o)
+  SndWData: have (mem_req_snd_d |-> (spec_mem_write_snd_wdata & snd_mask) == (data_wdata_o & snd_mask))
+  /
+  End: in (instr_will_progress)
+    Fst: have (spec_mem_write |-> mem_gnt_fst_d)
+    Snd: have (spec_mem_write_snd |-> mem_gnt_snd_d)
