@@ -1,0 +1,47 @@
+# Copyright lowRISC contributors.
+# Copyright 2024 University of Oxford, see also CREDITS.md.
+# Licensed under the Apache License, Version 2.0 (see LICENSE for details).
+# Original Author: Louis-Emile Ploix
+# SPDX-License-Identifier: Apache-2.0
+
+lemma dti
+    SingleWbSource: have ($onehot0(`WB.rf_wdata_wb_mux_we))
+    
+    /
+
+    Ex: in (`CE.cheri_exec_id_i && ex_in_sats)
+        Csr: have (ex_out_csr_sats)
+        Lsu: have (ex_out_lsu_sats)
+        Result: have (ex_out_result_sats)
+        Pcc: have (`CE.branch_req_o |-> ex_out_pcc_sats)
+
+    Csr: block
+        each X mtvec:(mtvec) mepc:(mepc) mtdc:(mtdc) mscratchc:(mscratchc) depc:(depc) dscratch0:(dscratch0) dscratch1:(dscratch1)
+            have (csr_in |=> csr_``X``_sats)
+        PccIn: have (csr_in |=> csr_out_pcc_sats)
+        Out: have (csr_int |-> csr_out_rdata_sats && csr_out_pcc_sats)
+
+    Wb: block
+        Int: have (wb_in && wb_int |=> wb_int)
+        LsuIn: have (wb_in_lsu)
+        Ext: have (wb_int && wb_in_lsu |-> wb_out)
+    
+    Rf: in (rf_all)
+        A: have (rf_out_a)
+        B: have (rf_out_b)
+        Int1: have (rf_in |=> rf_group1)
+        Int2: have (rf_in |=> rf_group2)
+
+    /
+
+    Ex: block
+        have (ex_out_csr_sats && ex_out_lsu_sats && ex_out_result_sats && (`CE.branch_req_o -> ex_out_pcc_sats))
+        Inner: have (ex_inner_sats)
+
+    Csr: block
+        have (csr_int)
+        Pcc: have (csr_out_pcc_sats)
+    
+    Wb: have (wb_int)
+    
+    Rf: have (rf_all)
