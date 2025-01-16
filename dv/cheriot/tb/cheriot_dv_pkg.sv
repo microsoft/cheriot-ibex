@@ -88,16 +88,53 @@ package cheriot_dv_pkg;
     result[2] = (address >  in_cap.top33);     // impossible value = 2'b11
     result[3] = (address == in_cap.top33);
 
+    /*
+     * base32 is always <= top33, so also impossible:
+     * 4'b?1?1: can't be below    base and above    top
+     * 4'b?11?: can't be equal to base and above    top
+     * 4'b1??1: can't be below    base and equal to top
+     */
+
     room = in_cap.top33 - address;
     if ((room > 0) && (room < 8)) result[6:4] = room[2:0];
     else result[6:4] = 0;
+
+    /*
+     * Bits [6:4] are nonzero only when the address is just below the top.
+     * So, also impossible are...
+     * 7'b??1_?1??: can't be both below and above    the top
+     * 7'b?1?_?1??: ditto
+     * 7'b1??_?1??: ditto
+     * 7'b??1_1???: can't be both below and equal to the top
+     * 7'b?1?_1???: ditto
+     * 7'b1??_1???: ditto
+     */
 
     // cornercases 
     result[7] = (in_cap.top33  == 33'h1_0000_0000);
     result[8] = (in_cap.base32 == 33'h0);
 
+    /*
+     * Address is >= 0, and so 9'b1_????_???1 is impossible, as if the base is
+     * 0, the address surely cannot be below it.
+     */
+
     return result;
   endfunction
+
+  `define bound_check_cases_ignore_bins() \
+      wildcard ignore_bins ignore_base    = {9'b?_????_??11}; \
+      wildcard ignore_bins ignore_top     = {9'b?_????_11??}; \
+      wildcard ignore_bins ignore_range_0 = {9'b?_????_?1?1}; \
+      wildcard ignore_bins ignore_range_1 = {9'b?_????_?11?}; \
+      wildcard ignore_bins ignore_range_2 = {9'b?_????_1??1}; \
+      wildcard ignore_bins ignore_room_0  = {9'b?_???1_?1??}; \
+      wildcard ignore_bins ignore_room_1  = {9'b?_??1?_?1??}; \
+      wildcard ignore_bins ignore_room_2  = {9'b?_?1??_?1??}; \
+      wildcard ignore_bins ignore_room_3  = {9'b?_???1_1???}; \
+      wildcard ignore_bins ignore_room_4  = {9'b?_??1?_1???}; \
+      wildcard ignore_bins ignore_room_5  = {9'b?_?1??_1???}; \
+      wildcard ignore_bins ignore_below0  = {9'b1_????_???1};
 
   function automatic logic[4:0] setbounds_cases (full_cap_t cs1_cap, logic [31:0] cs1_address, logic [31:0] req_len);
     logic [4:0]  result;

@@ -1388,28 +1388,24 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
     }
 
     cp_cjal_target_bound_cases:  coverpoint fcov_cjal_target_bound_cases {
-      wildcard ignore_bins igonroe0 = {9'b???????11};
-      wildcard ignore_bins igonroe1 = {9'b?????11??};
+      `bound_check_cases_ignore_bins()
     }
 
     cp_cjalr_target_bound_cases: coverpoint fcov_cjalr_target_bound_cases {
-      wildcard ignore_bins igonroe0 = {9'b???????11};
-      wildcard ignore_bins igonroe1 = {9'b?????11??};
+      `bound_check_cases_ignore_bins()
     }
 
     cp_branch_target_bound_cases: coverpoint fcov_branch_target_bound_cases {
-      wildcard ignore_bins igonroe0 = {9'b???????11};
-      wildcard ignore_bins igonroe1 = {9'b?????11??};
+      `bound_check_cases_ignore_bins()
     }
 
     cp_clsc_bound_cases: coverpoint fcov_clsc_bound_cases {
-      wildcard ignore_bins igonroe0 = {9'b???????11};
-      wildcard ignore_bins igonroe1 = {9'b?????11??};
+      `bound_check_cases_ignore_bins()
     }
 
     cp_seal_bound_cases: coverpoint fcov_seal_bound_cases {
-      wildcard ignore_bins igonroe0 = {9'b???????11};
-      wildcard ignore_bins igonroe1 = {9'b?????11??};
+      wildcard ignore_bins igonroe0 = {4'b??11};
+      wildcard ignore_bins igonroe1 = {4'b11??};
     }
 
     cp_clsc_addr_lsb: coverpoint g_cheri_ex.u_cheri_ex.cheri_ls_chkaddr[2:0];
