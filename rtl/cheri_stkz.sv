@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 
-module cheri_stkz import cheri_pkg::*; (
+module cheri_stkz import cheri_pkg::*; #(
+  parameter int unsigned DataWidth  = 33     // legal values: 32, 33, 65
+) (
    // Clock and Reset
   input  logic          clk_i,
   input  logic          rst_ni,
@@ -31,8 +33,10 @@ module cheri_stkz import cheri_pkg::*; (
   output logic          stkz_lsu_we_o,
   output logic          stkz_lsu_is_cap_o,
   output logic [31:0]   stkz_lsu_addr_o,
-  output logic [32:0]   stkz_lsu_wdata_o
+  output logic [DataWidth-1:0] stkz_lsu_raw_wdata_o
 );
+
+  localparam bit Mem65Bit = (DataWidth == 65);
 
   typedef enum logic [1:0] {STKZ_IDLE, STKZ_ACTIVE, STKZ_ABORT} stkz_fsm_t;
 
@@ -50,8 +54,8 @@ module cheri_stkz import cheri_pkg::*; (
   logic         cmd_new_cap, cmd_new_null;
   logic         cmd_is_n2z;
 
-  assign stkz_lsu_wdata_o  = 33'h0;
-  assign stkz_lsu_is_cap_o = 1'b0;        // this means we are really writing 33'h0 to memory
+  assign stkz_lsu_raw_wdata_o  = {DataWidth{1'b0}};
+  assign stkz_lsu_is_cap_o     = Mem65Bit; 
   assign stkz_lsu_we_o     = 1'b1;
   assign stkz_lsu_req_o    = stkz_active;
   assign stkz_lsu_addr_o   = {stkz_ptrw_nxt, 2'h0};
@@ -135,7 +139,7 @@ module cheri_stkz import cheri_pkg::*; (
       //       will clear tag on read
       //
       if (ztop_wr_i) begin
-        stkz_ptrw <= ztop_wdata_i[31:2];
+        stkz_ptrw <= Mem65Bit ? {ztop_wdata_i[31:3], 1'b0} :ztop_wdata_i[31:2];
         ztop_rcap <= cmd_wcap;
       end else if (stkz_active && lsu_stkz_req_done_i) begin
         stkz_ptrw <= stkz_ptrw_nxt; 
@@ -144,10 +148,10 @@ module cheri_stkz import cheri_pkg::*; (
 
       // this is the captured hardware zeroization context, only updated for valid zerioation runs
       if (stkz_start) begin
-        stkz_ptrw_nxt <= ztop_wdata_i[31:2] - 1;
+        stkz_ptrw_nxt <= ztop_wdata_i[31:2] - (Mem65Bit ? 2 : 1);
         stkz_basew    <= ztop_wbase32[31:2];
       end else if (stkz_active && lsu_stkz_req_done_i && ~(stkz_done | stkz_stop)) begin
-        stkz_ptrw_nxt <= stkz_ptrw_nxt - 1;
+        stkz_ptrw_nxt <= stkz_ptrw_nxt - (Mem65Bit ? 2 : 1);
       end
        
       if (~stkz_active && stkz_start)

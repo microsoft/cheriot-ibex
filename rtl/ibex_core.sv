@@ -49,7 +49,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   parameter int unsigned DmExceptionAddr   = 32'h1A110808,
   // CHERIoT paramters
   parameter bit          CHERIoTEn         = 1'b1,
-  parameter int unsigned DataWidth         = 33,
+  parameter int unsigned DataWidth         = 33,    // legal values: 32, 33, 65
   parameter int unsigned HeapBase          = 32'h2001_0000,
   parameter int unsigned TSMapBase         = 32'h2002_f000,
   parameter int unsigned TSMapSize         = 1024,
@@ -174,9 +174,9 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   output logic [31:0]                  rvfi_mem_addr,
   output logic [ 3:0]                  rvfi_mem_rmask,
   output logic [ 3:0]                  rvfi_mem_wmask,
-  output logic [DataWidth-1:0]         rvfi_mem_rdata,
+  output logic [31:0]                  rvfi_mem_rdata,
   output reg_cap_t                     rvfi_mem_rcap,
-  output logic [DataWidth-1:0]         rvfi_mem_wdata,
+  output logic [31:0]                  rvfi_mem_wdata,
   output reg_cap_t                     rvfi_mem_wcap,
   output logic [31:0]                  rvfi_ext_mip,
   output logic                         rvfi_ext_nmi,
@@ -248,7 +248,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   // LSU signals
   logic        lsu_addr_incr_req;
   logic [31:0] lsu_addr_last;
-  logic [31:0] lsu_addr;
+  logic [31:0] cpu_lsu_addr;
 
   // Jump and branch target and decision (EX->IF)
   logic [31:0] branch_target_ex_rv32;
@@ -327,12 +327,12 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
                                        // or missing write permissions
 
   // Data Memory Control
-  logic        lsu_we;
-  logic [1:0]  lsu_type;
-  logic        lsu_sign_ext;
-  logic        lsu_req;
-  logic [32:0] lsu_wdata;
-  reg_cap_t    lsu_wcap;
+  logic        cpu_lsu_we;
+  logic [1:0]  cpu_lsu_type;
+  logic        cpu_lsu_sign_ext;
+  logic        cpu_lsu_req;
+  logic [32:0] cpu_lsu_wdata;
+  reg_cap_t    cpu_lsu_wcap;
   logic        lsu_req_done;
 
   // stall control
@@ -455,8 +455,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic          cheri_csr_set_mie;
   logic          cheri_csr_clr_mie;
 
-  logic          lsu_is_cap, lsu_cheri_err;
-  logic [3:0]    lsu_lc_clrperm;
+  logic          cpu_lsu_is_cap, cpu_lsu_cheri_err;
+  logic [3:0]    cpu_lsu_lc_clrperm;
 
   logic          csr_dbg_tclr_fault;
 
@@ -478,14 +478,14 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic          lsu_tbre_resp_valid;
   logic          lsu_tbre_resp_err;
   logic          lsu_resp_is_wr;
-  logic [32:0]   lsu_tbre_raw_lsw;   
+  logic [DataWidth-1:0] lsu_tbre_raw_rdata;   
   logic          lsu_tbre_req_done;   
   logic          lsu_tbre_addr_incr;
   logic          tbre_lsu_req;
   logic          tbre_lsu_is_cap;
   logic          tbre_lsu_we;
   logic [31:0]   tbre_lsu_addr;
-  logic [32:0]   tbre_lsu_wdata;
+  logic [DataWidth-1:0] tbre_lsu_raw_wdata;
   logic          tbre_trvk_en;
   logic          tbre_trvk_clrtag;
 
@@ -924,18 +924,18 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .cheri_ex_err_info_o  (cheri_ex_err_info),
       .cheri_wb_err_o       (cheri_wb_err),
       .cheri_wb_err_info_o  (cheri_wb_err_info),
-      .lsu_req_o            (lsu_req),
-      .lsu_is_cap_o         (lsu_is_cap),
-      .lsu_lc_clrperm_o     (lsu_lc_clrperm),
-      .lsu_cheri_err_o      (lsu_cheri_err),
-      .lsu_we_o             (lsu_we),
-      .lsu_addr_o           (lsu_addr),
-      .lsu_type_o           (lsu_type),
-      .lsu_wdata_o          (lsu_wdata),
-      .lsu_wcap_o           (lsu_wcap),
+      .lsu_req_o            (cpu_lsu_req),
+      .lsu_is_cap_o         (cpu_lsu_is_cap),
+      .lsu_lc_clrperm_o     (cpu_lsu_lc_clrperm),
+      .lsu_cheri_err_o      (cpu_lsu_cheri_err),
+      .lsu_we_o             (cpu_lsu_we),
+      .lsu_addr_o           (cpu_lsu_addr),
+      .lsu_type_o           (cpu_lsu_type),
+      .lsu_wdata_o          (cpu_lsu_wdata),
+      .lsu_wcap_o           (cpu_lsu_wcap),
+      .lsu_sign_ext_o       (cpu_lsu_sign_ext),
       .cpu_stall_by_stkz_o  (cpu_stall_by_stkz),
       .cpu_grant_to_stkz_o  (cpu_grant_to_stkz),
-      .lsu_sign_ext_o       (lsu_sign_ext),
       .addr_incr_req_i      (lsu_addr_incr_req),
       .addr_last_i          (lsu_addr_last),
       .lsu_req_done_i       (lsu_req_done),
@@ -949,12 +949,6 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .rv32_lsu_addr_i      (alu_adder_result_ex),
       .rv32_addr_incr_req_o (rv32_lsu_addr_incr_req),
       .rv32_addr_last_o     (rv32_lsu_addr_last),
-      .lsu_tbre_sel_i       (lsu_tbre_sel),
-      .tbre_lsu_req_i       (tbre_lsu_req),
-      .tbre_lsu_is_cap_i    (tbre_lsu_is_cap),
-      .tbre_lsu_we_i        (tbre_lsu_we),
-      .tbre_lsu_addr_i      (tbre_lsu_addr),
-      .tbre_lsu_wdata_i     (tbre_lsu_wdata),
       .cpu_lsu_dec_o        (cpu_lsu_dec),  
       .csr_rdata_i          (cheri_csr_rdata),
       .csr_rcap_i           (cheri_csr_rcap),
@@ -1005,16 +999,16 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     assign cheri_wb_err           = 1'b0;
     assign cheri_wb_err_info      = 16'h0;
 
-    assign lsu_req                = rv32_lsu_req;
-    assign lsu_is_cap             = 1'b0;
-    assign lsu_lc_clrperm         = 4'h0;
-    assign lsu_cheri_err          = 1'b0;
-    assign lsu_we                 = rv32_lsu_we;
-    assign lsu_addr               = alu_adder_result_ex;
-    assign lsu_type               = rv32_lsu_type;
-    assign lsu_wdata              = rv32_lsu_wdata;
-    assign lsu_wcap               = NULL_REG_CAP;
-    assign lsu_sign_ext           = rv32_lsu_sign_ext;
+    assign cpu_lsu_req            = rv32_lsu_req;
+    assign cpu_lsu_is_cap         = 1'b0;
+    assign cpu_lsu_lc_clrperm     = 4'h0;
+    assign cpu_lsu_cheri_err      = 1'b0;
+    assign cpu_lsu_we             = rv32_lsu_we;
+    assign cpu_lsu_addr           = alu_adder_result_ex;
+    assign cpu_lsu_type           = rv32_lsu_type;
+    assign cpu_lsu_wdata          = rv32_lsu_wdata;
+    assign cpu_lsu_wcap           = NULL_REG_CAP;
+    assign cpu_lsu_sign_ext       = rv32_lsu_sign_ext;
     assign rv32_lsu_addr_incr_req = lsu_addr_incr_req;
     assign rv32_lsu_addr_last     = lsu_addr_last;
 
@@ -1086,7 +1080,8 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .CheriTBRE   (CheriTBRE),
     .CheriStkZ   (CheriStkZ),
     .MMRegDinW   (MMRegDinW),
-    .MMRegDoutW  (MMRegDoutW)
+    .MMRegDoutW  (MMRegDoutW),
+    .DataWidth   (DataWidth)
   ) cheri_tbre_wrapper_i (
    // Clock and Reset
     .clk_i                   (clk_i),                 
@@ -1096,7 +1091,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .lsu_tbre_resp_valid_i   (lsu_tbre_resp_valid),
     .lsu_tbre_resp_err_i     (lsu_tbre_resp_err),
     .lsu_tbre_resp_is_wr_i   (lsu_resp_is_wr),
-    .lsu_tbre_raw_lsw_i      (lsu_tbre_raw_lsw),   
+    .lsu_tbre_raw_rdata_i    (lsu_tbre_raw_rdata),   
     .lsu_tbre_req_done_i     (lsu_tbre_req_done),   
     .lsu_tbre_addr_incr_i    (lsu_tbre_addr_incr),
     .lsu_tbre_sel_i          (lsu_tbre_sel),
@@ -1104,13 +1099,13 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .tbre_lsu_is_cap_o       (tbre_lsu_is_cap),
     .tbre_lsu_we_o           (tbre_lsu_we),
     .tbre_lsu_addr_o         (tbre_lsu_addr),
-    .tbre_lsu_wdata_o        (tbre_lsu_wdata),
+    .tbre_lsu_raw_wdata_o    (tbre_lsu_raw_wdata),
     .snoop_lsu_req_done_i    (snoop_lsu_req_done),  
-    .snoop_lsu_req_i         (lsu_req),
-    .snoop_lsu_is_cap_i      (lsu_is_cap),
-    .snoop_lsu_we_i          (lsu_we),
-    .snoop_lsu_cheri_err_i   (lsu_cheri_err),
-    .snoop_lsu_addr_i        (lsu_addr),
+    .snoop_lsu_req_i         (cpu_lsu_req),
+    .snoop_lsu_is_cap_i      (cpu_lsu_is_cap),
+    .snoop_lsu_we_i          (cpu_lsu_we),
+    .snoop_lsu_cheri_err_i   (cpu_lsu_cheri_err),
+    .snoop_lsu_addr_i        (cpu_lsu_addr),
     .trvk_en_i               (tbre_trvk_en),
     .trvk_clrtag_i           (tbre_trvk_clrtag),
     .ztop_wr_i               (ztop_wr),  
@@ -1129,19 +1124,13 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   /////////////////////
   // Load/store unit //
   /////////////////////
-  logic [32:0] data_wdata33, data_rdata33;
+
 
   assign data_req_o   = data_req_out & ~pmp_req_err[PMP_D];
   assign lsu_resp_err = lsu_load_err | lsu_store_err;
-  assign data_wdata_o = data_wdata33[DataWidth-1:0];
-
-  if (DataWidth == 33) begin
-    assign data_rdata33 = data_rdata_i;
-  end else begin
-    assign data_rdata33 = {1'b0, data_rdata_i};
-  end
 
   ibex_load_store_unit #(
+    .DataWidth(DataWidth),
     .CHERIoTEn(CHERIoTEn),
     .MemCapFmt(MemCapFmt),
     .CheriTBRE(CheriTBRE),
@@ -1162,26 +1151,26 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .data_addr_o (data_addr_o),
     .data_we_o   (data_we_o),
     .data_be_o   (data_be_o),
-    .data_wdata_o(data_wdata33),
-    .data_rdata_i(data_rdata33),
+    .data_wdata_o(data_wdata_o),
+    .data_rdata_i(data_rdata_i),
 
     // signals to/from ID/EX stage
-    .lsu_we_i      (lsu_we),
-    .lsu_type_i    (lsu_type),
-    .lsu_wdata_i   (lsu_wdata),
-    .lsu_wcap_i    (lsu_wcap),
-    .lsu_sign_ext_i(lsu_sign_ext),
+    .cpu_lsu_we_i         (cpu_lsu_we), 
+    .cpu_lsu_type_i       (cpu_lsu_type),
+    .cpu_lsu_wdata_i      (cpu_lsu_wdata),
+    .cpu_lsu_wcap_i       (cpu_lsu_wcap),
+    .cpu_lsu_sign_ext_i   (cpu_lsu_sign_ext),
     .cpu_stall_by_stkz_i  (cpu_stall_by_stkz),
     .cpu_grant_to_stkz_i  (cpu_grant_to_stkz),
 
     .lsu_rdata_o      (rf_wdata_lsu),
     .lsu_rcap_o       (rf_wcap_lsu),
     .lsu_rdata_valid_o(rf_we_lsu),
-    .lsu_req_i        (lsu_req),
-    .lsu_is_cap_i     (lsu_is_cap),
-    .lsu_lc_clrperm_i (lsu_lc_clrperm),
-    .lsu_cheri_err_i  (lsu_cheri_err),
-    .lsu_addr_i       (lsu_addr),
+    .cpu_lsu_req_i        (cpu_lsu_req),
+    .cpu_lsu_is_cap_i     (cpu_lsu_is_cap),
+    .cpu_lsu_lc_clrperm_i (cpu_lsu_lc_clrperm),
+    .cpu_lsu_cheri_err_i  (cpu_lsu_cheri_err),
+    .cpu_lsu_addr_i       (cpu_lsu_addr),
 
     .lsu_addr_incr_req_o(lsu_addr_incr_req),
     .addr_last_o    (lsu_addr_last),
@@ -1192,8 +1181,12 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
 
     .tbre_lsu_req_i        (tbre_lsu_req),
     .cpu_lsu_dec_i         (cpu_lsu_dec),
-    .lsu_tbre_sel_o        (lsu_tbre_sel),     
-    .lsu_tbre_raw_lsw_o    (lsu_tbre_raw_lsw),
+    .lsu_tbre_sel_o        (lsu_tbre_sel),
+    .tbre_lsu_is_cap_i     (tbre_lsu_is_cap),
+    .tbre_lsu_we_i         (tbre_lsu_we),
+    .tbre_lsu_addr_i       (tbre_lsu_addr),
+    .tbre_lsu_raw_wdata_i  (tbre_lsu_raw_wdata),
+    .lsu_tbre_raw_rdata_o  (lsu_tbre_raw_rdata),
     .lsu_tbre_req_done_o   (lsu_tbre_req_done),
     .lsu_tbre_resp_valid_o (lsu_tbre_resp_valid),
     .lsu_tbre_resp_err_o   (lsu_tbre_resp_err),
@@ -1684,10 +1677,10 @@ end
   logic [31:0] rvfi_rd_wdata_q;
   logic        rvfi_rd_we_wb;
   logic [3:0]  rvfi_mem_mask_int;
-  logic [DataWidth-1:0] rvfi_mem_rdata_d;
-  logic [DataWidth-1:0] rvfi_mem_rdata_q;
-  logic [DataWidth-1:0] rvfi_mem_wdata_d;
-  logic [DataWidth-1:0] rvfi_mem_wdata_q;
+  logic [31:0] rvfi_mem_rdata_d;
+  logic [31:0] rvfi_mem_rdata_q;
+  logic [31:0] rvfi_mem_wdata_d;
+  logic [31:0] rvfi_mem_wdata_q;
   logic [31:0] rvfi_mem_addr_d;
   logic [31:0] rvfi_mem_addr_q;
   logic        rvfi_mem_is_cap_d;
@@ -1920,8 +1913,8 @@ end
   end
 
   logic is_mem_rd, is_mem_wr;
-  assign is_mem_rd = lsu_req & ~lsu_we;
-  assign is_mem_wr = lsu_req & lsu_we;
+  assign is_mem_rd = cpu_lsu_req & ~cpu_lsu_we;
+  assign is_mem_wr = cpu_lsu_req & cpu_lsu_we;
 
   for (genvar i = 0; i < RVFI_STAGES; i = i + 1) begin : g_rvfi_stages
     int im1;
@@ -2053,15 +2046,15 @@ end
   always_comb begin
     if (~CheriTBRE & instr_first_cycle_id) begin
       // rvfi_mem_addr_d    = alu_adder_result_ex;
-      rvfi_mem_addr_d    = lsu_addr;
-      rvfi_mem_wdata_d   = lsu_wdata;
-      rvfi_mem_wcap_d    = lsu_wcap;
-      rvfi_mem_is_cap_d  = lsu_is_cap;
-    end else if (CheriTBRE & lsu_req & cpu_lsu_dec & ~lsu_addr_incr_req) begin
-      rvfi_mem_addr_d    = lsu_addr;
-      rvfi_mem_wdata_d   = lsu_wdata;
-      rvfi_mem_wcap_d    = lsu_wcap;
-      rvfi_mem_is_cap_d  = lsu_is_cap;
+      rvfi_mem_addr_d    = cpu_lsu_addr;
+      rvfi_mem_wdata_d   = cpu_lsu_wdata;
+      rvfi_mem_wcap_d    = cpu_lsu_wcap;
+      rvfi_mem_is_cap_d  = cpu_lsu_is_cap;
+    end else if (CheriTBRE & cpu_lsu_req & cpu_lsu_dec & ~lsu_addr_incr_req) begin
+      rvfi_mem_addr_d    = cpu_lsu_addr;
+      rvfi_mem_wdata_d   = cpu_lsu_wdata;
+      rvfi_mem_wcap_d    = cpu_lsu_wcap;
+      rvfi_mem_is_cap_d  = cpu_lsu_is_cap;
     end else begin
       rvfi_mem_addr_d    = rvfi_mem_addr_q;
       rvfi_mem_wdata_d   = rvfi_mem_wdata_q;
@@ -2103,7 +2096,7 @@ end
   end
   // Byte enable based on data type
   always_comb begin
-    unique case (lsu_type)
+    unique case (cpu_lsu_type)
       2'b00:   rvfi_mem_mask_int = 4'b1111;
       2'b01:   rvfi_mem_mask_int = 4'b0011;
       2'b10:   rvfi_mem_mask_int = 4'b0001;

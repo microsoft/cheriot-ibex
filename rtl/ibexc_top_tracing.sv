@@ -21,7 +21,7 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   parameter int unsigned TSMapSize        = 1024,          // in words
   parameter int unsigned MMRegDinW        = 128,
   parameter int unsigned MMRegDoutW       = 64,
-  parameter int unsigned DataWidth        = 33,     // this enables testbench to use defparam to override
+  parameter int unsigned DataWidth        = 33,     // legal values: 32, 33, 65 
   parameter bit          CheriCapIT8      = 1'b0
 ) (
   // Clock and Reset
@@ -54,9 +54,9 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   output logic                         data_we_o,
   output logic [3:0]                   data_be_o,
   output logic [31:0]                  data_addr_o,
-  output logic [32:0]                  data_wdata_o,
+  output logic [DataWidth-1:0]         data_wdata_o,
   output logic [6:0]                   data_wdata_intg_o,
-  input  logic [32:0]                  data_rdata_i,
+  input  logic [DataWidth-1:0]         data_rdata_i,
   input  logic [6:0]                   data_rdata_intg_i,
   input  logic                         data_err_i,
 
@@ -117,8 +117,8 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
   logic [31:0] rvfi_mem_addr;
   logic [ 3:0] rvfi_mem_rmask;
   logic [ 3:0] rvfi_mem_wmask;
-  logic [DataWidth-1:0] rvfi_mem_rdata;
-  logic [DataWidth-1:0] rvfi_mem_wdata;
+  logic [31:0] rvfi_mem_rdata;
+  logic [31:0] rvfi_mem_wdata;
   logic        rvfi_mem_is_cap;
   reg_cap_t     rvfi_mem_rcap;
   reg_cap_t     rvfi_mem_wcap;
@@ -269,7 +269,6 @@ module ibex_top_tracing import ibex_pkg::*; import cheri_pkg::*; #(
 
 `ifdef RVFI
   ibex_tracer #(
-    .DataWidth        (DataWidth),
     .CheriCapIT8      (CheriCapIT8)
   ) u_ibex_tracer (
     .clk_i,

@@ -14,13 +14,14 @@ package cheriot_dv_pkg;
     logic          we;
     logic [3:0]    be;
     logic [29:0]   addr32;
-    logic [32:0]   wdata;
-    logic [32:0]   rdata;
+    logic [64:0]   wdata;
+    logic [64:0]   rdata;
     logic          err;
   } mem_cmd_t;
 
   typedef struct packed {
     logic        is_cap;
+    logic        is_raw;
     logic        we;
     logic [1:0]  rv32_type;
     logic [31:0] addr;
@@ -28,6 +29,8 @@ package cheriot_dv_pkg;
     logic [31:0] wdata;
     reg_cap_t    rcap;
     logic [31:0] rdata;
+    logic [64:0] raw_wdata;
+    logic [64:0] raw_rdata;
     logic        err;
   } lsu_cmd_t;
 
@@ -118,7 +121,7 @@ package cheriot_dv_pkg;
     full_cap_t result_cap;
 
     logic [EXP_W-1:0] tmp5;
-    logic [2:0]  tmp3;
+    logic [3:0]  tmp4;
     logic [CPERMS_W-1:0] cperms_mem;
     logic [BOT_W-1:0]    addrmi9;
     logic                valid_in;
@@ -137,9 +140,9 @@ package cheriot_dv_pkg;
     cperms_mem      = msw[CPERMS_LO+:CPERMS_W];
     regcap.cperms   = cperms_mem;
     addrmi9         = BOT_W'({1'b0, addr33[31:0]} >> regcap.exp); // ignore the tag valid bit
-    tmp3            = update_temp_fields(regcap.top, regcap.base, addrmi9);
-    regcap.top_cor  = tmp3[2:1];
-    regcap.base_cor = tmp3[0];
+    tmp4            = update_temp_fields(regcap.top, regcap.base, addrmi9);
+    regcap.top_cor  = tmp4[3:2];
+    regcap.base_cor = tmp4[1:0];
 
     regcap.rsvd     = msw[RSVD_LO];
 

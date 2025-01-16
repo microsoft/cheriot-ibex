@@ -1092,7 +1092,8 @@ $display("--- set_bounds:  b1 = %x, t1 = %x, b2 = %x, t2 = %x", base1, top1, bas
 
   endfunction
 
-  // simply cast regcap to a 38-bit vector. 
+  // simply cast regcap to a 38-bit vector 
+  // (different from the mem format, here we keep all regcap fields including corrections, exp and top9)
   // we can do this with systemverilog casting but let's be explicit here
   function automatic logic [REGCAP_W-1:0] reg2vec (reg_cap_t regcap);
 

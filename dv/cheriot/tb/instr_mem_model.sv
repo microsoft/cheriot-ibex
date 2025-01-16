@@ -56,6 +56,7 @@ module instr_mem_model (
     .data_err     (instr_err),
     .data_resp_info (),
     .mem_cs       (mem_cs),
+    .mem_is_cap   (),
     .mem_we       (),
     .mem_be       (),
     .mem_flag     (),

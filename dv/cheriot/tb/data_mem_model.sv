@@ -5,7 +5,9 @@
 //
 // data interface/memory model
 //
-module data_mem_model import cheriot_dv_pkg::*; ( 
+module data_mem_model import cheriot_dv_pkg::*; #(
+  parameter int unsigned DW = 33
+)( 
   input  logic              clk,
   input  logic              rst_n,
 
@@ -21,12 +23,12 @@ module data_mem_model import cheriot_dv_pkg::*; (
   input  logic [3:0]        data_be,
   input  logic              data_is_cap,
   input  logic [31:0]       data_addr,
-  input  logic [32:0]       data_wdata,
+  input  logic [DW-1:0]     data_wdata,
   input  logic [7:0]        data_flag,
 
   output logic              data_gnt,
   output logic              data_rvalid,
-  output logic [32:0]       data_rdata,
+  output logic [DW-1:0]     data_rdata,
   output logic              data_err,
   output mem_cmd_t          data_resp_info,
 
@@ -42,24 +44,26 @@ module data_mem_model import cheriot_dv_pkg::*; (
   output logic              uart_stop_sim
 );
  
-  localparam int unsigned DRAM_AW     = 16; 
+  localparam int unsigned DRAM_AW32   = 16; 
+  localparam int unsigned DRAM_AW     = (DW == 65)? (DRAM_AW32-1) : DRAM_AW32; 
 
   localparam int unsigned TSRAM_AW    = 10; 
   localparam int unsigned NMMRI       = 128/32;
   localparam int unsigned NMMRO       = 64/32;
 
-  logic        mem_cs;
-  logic        mem_we;
-  logic [3:0]  mem_be;
-  logic [29:0] mem_addr32;
-  logic [32:0] mem_wdata;
-  logic [32:0] mem_rdata;
-  logic        mem_err;
+  logic          mem_cs;
+  logic          mem_is_cap;
+  logic          mem_we;
+  logic [3:0]    mem_be;
+  logic [29:0]   mem_addr32;
+  logic [DW-1:0] mem_wdata;
+  logic [DW-1:0] mem_rdata;
+  logic          mem_err;
 
   // simple unified memory system model
-  logic [32:0]        dram[0:2**DRAM_AW-1];
-  logic [DRAM_AW-1:0] dram_addr32;
-  logic [32:0]        dram_rdata;
+  logic [DW-1:0]      dram[0:2**DRAM_AW-1];
+  logic [DRAM_AW-1:0] dram_addr;
+  logic [DW-1:0]      dram_rdata;
   logic               dram_sel, dram_cs;
   logic               dram_err_schd;
 
@@ -82,7 +86,7 @@ module data_mem_model import cheriot_dv_pkg::*; (
   logic [7:0]             mem_flag;
 
   mem_obi_if #(
-    .DW         (33)
+    .DW         (DW)
   ) u_mem_obj_if (
     .clk_i        (clk),
     .rst_ni       (rst_n),
@@ -101,6 +105,7 @@ module data_mem_model import cheriot_dv_pkg::*; (
     .data_err     (data_err),
     .data_resp_info (data_resp_info),
     .mem_cs       (mem_cs),
+    .mem_is_cap   (mem_is_cap),
     .mem_we       (mem_we),
     .mem_be       (mem_be),
     .mem_flag     (mem_flag),
@@ -114,12 +119,20 @@ module data_mem_model import cheriot_dv_pkg::*; (
   // memory signals (sampled @posedge clk)
   //
   logic dram_sel_q, tsram_p0_sel_q, mmreg_sel_q;
+  logic dram_word_sel, dram_word_sel_q;
   logic mem_req_isr, mem_req_stkz;
 
   assign mem_req_stkz = mem_flag[2];
   assign mem_req_isr  = mem_flag[0];
-  assign mem_rdata = dram_sel_q ? dram_rdata : (tsram_p0_sel_q ? {1'b0, tsram_p0_rdata} : 
-                                              (mmreg_sel_q ? {1'b0, mmreg_rdata} : 33'h0));
+
+  if (DW == 64) begin : gen_rdata65
+    assign mem_rdata = dram_sel_q ? dram_rdata : (tsram_p0_sel_q ? {33'h0, tsram_p0_rdata} : 
+                                                 (mmreg_sel_q ? {33'h0, mmreg_rdata} : 65'h0));
+  end else begin : gen_rdata33
+    assign mem_rdata = dram_sel_q ? dram_rdata : (tsram_p0_sel_q ? {1'b0, tsram_p0_rdata} : 
+                                                 (mmreg_sel_q ? {1'b0, mmreg_rdata} : 33'h0));
+  end
+
   // mem_err is in themem_cs
   assign mem_err   = ~mem_req_isr & dram_sel ? dram_err_schd : (tsram_p0_sel ? tsram_p0_err_schd : 1'b0);
 
@@ -130,44 +143,78 @@ module data_mem_model import cheriot_dv_pkg::*; (
   // don't generate memory access if
   //   - responds with an error, or
   //   - accesses from stkz is supposed to be ignored.
-  assign dram_addr32 = mem_addr32[DRAM_AW-1:0];
-  assign dram_sel    = mem_cs & mem_addr32[29] & (mem_addr32[28:DRAM_AW+1] == 0);   
+  assign dram_addr   = (DW == 65) ? mem_addr32[DRAM_AW:1] : mem_addr32[DRAM_AW-1:0];
+  assign dram_sel    = mem_cs & mem_addr32[29] & (mem_addr32[28:DRAM_AW32+1] == 0);   
   assign dram_cs     = dram_sel & ~mem_err & (~mem_req_stkz | ~ignore_stkz);   
+
+  assign dram_word_sel = (DW == 65) ? mem_addr32[0] : 1'b0;
 
   always @(posedge clk, negedge rst_n) begin
     if (~rst_n) begin
       dram_sel_q      <= 1'b0;
       tsram_p0_sel_q  <= 1'b0;
       mmreg_sel_q     <= 1'b0;
+      dram_word_sel_q <= 1'b0;
     end else begin
       dram_sel_q      <= dram_sel;
       tsram_p0_sel_q  <= tsram_p0_sel;
       mmreg_sel_q     <= mmreg_sel;
+      dram_word_sel_q <= dram_word_sel;
     end
   end
 
-  always @(posedge clk) begin
-    if (dram_cs && mem_we) begin
-      if(mem_be[0])
-        dram[dram_addr32][7:0]  <= mem_wdata[7:0];
-      if(mem_be[1])
-        dram[dram_addr32][15:8] <= mem_wdata[15:8];
-      if(mem_be[2])
-        dram[dram_addr32][23:16] <= mem_wdata[23:16];
-      if(mem_be[3])
-        dram[dram_addr32][31:24] <= mem_wdata[31:24];
+  if (DW == 65) begin : gen_dram_rw65
+    always @(posedge clk) begin
+      if (dram_cs && mem_we && mem_is_cap) begin
+        dram[dram_addr] <= mem_wdata;
+      end else if (dram_cs && mem_we && dram_word_sel) begin
+        if(mem_be[0])
+          dram[dram_addr][39:32]  <= mem_wdata[7:0];
+        if(mem_be[1])
+          dram[dram_addr][47:40] <= mem_wdata[15:8];
+        if(mem_be[2])
+          dram[dram_addr][55:48] <= mem_wdata[23:16];
+        if(mem_be[3])
+          dram[dram_addr][63:56] <= mem_wdata[31:24];
+      end else if (dram_cs && mem_we) begin
+        if(mem_be[0])
+          dram[dram_addr][7:0]  <= mem_wdata[7:0];
+        if(mem_be[1])
+          dram[dram_addr][15:8] <= mem_wdata[15:8];
+        if(mem_be[2])
+          dram[dram_addr][23:16] <= mem_wdata[23:16];
+        if(mem_be[3])
+          dram[dram_addr][31:24] <= mem_wdata[31:24];
+      end
+       
+        // CPU should always take care of driving the tag bit
+      if (dram_cs && mem_we) dram[dram_addr][64]  <= mem_wdata[64];
 
-      // valid tag bit for caps - only allow to update for word accesses, where bit[32] is taken 
-      // care of by CPU, otherwise clear the valid bit.
-      //  - if the physical memory doesn't support BE for bit[32], then needs RMW or 
-      //    separate mem for tag bits..
-       // - only makes sure data accesses can't modify capabilities but could still read..
-      // is this sufficent for cheri - QQQ? 
-      //  - the original cheri ask is to qualify memory accesses based on the tag bit, which requires RMW
-      if (|mem_be)  dram[dram_addr32][32]  <= mem_wdata[32];
-        
-    end else if (dram_cs)
-      dram_rdata <= dram[dram_addr32];  
+      if (dram_cs && ~mem_we && mem_is_cap)
+        dram_rdata <= dram[dram_addr];  
+      else if (dram_cs && ~mem_we && dram_word_sel)
+        dram_rdata <= {33'h0, dram[dram_addr][63:32]};  
+      else if (dram_cs && ~mem_we)
+        dram_rdata <= {33'h0, dram[dram_addr][31:0]};  
+
+    end
+  end else begin : gen_dram_rw33
+    always @(posedge clk) begin
+      if (dram_cs && mem_we) begin
+        if(mem_be[0])
+          dram[dram_addr][7:0]  <= mem_wdata[7:0];
+        if(mem_be[1])
+          dram[dram_addr][15:8] <= mem_wdata[15:8];
+        if(mem_be[2])
+          dram[dram_addr][23:16] <= mem_wdata[23:16];
+        if(mem_be[3])
+          dram[dram_addr][31:24] <= mem_wdata[31:24];
+       
+        // CPU should always take care of driving the tag bit
+        dram[dram_addr][32]  <= mem_wdata[32];
+      end else if (dram_cs)
+        dram_rdata <= dram[dram_addr];  
+    end
   end
 
   always @(negedge clk, negedge rst_n) begin
@@ -180,6 +227,7 @@ module data_mem_model import cheriot_dv_pkg::*; (
         dram_err_schd <= (ERR_RATE == 0) ? 1'b0 : ($urandom()%(2**(8-ERR_RATE))==0);
     end
   end 
+
   //
   // TSRAM (dual port RAM)
   //

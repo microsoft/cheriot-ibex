@@ -5,7 +5,9 @@
 //
 // Random TBRE/STKZ traffic generator
 //
-module tbre_bg_gen (
+module tbre_bg_gen # (
+  parameter int unsigned DataWidth = 33
+) (
   input  logic              clk,
   input  logic              rst_n,
 
@@ -49,7 +51,10 @@ module tbre_bg_gen (
     @(posedge clk);
 
     // generate data in DRAM to be walked through
-    base = (start_addr - DRAMStartAddr)/4;
+    if (DataWidth == 65)
+      base = (start_addr - DRAMStartAddr)/8;
+    else
+      base = (start_addr - DRAMStartAddr)/4;
     len = (end_addr - start_addr)/8 + 1;   // TBRE end addr is inclusive
     // $display("tbre dram_start = %8x, len = %8x", dram_start, len);
     for (i = 0; i <len; i++) begin
@@ -59,9 +64,13 @@ module tbre_bg_gen (
       tmp0 = TestHeapBase + (rand32 % (TestHeapSize/4))*4;     //address
       tmp0 = {rand32[31], tmp0[31:0]};   // set tag value
       // add a redundant tag value and signature in perms/otype field to help checking
-      tmp1 = {rand32[31], rand32[31], 9'h15a, 4'h0, tmp0[8:0], tmp0[8:0]};       
-      u_tb_top.u_data_mem.dram[base + 2*i] = tmp0;
-      u_tb_top.u_data_mem.dram[base + 2*i+1] = tmp1;
+      tmp1 = {rand32[31], rand32[31], 9'h15a, 4'h0, tmp0[8:0], tmp0[8:0]};
+      if (DataWidth == 65) begin
+        u_tb_top.u_data_mem.dram[base + i] = {tmp1, tmp0[31:0]};
+      end else begin       
+        u_tb_top.u_data_mem.dram[base + 2*i] = tmp0;
+        u_tb_top.u_data_mem.dram[base + 2*i+1] = tmp1;
+      end
       // if (i == 0) $display("tmp0 = %09x, tmp1 = %09x", tmp0, tmp1);
     end
 
@@ -80,15 +89,25 @@ module tbre_bg_gen (
     int i, base, len, tsmap_addr, tsmap_offset;
     logic [31:0] rand32;
     logic [32:0] dw0, dw1;
+    logic [64:0] tmp65;
     @(posedge clk);
 
     // generate data in DRAM to be walked through
-    base = (start_addr - DRAMStartAddr)/4;
+    if (DataWidth == 65)
+      base = (start_addr - DRAMStartAddr)/8;
+    else
+      base = (start_addr - DRAMStartAddr)/4;
     len = (end_addr - start_addr)/8 + 1;   // TBRE end addr is inclusive
     // $display("dram_start = %8x, len = %8x", base, len);
     for (i = 0; i <len; i++) begin
-      dw0 = u_tb_top.u_data_mem.dram[base + 2*i];
-      dw1 = u_tb_top.u_data_mem.dram[base + 2*i+1];
+      if (DataWidth == 65) begin
+        tmp65 = u_tb_top.u_data_mem.dram[base + 2*i];
+        dw0 = {tmp65[64], tmp65[31:0]};
+        dw1 = tmp65[64:32];
+      end else begin
+        dw0 = u_tb_top.u_data_mem.dram[base + 2*i];
+        dw1 = u_tb_top.u_data_mem.dram[base + 2*i+1];
+      end
       if ((dw0 < TestHeapBase) && (dw0 >= TestHeapBase+TestHeapSize))
         $error("TB> tbre_bg_gen: check_result ptr ERROR %d", i);
 
@@ -103,7 +122,7 @@ module tbre_bg_gen (
                 base+2*i);
 
       // check dw1 to make sure we didn't overwrite the wrong location       
-      if ((dw1[32] != dw1[31]) || (dw1[30:22] != 9'h15a) || (dw1[21:18] != 0) ||
+      if (((DataWidth ==33 ) && (dw1[32] != dw1[31])) || (dw1[30:22] != 9'h15a) || (dw1[21:18] != 0) ||
           (dw1[17:9] != dw1[8:0]) || (dw0[8:0] != dw1[8:0]))
         $error("TB> tbre_bg_gen: check_result dw1 ERROR, %x, %x @%x", dw0, dw1, base+2*i);
     end

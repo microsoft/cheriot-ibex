@@ -4,8 +4,9 @@
 
 
 module cheri_tbre #(
-  parameter int unsigned FifoSize = 4,        // must be power-of-2
-  parameter int unsigned AddrHi = 31 
+  parameter int unsigned FifoSize  = 4,      // must be power-of-2
+  parameter int unsigned AddrHi    = 31,
+  parameter int unsigned DataWidth = 33      // legal values: 32, 33, 65
 ) (
    // Clock and Reset
   input  logic          clk_i,
@@ -20,14 +21,14 @@ module cheri_tbre #(
   input  logic          lsu_tbre_resp_valid_i,
   input  logic          lsu_tbre_resp_err_i,
   input  logic          lsu_tbre_resp_is_wr_i,
-  input  logic [32:0]   lsu_tbre_raw_lsw_i,   
+  input  logic [DataWidth-1:0] lsu_tbre_raw_rdata_i,   
   input  logic          lsu_tbre_req_done_i,   
   input  logic          lsu_tbre_addr_incr_i,
   output logic          tbre_lsu_req_o,
   output logic          tbre_lsu_is_cap_o,
   output logic          tbre_lsu_we_o,
   output logic [31:0]   tbre_lsu_addr_o,
-  output logic [32:0]   tbre_lsu_wdata_o,
+  output logic [DataWidth-1:0] tbre_lsu_raw_wdata_o,
 
   // LSU snoop interface
   input  logic          snoop_lsu_req_done_i,   
@@ -42,8 +43,10 @@ module cheri_tbre #(
   input  logic          trvk_clrtag_i
 );
 
+  localparam bit Mem65Bit = (DataWidth == 65);
+
   localparam FifoPtrW  = $clog2(FifoSize);
-  localparam CapFifoDW = 33+1;
+  localparam CapFifoDW = DataWidth+1;
   localparam ReqFifoDW = AddrHi-1;
 
 
@@ -67,7 +70,7 @@ module cheri_tbre #(
   logic [CapFifoDW-1:0]  cap_fifo_wr_data;
   logic [ReqFifoDW-1:0]  req_fifo_wr_data;
   logic                  fifo_rd_shdw, fifo_rd_tag, fifo_rd_valid, fifo_rd_err;
-  logic [31:0]           fifo_rd_data;
+  logic [DataWidth-2:0]  fifo_rd_data;
   logic [AddrHi-3:0]     fifo_rd_addr8;
   logic                  fifo_not_empty;
   
@@ -97,10 +100,10 @@ module cheri_tbre #(
   //  note having resp_valid here improves performance but making timing a bit worse 
   //     (data_rvalid --> tbre_lsu_req --> core/tbre mux select --> data_wdata_o
   assign tbre_lsu_req_o    = ((tbre_sch_q == SCH_LOAD) | ((tbre_sch_q == SCH_STORE) && store_req_valid)) & (~wait_resp_q |  (lsu_tbre_resp_valid_i & ~tbre_ctrl.add1wait));
-  assign tbre_lsu_is_cap_o = (tbre_sch_q == SCH_LOAD);
+  assign tbre_lsu_is_cap_o = Mem65Bit ? 1'b1 : (tbre_sch_q == SCH_LOAD);
   assign tbre_lsu_we_o     = (tbre_sch_q == SCH_STORE);
   assign tbre_lsu_addr_o   = (tbre_sch_q == SCH_LOAD) ? load_addr + {lsu_tbre_addr_incr_i, 2'b00} : store_addr;
-  assign tbre_lsu_wdata_o  = {1'b0, fifo_rd_data};
+  assign tbre_lsu_raw_wdata_o  = {1'b0, fifo_rd_data};
          
   assign load_addr8_p1     = cur_load_addr8 + 1;
 
@@ -242,9 +245,9 @@ module cheri_tbre #(
   // peek into the current FIFO head
   assign fifo_rd_addr8  = req_fifo_mem[fifo_rd_ptr][AddrHi-3:0];
   assign fifo_rd_valid  = req_fifo_mem[fifo_rd_ptr][AddrHi-2];
-  assign fifo_rd_data   = cap_fifo_mem[fifo_rd_ptr][31:0];
-  assign fifo_rd_tag    = cap_fifo_mem[fifo_rd_ptr][32];
-  assign fifo_rd_err    = cap_fifo_mem[fifo_rd_ptr][33];
+  assign fifo_rd_data   = cap_fifo_mem[fifo_rd_ptr][DataWidth-2:0];
+  assign fifo_rd_tag    = cap_fifo_mem[fifo_rd_ptr][DataWidth-1];
+  assign fifo_rd_err    = cap_fifo_mem[fifo_rd_ptr][DataWidth];
   assign fifo_rd_shdw   = shdw_fifo_mem[fifo_rd_ptr];
 
   // only issue invalidation store requests if
@@ -261,7 +264,7 @@ module cheri_tbre #(
   assign req_fifo_wr_data = {1'b1, cur_load_addr8};
 
   assign cap_fifo_wr_en   = lsu_tbre_resp_valid_i & ~lsu_tbre_resp_is_wr_i;
-  assign cap_fifo_wr_data = {lsu_tbre_resp_err_i, lsu_tbre_raw_lsw_i};
+  assign cap_fifo_wr_data = {lsu_tbre_resp_err_i, lsu_tbre_raw_rdata_i};
 
   assign shdw_fifo_wr_en   = trvk_en_i;
   assign shdw_fifo_wr_data = trvk_clrtag_i;

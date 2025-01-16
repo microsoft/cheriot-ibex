@@ -115,7 +115,14 @@ module tb_env;
     // overlaying the same image in both instr_mem model and data_mem model
     // so that we can get RO data. this works in this setup since we only use static code images. 
     $readmemh(vhx_path, u_tb_top.u_instr_mem.iram, 'h0);   // load main executable
-    $readmemh(vhx_path, u_tb_top.u_data_mem.dram, 'h0);   // load main executable
+    `ifdef DATAMEM65BIT
+      for (i=0; i<4096;i++) begin
+        u_tb_top.u_data_mem.dram[i][63:32] = u_tb_top.u_instr_mem.iram[2*i+1];
+        u_tb_top.u_data_mem.dram[i][31:0] = u_tb_top.u_instr_mem.iram[2*i];
+      end
+    `else
+      $readmemh(vhx_path, u_tb_top.u_data_mem.dram, 'h0);   // load main executable
+    `endif
 
     //for (i=0; i<64;i++)
     //  $display("%08x %08x %08x %08x", u_tb_top.u_instr_mem.mem[4*i], u_tb_top.u_instr_mem.mem[4*i+1],

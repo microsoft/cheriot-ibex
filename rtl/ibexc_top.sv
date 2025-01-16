@@ -31,7 +31,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   parameter bit          BranchPredictor  = 1'b0,
   parameter bit          SecureIbex       = 1'b0,   // placeholder for TB compatbility
   parameter bit          CHERIoTEn        = 1'b1,
-  parameter int unsigned DataWidth        = 33,
+  parameter int unsigned DataWidth        = 33,     // legal values: 32, 33, 65
   parameter int unsigned HeapBase         = 32'h2001_0000,
   parameter int unsigned TSMapBase        = 32'h2002_f000, // 4kB default
   parameter int unsigned TSMapSize        = 1024,
@@ -73,9 +73,9 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   output logic                         data_we_o,
   output logic [3:0]                   data_be_o,
   output logic [31:0]                  data_addr_o,
-  output logic [32:0]                  data_wdata_o,
+  output logic [DataWidth-1:0]         data_wdata_o,
   output logic [6:0]                   data_wdata_intg_o,
-  input  logic [32:0]                  data_rdata_i,
+  input  logic [DataWidth-1:0]         data_rdata_i,
   input  logic [6:0]                   data_rdata_intg_i,
   input  logic                         data_err_i,
 
@@ -133,8 +133,8 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   output logic [31:0]                  rvfi_mem_addr,
   output logic [ 3:0]                  rvfi_mem_rmask,
   output logic [ 3:0]                  rvfi_mem_wmask,
-  output logic [32:0]                  rvfi_mem_rdata,
-  output logic [32:0]                  rvfi_mem_wdata,
+  output logic [31:0]                  rvfi_mem_rdata,
+  output logic [31:0]                  rvfi_mem_wdata,
   output logic                         rvfi_mem_is_cap,
   output reg_cap_t                     rvfi_mem_rcap,
   output reg_cap_t                     rvfi_mem_wcap,

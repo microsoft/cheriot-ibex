@@ -9,8 +9,8 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   parameter bit          CheriStkZ   = 1'b1,
   parameter  bit         StkZIntrOK  = 1'b0,
   parameter int unsigned MMRegDinW   = 128,
-  parameter int unsigned MMRegDoutW  = 64
-  
+  parameter int unsigned MMRegDoutW  = 64,
+  parameter int unsigned DataWidth   = 33     // legal values: 32, 33, 65
 ) (
    // Clock and Reset
   input  logic          clk_i,
@@ -24,7 +24,7 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   input  logic          lsu_tbre_resp_valid_i,
   input  logic          lsu_tbre_resp_err_i,
   input  logic          lsu_tbre_resp_is_wr_i,
-  input  logic [32:0]   lsu_tbre_raw_lsw_i,   
+  input  logic [DataWidth-1:0] lsu_tbre_raw_rdata_i,   
   input  logic          lsu_tbre_req_done_i,   
   input  logic          lsu_tbre_addr_incr_i,
   input  logic          lsu_tbre_sel_i,
@@ -32,7 +32,7 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   output logic          tbre_lsu_is_cap_o,
   output logic          tbre_lsu_we_o,
   output logic [31:0]   tbre_lsu_addr_o,
-  output logic [32:0]   tbre_lsu_wdata_o,
+  output logic [DataWidth-1:0] tbre_lsu_raw_wdata_o,
 
   // LSU snoop interface
   input  logic          snoop_lsu_req_done_i,   
@@ -69,7 +69,7 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   logic          blk1_lsu_is_cap;
   logic          blk1_lsu_we;
   logic [31:0]   blk1_lsu_addr;
-  logic [32:0]   blk1_lsu_wdata;
+  logic [DataWidth-1:0] blk1_lsu_wdata;
 
   logic          lsu_blk0_resp_valid;    
   logic          lsu_blk0_req_done;   
@@ -77,7 +77,7 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   logic          blk0_lsu_is_cap;
   logic          blk0_lsu_we;
   logic [31:0]   blk0_lsu_addr;
-  logic [32:0]   blk0_lsu_wdata;
+  logic [DataWidth-1:0] blk0_lsu_wdata;
 
 
   logic          tbre_stat, tbre_err, stkz_err;
@@ -92,7 +92,8 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
 
     cheri_tbre #(
       .FifoSize (4), 
-      .AddrHi   (23)
+      .AddrHi   (23),
+      .DataWidth(DataWidth)
     ) cheri_tbre_i (
      // Clock and Reset
       .clk_i                   (clk_i),                 
@@ -103,14 +104,14 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
       .lsu_tbre_resp_valid_i   (lsu_blk1_resp_valid),
       .lsu_tbre_resp_err_i     (lsu_tbre_resp_err_i),
       .lsu_tbre_resp_is_wr_i   (lsu_tbre_resp_is_wr_i),
-      .lsu_tbre_raw_lsw_i      (lsu_tbre_raw_lsw_i),   
+      .lsu_tbre_raw_rdata_i    (lsu_tbre_raw_rdata_i),   
       .lsu_tbre_req_done_i     (lsu_blk1_req_done),   
       .lsu_tbre_addr_incr_i    (lsu_tbre_addr_incr_i),
       .tbre_lsu_req_o          (blk1_lsu_req),
       .tbre_lsu_is_cap_o       (blk1_lsu_is_cap),
       .tbre_lsu_we_o           (blk1_lsu_we),
       .tbre_lsu_addr_o         (blk1_lsu_addr),
-      .tbre_lsu_wdata_o        (blk1_lsu_wdata),
+      .tbre_lsu_raw_wdata_o    (blk1_lsu_wdata),
       .snoop_lsu_req_done_i    (snoop_lsu_req_done_i),  
       .snoop_lsu_req_i         (snoop_lsu_req_i),
       .snoop_lsu_is_cap_i      (snoop_lsu_is_cap_i),
@@ -127,14 +128,14 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
     assign blk1_lsu_is_cap = 1'b0;
     assign blk1_lsu_we     = 1'b0;
     assign blk1_lsu_addr   = 32'h0;
-    assign blk1_lsu_wdata  = 33'h0;
+    assign blk1_lsu_wdata  = {DataWidth{1'b0}};
   end
 
   if (CHERIoTEn & CheriStkZ) begin : g_stkz
     logic unmasked_intr;
     assign unmasked_intr = StkZIntrOK & unmasked_intr_i;
 
-    cheri_stkz cheri_stkz_i (
+    cheri_stkz #(.DataWidth(DataWidth)) cheri_stkz_i (
       .clk_i                  (clk_i             ),
       .rst_ni                 (rst_ni            ),
       .ztop_wr_i              (ztop_wr_i),  
@@ -155,7 +156,7 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
       .stkz_lsu_we_o          (blk0_lsu_we            ),
       .stkz_lsu_is_cap_o      (blk0_lsu_is_cap        ),
       .stkz_lsu_addr_o        (blk0_lsu_addr          ),
-      .stkz_lsu_wdata_o       (blk0_lsu_wdata         )
+      .stkz_lsu_raw_wdata_o   (blk0_lsu_wdata         )
       );
 
   end else begin
@@ -172,7 +173,7 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
     assign blk0_lsu_is_cap = 1'b0;
     assign blk0_lsu_we     = 1'b0;
     assign blk0_lsu_addr   = 32'h0;
-    assign blk0_lsu_wdata  = 33'h0;
+    assign blk0_lsu_wdata  = {DataWidth{1'b0}};
   end
 
   //
@@ -222,14 +223,14 @@ module cheri_tbre_wrapper import cheri_pkg::*; #(
   assign slv_gnt  = lsu_tbre_req_done_i;
   assign mstr_req = {blk1_lsu_req,  blk0_lsu_req};
 
-  assign tbre_lsu_req_o     = slv_req;
-  assign tbre_lsu_is_cap_o  = mstr_arbit_comb[1] ? blk1_lsu_is_cap : blk0_lsu_is_cap;
-  assign tbre_lsu_we_o      = mstr_arbit_comb[1] ? blk1_lsu_we : blk0_lsu_we;
-  assign tbre_lsu_addr_o    = mstr_arbit_comb[1] ? blk1_lsu_addr : blk0_lsu_addr;
-  assign tbre_lsu_wdata_o   = mstr_arbit_comb[1] ? blk1_lsu_wdata : blk0_lsu_wdata;
+  assign tbre_lsu_req_o       = slv_req;
+  assign tbre_lsu_is_cap_o    = mstr_arbit_comb[1] ? blk1_lsu_is_cap : blk0_lsu_is_cap;
+  assign tbre_lsu_we_o        = mstr_arbit_comb[1] ? blk1_lsu_we : blk0_lsu_we;
+  assign tbre_lsu_addr_o      = mstr_arbit_comb[1] ? blk1_lsu_addr : blk0_lsu_addr;
+  assign tbre_lsu_raw_wdata_o = mstr_arbit_comb[1] ? blk1_lsu_wdata : blk0_lsu_wdata;
 
-  assign lsu_blk1_req_done  = mstr_arbit_comb[1] & lsu_tbre_req_done_i; 
-  assign lsu_blk0_req_done  = mstr_arbit_comb[0] & lsu_tbre_req_done_i; 
+  assign lsu_blk1_req_done    = mstr_arbit_comb[1] & lsu_tbre_req_done_i; 
+  assign lsu_blk0_req_done    = mstr_arbit_comb[0] & lsu_tbre_req_done_i; 
 
   // 
   logic resp_sel_q;

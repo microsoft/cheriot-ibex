@@ -104,13 +104,6 @@ module cheri_ex import cheri_pkg::*; #(
   output logic          rv32_addr_incr_req_o,
   output logic [31:0]   rv32_addr_last_o,
 
-  // TBRE LSU request (for muxing)
-  input  logic          lsu_tbre_sel_i,
-  input  logic          tbre_lsu_req_i,
-  input  logic          tbre_lsu_is_cap_i,
-  input  logic          tbre_lsu_we_i,
-  input  logic [31:0]   tbre_lsu_addr_i,
-  input  logic [32:0]   tbre_lsu_wdata_i,
   output logic          cpu_lsu_dec_o,
 
   input  logic [31:0]   csr_rdata_i,
@@ -1056,17 +1049,16 @@ module cheri_ex import cheri_pkg::*; #(
 
   // muxing tbre ctrl inputs and CPU ctrl inputs
 
-  assign lsu_cheri_err_o   = ~lsu_tbre_sel_i ? cpu_lsu_cheri_err : 1'b0;
-  assign lsu_we_o          = ~lsu_tbre_sel_i ? cpu_lsu_we   : tbre_lsu_we_i;
-  assign lsu_addr_o        = ~lsu_tbre_sel_i ? cpu_lsu_addr : tbre_lsu_addr_i;
-  assign lsu_wdata_o       = ~lsu_tbre_sel_i ? cpu_lsu_wdata : tbre_lsu_wdata_i;
-  assign lsu_is_cap_o      = ~lsu_tbre_sel_i ? cpu_lsu_is_cap : tbre_lsu_is_cap_i;
+  assign lsu_cheri_err_o   = cpu_lsu_cheri_err;
+  assign lsu_we_o          = cpu_lsu_we;
+  assign lsu_addr_o        = cpu_lsu_addr;
+  assign lsu_wdata_o       = cpu_lsu_wdata;
+  assign lsu_is_cap_o      = cpu_lsu_is_cap;
 
-  assign lsu_lc_clrperm_o  = (~lsu_tbre_sel_i & instr_is_cheri_i) ? cheri_lsu_lc_clrperm : 0;
-  assign lsu_type_o        = (~lsu_tbre_sel_i & ~instr_is_cheri_i) ? rv32_lsu_type_i : 2'b00;
-  assign lsu_wcap_o        = (~lsu_tbre_sel_i & instr_is_cheri_i) ? cheri_lsu_wcap    : NULL_REG_CAP;
-  assign lsu_sign_ext_o    = (~lsu_tbre_sel_i & ~instr_is_cheri_i) ? rv32_lsu_sign_ext_i : 1'b0;
-
+  assign lsu_lc_clrperm_o  = (instr_is_cheri_i) ? cheri_lsu_lc_clrperm : 0;
+  assign lsu_type_o        = (~instr_is_cheri_i) ? rv32_lsu_type_i : 2'b00;
+  assign lsu_wcap_o        = (instr_is_cheri_i) ? cheri_lsu_wcap    : NULL_REG_CAP;
+  assign lsu_sign_ext_o    = (~instr_is_cheri_i) ? rv32_lsu_sign_ext_i : 1'b0;
 
   // rv32 core side signals
   // request phase: be nice and mux using the current EX instruction to select

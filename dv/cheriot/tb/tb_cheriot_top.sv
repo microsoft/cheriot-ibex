@@ -21,67 +21,24 @@ module tb_cheriot_top (
   output logic         end_sim_ack_o
   );
 
-  logic        instr_req;
-  logic        instr_gnt;
-  logic        instr_rvalid;
-  logic [31:0] instr_addr;
-  logic [31:0] instr_rdata;
-  logic [31:0] instr_rdata_mem;
-  logic [6:0]  instr_rdata_intg;
-  logic        instr_err;
-  logic        instr_err_enable;
-
-  logic        data_req;
-  logic        data_gnt;
-  logic        data_rvalid;
-  logic        data_we;
-  logic [3:0]  data_be;
-  logic [31:0] data_addr;
-  logic [32:0] data_wdata;
-  logic [32:0] data_rdata;
-  logic [6:0]  data_rdata_intg;
-  logic        data_err;
-  logic        data_err_enable;
-  logic        data_is_cap;
-  logic [7:0]  data_flag;
-  mem_cmd_t    data_resp_info;
-
-  logic        irq_external;
-  logic        irq_software;
-  logic        irq_timer;
-  logic [2:0]  irq_vec, intr_ack;
-  logic        intr_enable;
- 
-  logic        dbg_req_enable;
-
-  logic        tbre_bg_enable, stkz_bg_enable;
-  logic        tbre_bg_active, stkz_bg_active;
-  logic        ignore_stkz;
-  logic        end_mon_flag;
-
   logic        cheri_pmode;
   logic        cheri_tsafe_en;
-
-  logic        tsmap_cs;
-  logic [15:0] tsmap_addr;
-  logic [31:0] tsmap_rdata;
-
-  logic [127:0] mmreg_corein, mmreg_corein_0, mmreg_corein_1;
-  logic [63:0]  mmreg_coreout;
-  logic         cheri_fatal_err;
-
-  logic         debug_req;
 
 `ifndef VERILATOR
   `ifdef CHERI0
     defparam dut.u_ibex_top.CHERIoTEn = 1'b0;
     defparam dut.DataWidth = 32;
-    localparam int unsigned busDataWidth = 32;
+    localparam int unsigned BusDataWidth = 32;
   `else
     defparam dut.u_ibex_top.CHERIoTEn = 1'b1;
-    defparam dut.DataWidth = 33;
-    localparam int unsigned busDataWidth = 33;
-    defparam dut.u_ibex_top.u_ibex_core.cheri_tbre_wrapper_i.StkZIntrOK = 1;
+     `ifndef DATAMEM65BIT
+        defparam dut.DataWidth = 33;
+        localparam int unsigned BusDataWidth = 33;
+     `else
+        defparam dut.DataWidth = 65;
+        localparam int unsigned BusDataWidth = 65;
+     `endif
+     defparam dut.u_ibex_top.u_ibex_core.cheri_tbre_wrapper_i.StkZIntrOK = 1;
   `endif
 
   `ifdef SECURE1
@@ -105,8 +62,10 @@ module tb_cheriot_top (
 
   `ifdef MEMCAPFMT1
     defparam dut.u_ibex_top.MemCapFmt = 1'b1;
+    defparam u_mem_mon.MemCapFmt      = 1'b1;
   `else
     defparam dut.u_ibex_top.MemCapFmt = 1'b0;
+    defparam u_mem_mon.MemCapFmt      = 1'b0;
   `endif
 
   `ifdef CHERIPPLBC0
@@ -152,7 +111,62 @@ module tb_cheriot_top (
   `ifdef RV32B
     defparam dut.u_ibex_top.RV32B = 3;
   `endif
+
+  `ifdef IT8
+    defparam dut.u_ibex_top.CheriCapIT8 = 1'b1;
+    defparam u_mem_mon.CheriCapIT8      = 1'b1;
+  `endif
+  
  `endif // ifndef verilator
+
+  logic        instr_req;
+  logic        instr_gnt;
+  logic        instr_rvalid;
+  logic [31:0] instr_addr;
+  logic [31:0] instr_rdata;
+  logic [31:0] instr_rdata_mem;
+  logic [6:0]  instr_rdata_intg;
+  logic        instr_err;
+  logic        instr_err_enable;
+
+  logic        data_req;
+  logic        data_gnt;
+  logic        data_rvalid;
+  logic        data_we;
+  logic [3:0]  data_be;
+  logic [31:0] data_addr;
+  logic [BusDataWidth-1:0] data_wdata;
+  logic [BusDataWidth-1:0] data_rdata;
+  logic [6:0]  data_rdata_intg;
+  logic        data_err;
+  logic        data_err_enable;
+  logic        data_is_cap;
+  logic [7:0]  data_flag;
+  mem_cmd_t    data_resp_info;
+
+  logic        irq_external;
+  logic        irq_software;
+  logic        irq_timer;
+  logic [2:0]  irq_vec, intr_ack;
+  logic        intr_enable;
+ 
+  logic        dbg_req_enable;
+
+  logic        tbre_bg_enable, stkz_bg_enable;
+  logic        tbre_bg_active, stkz_bg_active;
+  logic        ignore_stkz;
+  logic        end_mon_flag;
+
+
+  logic        tsmap_cs;
+  logic [15:0] tsmap_addr;
+  logic [31:0] tsmap_rdata;
+
+  logic [127:0] mmreg_corein, mmreg_corein_0, mmreg_corein_1;
+  logic [63:0]  mmreg_coreout;
+  logic         cheri_fatal_err;
+
+  logic         debug_req;
 
   ibex_top_tracing #(
                      .HeapBase        (32'h8000_0000),
@@ -348,7 +362,8 @@ module tb_cheriot_top (
     i = $value$plusargs("STKZ_INTVL=%d", cfg_stkz_intvl);
     if (i == 1) stkz_intvl = cfg_stkz_intvl[3:0];
 
-    $display("TB> CFG.memCapFmt=%1d", dut.u_ibex_top.MemCapFmt);
+    $display("TB> CFG.DataWidth = %2d, CFG.CheriCapIT8=%1d, CFG.memCapFmt=%1d", 
+             dut.u_ibex_top.DataWidth,  dut.u_ibex_top.CheriCapIT8, dut.u_ibex_top.MemCapFmt);
     $display("TB> INSTR_GNTW = %d, INSTR_RESPW = %d, DATA_GNTW = %d, DATA_RESPW = %d", 
              instr_gnt_wmax, instr_resp_wmax, data_gnt_wmax, data_resp_wmax); 
     $display("TB> INSTR_ERR_RATE = %d, DATA_ERR_RATE = %d, INTR_INTVL = %d, CAP_ERR_RATE = %d", 
@@ -413,7 +428,7 @@ module tb_cheriot_top (
 
   assign ignore_stkz = (stkz_intvl != 0);
 
-  data_mem_model u_data_mem (
+  data_mem_model #(.DW(BusDataWidth)) u_data_mem (
     .clk             (clk_i        ), 
     .rst_n           (rst_ni       ),
     .ERR_RATE        (data_err_rate),
@@ -446,9 +461,10 @@ module tb_cheriot_top (
   //
   // memory transaction monitor 
   //
-  mem_mon_top u_mem_mon (
+  mem_mon_top #(.DataWidth(BusDataWidth)) u_mem_mon (
     .clk_i           (clk_i        ), 
     .rst_ni          (rst_ni       ),
+    //.rst_ni          (1'b0       ),
     .data_req        (data_req     ),
     .data_we         (data_we      ),
     .data_be         (data_be      ),
@@ -503,7 +519,7 @@ module tb_cheriot_top (
   //
   // random TBRE background traffic generation
   //
-  tbre_bg_gen u_tbre_bg_gen (
+  tbre_bg_gen # (.DataWidth(BusDataWidth))  u_tbre_bg_gen (
     .clk             (clk_i        ), 
     .rst_n           (rst_ni       ),
     .TBRE_INTVL      (tbre_intvl   ),

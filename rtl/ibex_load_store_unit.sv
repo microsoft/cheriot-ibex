@@ -19,10 +19,11 @@
 `include "dv_fcov_macros.svh"
 
 module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
-  parameter bit CHERIoTEn   = 1'b1,
-  parameter bit MemCapFmt   = 1'b0,
-  parameter bit CheriTBRE   = 1'b0,
-  parameter bit CheriCapIT8 = 1'b0
+  parameter int unsigned DataWidth = 33,        // legal values: 32, 33, 65
+  parameter bit          CHERIoTEn   = 1'b1,
+  parameter bit          MemCapFmt   = 1'b0,
+  parameter bit          CheriTBRE   = 1'b0,
+  parameter bit          CheriCapIT8 = 1'b0
 )(
   input  logic         clk_i,
   input  logic         rst_ni,
@@ -38,28 +39,30 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
 
   output logic [31:0]  data_addr_o,
   output logic         data_we_o,
+
   output logic [3:0]   data_be_o,
-  output logic [32:0]  data_wdata_o,         // kliu
-  input  logic [32:0]  data_rdata_i,         // kliu
+  output logic [DataWidth-1:0] data_wdata_o,         // kliu
+  input  logic [DataWidth-1:0] data_rdata_i,         // kliu
 
   // signals to/from ID/EX stage
-  input  logic         lsu_we_i,             // write enable                     -> from ID/EX
-  input  logic         lsu_is_cap_i,         // kliu
-  input  logic         lsu_cheri_err_i,      // kliu
-  input  logic [1:0]   lsu_type_i,           // data type: word, half word, byte -> from ID/EX
-  input  logic [32:0]  lsu_wdata_i,          // data to write to memory          -> from ID/EX
-  input  reg_cap_t     lsu_wcap_i,           // kliu
-  input  logic [3:0]   lsu_lc_clrperm_i,
-  input  logic         lsu_sign_ext_i,       // sign extension                   -> from ID/EX
+  input  logic         cpu_lsu_we_i,         // write enable                     -> from ID/EX
+  input  logic         cpu_lsu_is_cap_i,     // kliu
+  input  logic         cpu_lsu_cheri_err_i,  // kliu
+  input  logic [1:0]   cpu_lsu_type_i,       // data type: word, half word, byte -> from ID/EX
+  input  logic [32:0]  cpu_lsu_wdata_i,      // data to write to memory          -> from ID/EX
+  input  reg_cap_t     cpu_lsu_wcap_i,       // kliu
+  input  logic [3:0]   cpu_lsu_lc_clrperm_i,
+  input  logic         cpu_lsu_sign_ext_i,   // sign extension                   -> from ID/EX
+
   input  logic         cpu_stall_by_stkz_i, 
   input  logic         cpu_grant_to_stkz_i, 
 
   output reg_cap_t     lsu_rcap_o,           // kliu
   output logic [32:0]  lsu_rdata_o,          // requested data                   -> to ID/EX
   output logic         lsu_rdata_valid_o,
-  input  logic         lsu_req_i,            // data request                     -> from ID/EX
+  input  logic         cpu_lsu_req_i,        // data request                     -> from ID/EX
 
-  input  logic [31:0]  lsu_addr_i,           // address computed in ALU          -> from ID/EX
+  input  logic [31:0]  cpu_lsu_addr_i,       // address computed in ALU          -> from ID/EX
 
   output logic         lsu_addr_incr_req_o,  // request address increment for
                                               // misaligned accesses              -> to ID/EX
@@ -67,18 +70,22 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
                                               // -> mtval
                                               // -> AGU for misaligned accesses
 
-  output logic         lsu_req_done_o,       // Signals that data request is complete
+  output logic         lsu_req_done_o,        // Signals that data request is complete
                                               // (only need to await final data
                                               // response)                        -> to ID/EX
-  output logic         lsu_resp_valid_o,     // LSU has response from transaction -> to ID/EX & WB
+  output logic         lsu_resp_valid_o,      // LSU has response from transaction -> to ID/EX & WB
   output logic         lsu_resp_is_wr_o,
 
   // TBRE related signals
   input  logic         tbre_lsu_req_i,
+  input  logic         tbre_lsu_is_cap_i,
+  input  logic         tbre_lsu_we_i,
+  input  logic [31:0]  tbre_lsu_addr_i,
+  input  logic [DataWidth-1:0]  tbre_lsu_raw_wdata_i,
   input  logic         cpu_lsu_dec_i,
-  output logic         lsu_tbre_sel_o,        // request-side selection signal
+  output logic         lsu_tbre_sel_o,
   output logic         lsu_tbre_addr_incr_req_o,  // request address increment for
-  output logic [32:0]  lsu_tbre_raw_lsw_o,
+  output logic [DataWidth-1:0] lsu_tbre_raw_rdata_o,
   output logic         lsu_tbre_req_done_o,
   output logic         lsu_tbre_resp_valid_o, // response from transaction -> to TBRE 
   output logic         lsu_tbre_resp_err_o,
@@ -94,6 +101,9 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   output logic         perf_load_o,
   output logic         perf_store_o
 );
+
+
+  localparam bit DataMem65Bit = (DataWidth == 65);
 
   logic [31:0]  data_addr;
   logic [31:0]  data_addr_w_aligned;
@@ -111,7 +121,7 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   logic [1:0]   data_offset;   // mux control for data to be written to memory
 
   logic [3:0]   data_be;
-  logic [32:0]  data_wdata;
+  logic [DataWidth-1:0]   data_wdata;
 
   logic [32:0]  data_rdata_ext;
 
@@ -135,9 +145,20 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   logic         tbre_req_good;
   logic         outstanding_resp_q, resp_wait;
   logic         lsu_resp_valid;
-  logic         lsu_go;
+  logic         lsu_go, lsu_go_goodcap;
   logic         addr_incr_req;
   logic         cpu_req_erred, cpu_req_valid;
+
+  logic         lsu_tbre_sel;
+  logic [31:0]  lsu_addr;
+  logic         lsu_we;    
+  logic         lsu_is_cap;   
+  logic         lsu_cheri_err; 
+  logic [1:0]   lsu_type;
+  logic [32:0]  lsu_wdata;
+  reg_cap_t     lsu_wcap;     
+  logic [3:0]   lsu_lc_clrperm;
+  logic         lsu_sign_ext;
   
 
   ls_fsm_e ls_fsm_cs, ls_fsm_ns;
@@ -147,18 +168,35 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   logic         cap_lsw_err_q;
   logic [32:0]  cap_lsw_q;
 
-  assign data_addr   = lsu_addr_i;
-  assign data_offset = (cheri_pmode_i & lsu_is_cap_i) ? 2'b00 : data_addr[1:0];
+  assign data_addr   = lsu_addr;
+  assign data_offset = (cheri_pmode_i & lsu_is_cap) ? 2'b00 : data_addr[1:0];
+
+  // multiplex inputs between CPU and TBRE/stkz
+  assign lsu_cheri_err   = ~lsu_tbre_sel ? cpu_lsu_cheri_err_i  : 1'b0;
+  assign lsu_we          = ~lsu_tbre_sel ? cpu_lsu_we_i         : tbre_lsu_we_i;
+  assign lsu_addr        = ~lsu_tbre_sel ? cpu_lsu_addr_i       : tbre_lsu_addr_i;
+
+  if (DataMem65Bit) begin
+    assign lsu_wdata     = cpu_lsu_wdata_i;    //  tbre wdata mux hanled later (wdata_o)
+  end else begin
+    assign lsu_wdata     = ~lsu_tbre_sel ? cpu_lsu_wdata_i      : tbre_lsu_raw_wdata_i[32:0];
+  end
+
+  assign lsu_is_cap      = ~lsu_tbre_sel ? cpu_lsu_is_cap_i     : tbre_lsu_is_cap_i;
+  assign lsu_lc_clrperm  = ~lsu_tbre_sel ? cpu_lsu_lc_clrperm_i : 0;
+  assign lsu_type        = ~lsu_tbre_sel ? cpu_lsu_type_i       : 2'b00;
+  assign lsu_wcap        = ~lsu_tbre_sel ? cpu_lsu_wcap_i       : NULL_REG_CAP;
+  assign lsu_sign_ext    = ~lsu_tbre_sel ? cpu_lsu_sign_ext_i   : 1'b0;
 
   ///////////////////
   // BE generation //
   ///////////////////
 
   always_comb begin
-    if (CHERIoTEn & cheri_pmode_i & lsu_is_cap_i)
-      data_be = 4'b1111;        // caps are always word aligned
+    if (CHERIoTEn & cheri_pmode_i & lsu_is_cap)
+      data_be = {DataWidth{1'b1}};        // caps are always word aligned
     else begin
-      unique case (lsu_type_i) // Data type 00 Word, 01 Half word, 11,10 byte
+      unique case (lsu_type) // Data type 00 Word, 01 Half word, 11,10 byte
         2'b00: begin // Writing a word
           if (!handle_misaligned_q) begin // first part of potentially misaligned transaction
             unique case (data_offset)
@@ -205,8 +243,8 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
         end
 
         default:     data_be = 4'b1111;
-      endcase // case (lsu_type_i)
-    end  // if lsu_cap_i
+      endcase // case (lsu_type)
+    end  // if lsu_cap
   end
 
   /////////////////////
@@ -215,42 +253,53 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
 
   // prepare data to be written to the memory
   // we handle misaligned accesses, half word and byte accesses here
-  if (~MemCapFmt) begin : gen_memcap_wr_fmt0
+  logic [32:0] wdata_int;
+  always_comb begin
+     unique case (data_offset)
+       2'b00:   wdata_int = lsu_wdata[32:0];
+       2'b01:   wdata_int = {1'b0, lsu_wdata[23:0], lsu_wdata[31:24]};
+       2'b10:   wdata_int = {1'b0, lsu_wdata[15:0], lsu_wdata[31:16]};
+       2'b11:   wdata_int = {1'b0, lsu_wdata[ 7:0], lsu_wdata[31: 8]};
+       default: wdata_int = lsu_wdata[32:0];
+     endcase // case (data_offset)
+   end
+
+  // When in Mem65Bit mode tbre/stkz do a raw 65-bit memcap write (is_cap == 1)
+  // When in Mem33Bit mode tbre/stkz do a normal 33-bit integer data write (is_cap == 0)
+  if (DataMem65Bit) begin : gen_memcap_wr_65bit
     always_comb begin
-      if (CHERIoTEn & cheri_pmode_i & lsu_is_cap_i && (ls_fsm_cs == CTX_WAIT_GNT2))
-        data_wdata = CheriCapIT8 ? reg2memcap_it8_fmt0(lsu_wcap_i): 
-                                   reg2memcap_fmt0(lsu_wcap_i);
-      else if (CHERIoTEn & cheri_pmode_i & lsu_is_cap_i)
-        data_wdata = lsu_wdata_i;
-      else begin
-        unique case (data_offset)
-          2'b00:   data_wdata =  lsu_wdata_i[32:0];
-          2'b01:   data_wdata = {1'b0, lsu_wdata_i[23:0], lsu_wdata_i[31:24]};
-          2'b10:   data_wdata = {1'b0, lsu_wdata_i[15:0], lsu_wdata_i[31:16]};
-          2'b11:   data_wdata = {1'b0, lsu_wdata_i[ 7:0], lsu_wdata_i[31: 8]};
-          default: data_wdata =  lsu_wdata_i[32:0];
-        endcase // case (data_offset)
+      if (CHERIoTEn & cheri_pmode_i & lsu_is_cap & ~lsu_tbre_sel) begin
+        data_wdata[DataWidth-1:32] = CheriCapIT8 ? reg2memcap_it8_fmt0(lsu_wcap) : 
+                                     reg2memcap_fmt0(lsu_wcap);
+        data_wdata[31:0] = lsu_wdata[31:0];
+      end else if (CHERIoTEn & cheri_pmode_i & lsu_is_cap) begin
+        data_wdata = tbre_lsu_raw_wdata_i;
+      end else begin
+        data_wdata = {33'h0, wdata_int[31:0]};
       end
+    end
+  end else if (~MemCapFmt) begin : gen_memcap_wr_fmt0
+    always_comb begin
+      if (CHERIoTEn & cheri_pmode_i & lsu_is_cap && (ls_fsm_cs == CTX_WAIT_GNT2))
+        data_wdata = CheriCapIT8 ? reg2memcap_it8_fmt0(lsu_wcap): 
+                                   reg2memcap_fmt0(lsu_wcap);
+      else if (CHERIoTEn & cheri_pmode_i & lsu_is_cap)
+        data_wdata = lsu_wdata;
+      else 
+        data_wdata = wdata_int;
     end
   end else begin : gen_memcap_wr_fmt1
     logic [65:0] mem_capaddr;
-    assign mem_capaddr = CheriCapIT8 ? reg2mem_it8_fmt1(lsu_wcap_i, lsu_wdata_i) : 
-                                       reg2mem_fmt1(lsu_wcap_i, lsu_wdata_i);
+    assign mem_capaddr = CheriCapIT8 ? reg2mem_it8_fmt1(lsu_wcap, lsu_wdata) : 
+                                       reg2mem_fmt1(lsu_wcap, lsu_wdata);
 
     always_comb begin
-      if (CHERIoTEn & lsu_is_cap_i && (ls_fsm_cs == CTX_WAIT_GNT2))
+      if (CHERIoTEn & lsu_is_cap && (ls_fsm_cs == CTX_WAIT_GNT2))
         data_wdata = mem_capaddr[65:33];
-      else if (CHERIoTEn & lsu_is_cap_i)
+      else if (CHERIoTEn & lsu_is_cap)
         data_wdata = mem_capaddr[32:0];
-      else begin
-        unique case (data_offset)
-          2'b00:   data_wdata =  lsu_wdata_i[32:0];
-          2'b01:   data_wdata = {1'b0, lsu_wdata_i[23:0], lsu_wdata_i[31:24]};
-          2'b10:   data_wdata = {1'b0, lsu_wdata_i[15:0], lsu_wdata_i[31:16]};
-          2'b11:   data_wdata = {1'b0, lsu_wdata_i[ 7:0], lsu_wdata_i[31: 8]};
-          default: data_wdata =  lsu_wdata_i[32:0];
-        endcase // case (data_offset)
-      end
+      else 
+        data_wdata = wdata_int;
     end
   end
   /////////////////////
@@ -275,9 +324,9 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
       data_we_q       <= 1'b0;
     end else if (ctrl_update) begin
       rdata_offset_q  <= data_offset;
-      data_type_q     <= lsu_type_i;
-      data_sign_ext_q <= lsu_sign_ext_i;
-      data_we_q       <= lsu_we_i;
+      data_type_q     <= lsu_type;
+      data_sign_ext_q <= lsu_sign_ext;
+      data_we_q       <= lsu_we;
     end
   end
 
@@ -404,11 +453,11 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
 
   // check for misaligned accesses that need to be split into two word-aligned accesses
   assign split_misaligned_access =
-      ((lsu_type_i == 2'b00) && (data_offset != 2'b00)) || // misaligned word access
-      ((lsu_type_i == 2'b01) && (data_offset == 2'b11));   // misaligned half-word access
+      ((lsu_type == 2'b00) && (data_offset != 2'b00)) || // misaligned word access
+      ((lsu_type == 2'b01) && (data_offset == 2'b11));   // misaligned half-word access
 
-  assign cpu_req_valid = lsu_req_i & ~lsu_cheri_err_i & ~cpu_stall_by_stkz_i;
-  assign cpu_req_erred = lsu_req_i & lsu_cheri_err_i;
+  assign cpu_req_valid = cpu_lsu_req_i & ~lsu_cheri_err & ~cpu_stall_by_stkz_i;
+  assign cpu_req_erred = cpu_lsu_req_i & lsu_cheri_err;
 
   // FSM
   always_comb begin
@@ -429,6 +478,7 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
     perf_store_o        = 1'b0;
 
     lsu_go              = 1'b0;
+    lsu_go_goodcap      = 1'b0;
 
     unique case (ls_fsm_cs)
 
@@ -448,17 +498,24 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
           lsu_go       = 1'b1;         // decision to move forward with a request
           ls_fsm_ns    = IDLE;
         end else if (CHERIoTEn & cheri_pmode_i & (cpu_req_valid | tbre_req_good) &
-                     lsu_is_cap_i & ~resp_wait) begin
+                     lsu_is_cap & ~resp_wait) begin
           // normal cap access case
           data_req_o   = 1'b1;
           cheri_err_d  = 1'b0;
           pmp_err_d    = data_pmp_err_i;
           lsu_err_d    = 1'b0;
-          perf_load_o  = ~lsu_we_i;
-          perf_store_o = lsu_we_i;
+          perf_load_o  = ~lsu_we;
+          perf_store_o = lsu_we;
           lsu_go       = 1'b1;         // decision to move forward with a request
+          lsu_go_goodcap = 1'b1;
 
-          if (data_gnt_i) begin
+          if (DataMem65Bit && data_gnt_i) begin
+            ctrl_update         = 1'b1;
+            addr_update         = 1'b1;
+            ls_fsm_ns           = IDLE;
+          end else if (DataMem65Bit) begin
+            ls_fsm_ns           = CTX_WAIT_GNT2;
+          end else if (data_gnt_i) begin
             ctrl_update         = 1'b1;
             addr_update         = 1'b1;
             ls_fsm_ns           = CTX_WAIT_GNT2;
@@ -471,8 +528,8 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
           cheri_err_d  = 1'b0;
           pmp_err_d    = data_pmp_err_i;
           lsu_err_d    = 1'b0;
-          perf_load_o  = ~lsu_we_i;
-          perf_store_o = lsu_we_i;
+          perf_load_o  = ~lsu_we;
+          perf_store_o = lsu_we;
           lsu_go       = 1'b1;         // decision to move forward with a request
 
           if (data_gnt_i) begin
@@ -566,7 +623,7 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
       CTX_WAIT_GNT1: begin
         if (cheri_pmode_i) begin
           addr_incr_req = 1'b0;
-          data_req_o      = 1'b1;
+          data_req_o    = 1'b1;
           if (data_gnt_i) begin
             ls_fsm_ns = CTX_WAIT_GNT2;
             ctrl_update         = 1'b1;
@@ -579,10 +636,15 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
 
       CTX_WAIT_GNT2: begin
         if (cheri_pmode_i) begin
-          addr_incr_req = 1'b1;
-          data_req_o      = 1'b1;
+          addr_incr_req = ~DataMem65Bit;
+          data_req_o    = 1'b1;
           if (data_gnt_i && (data_rvalid_i || (cap_rx_fsm_q == CRX_WAIT_RESP2))) ls_fsm_ns = IDLE;
           else if (data_gnt_i) ls_fsm_ns = CTX_WAIT_RESP;
+
+          if (DataMem65Bit && data_gnt_i) begin
+            ctrl_update         = 1'b1;
+            addr_update         = 1'b1;
+          end
         end else begin
           ls_fsm_ns = IDLE;
         end
@@ -590,8 +652,8 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
 
       CTX_WAIT_RESP: begin        // only needed if mem allows 2 active req 
         if (cheri_pmode_i) begin
-          addr_incr_req = 1'b1; // stay 1 to reduce unnecessary addr toggling
-          data_req_o      = 1'b0;
+          addr_incr_req = ~DataMem65Bit;  // if 33-bit memory, stay 1 to reduce unnecessary addr toggling
+          data_req_o    = 1'b0;
           if (data_rvalid_i) ls_fsm_ns = IDLE;
         end else begin
           ls_fsm_ns = IDLE;
@@ -609,11 +671,19 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
 
     case (cap_rx_fsm_q)
       CRX_IDLE:
-        if (CHERIoTEn & cheri_pmode_i & lsu_is_cap_i && (ls_fsm_ns != IDLE)) cap_rx_fsm_d = CRX_WAIT_RESP1;
+        if (CHERIoTEn & DataMem65Bit & cheri_pmode_i & lsu_go_goodcap)
+          cap_rx_fsm_d = CRX_WAIT_RESP2;
+        //else if (CHERIoTEn & cheri_pmode_i & lsu_is_cap && (ls_fsm_ns != IDLE))
+        else if (CHERIoTEn & cheri_pmode_i & lsu_go_goodcap)
+          cap_rx_fsm_d = CRX_WAIT_RESP1;
       CRX_WAIT_RESP1:
         if (data_rvalid_i) cap_rx_fsm_d = CRX_WAIT_RESP2;
       CRX_WAIT_RESP2:
-        if (data_rvalid_i && lsu_is_cap_i && (ls_fsm_ns != IDLE)) cap_rx_fsm_d = CRX_WAIT_RESP1;
+        if (DataMem65Bit & data_rvalid_i && lsu_go_goodcap)
+          cap_rx_fsm_d = CRX_WAIT_RESP2; 
+        //else if (data_rvalid_i && lsu_is_cap && (ls_fsm_ns != IDLE))
+        else if (data_rvalid_i && lsu_go_goodcap)
+          cap_rx_fsm_d = CRX_WAIT_RESP1;
         else if (data_rvalid_i) cap_rx_fsm_d = CRX_IDLE;
       default:;
     endcase
@@ -640,7 +710,8 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   assign cur_req_is_tbre = CHERIoTEn & cheri_pmode_i & CheriTBRE & ((ls_fsm_cs == IDLE) ? 
                            (tbre_req_good & ~resp_wait) : req_is_tbre_q);
 
-  assign lsu_tbre_sel_o = cur_req_is_tbre;        // req ctrl signal mux select (to cheri_ex/tbre_wrapper)
+  assign lsu_tbre_sel   = cur_req_is_tbre;      // req ctrl signal mux select (to cheri_ex/tbre_wrapper)
+  assign lsu_tbre_sel_o = lsu_tbre_sel;    
 
   // registers for FSM
   always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -666,14 +737,14 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
 
       cap_rx_fsm_q        <= cap_rx_fsm_d;
 
-      // resp_is_cap_q aligns with responses on the data interface, lsu_is_cap_i aligns with requests
+      // resp_is_cap_q aligns with responses on the data interface, lsu_is_cap aligns with requests
       //   we use lsu_go to qualify this update
       //   - note this implies that LSU only support a outstand request at a time
       //   - new request can't be issued (go) until resp_valid
       //   - also note resp_valid is gated by (ls_fsm_cs == IDLE)
       if (lsu_go) begin
-        resp_is_cap_q     <= lsu_is_cap_i;
-        resp_lc_clrperm_q <= lsu_lc_clrperm_i;
+        resp_is_cap_q     <= lsu_is_cap;
+        resp_lc_clrperm_q <= lsu_lc_clrperm;
         req_is_tbre_q     <= cur_req_is_tbre;
       end
 
@@ -713,7 +784,18 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
                               (~cheri_pmode_i | (~resp_is_tbre));
 
   // output to register file
-  if (CHERIoTEn & ~MemCapFmt) begin : gen_memcap_rd_fmt0
+  
+  if (CHERIoTEn & DataMem65Bit) begin : gen_memcap_rd_65bit
+    logic [32:0] rdata_msw, rdata_lsw;
+    assign       rdata_msw = data_rdata_i[DataWidth-1:32];
+    assign       rdata_lsw = {data_rdata_i[DataWidth-1], data_rdata_i[31:0]};
+
+    assign lsu_rdata_o = data_rdata_ext;
+    assign lsu_rcap_o  = (resp_is_cap_q && data_rvalid_i && (cap_rx_fsm_q == CRX_WAIT_RESP2) && (~data_or_pmp_err)) ?
+                         (CheriCapIT8 ? mem2regcap_it8_fmt0(rdata_msw, rdata_lsw, resp_lc_clrperm_q) :
+                                        mem2regcap_fmt0(rdata_msw, rdata_lsw, resp_lc_clrperm_q)) : NULL_REG_CAP;
+
+  end else if (CHERIoTEn & ~MemCapFmt) begin : gen_memcap_rd_fmt0
     assign lsu_rdata_o = (cheri_pmode_i & resp_is_cap_q) ? cap_lsw_q : data_rdata_ext;
     assign lsu_rcap_o  = (resp_is_cap_q && data_rvalid_i && (cap_rx_fsm_q == CRX_WAIT_RESP2) && (~data_or_pmp_err)) ?
                          (CheriCapIT8 ? mem2regcap_it8_fmt0(data_rdata_i, cap_lsw_q, resp_lc_clrperm_q) :
@@ -729,7 +811,8 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   end
   
   
-  assign lsu_tbre_raw_lsw_o = cap_lsw_q;          // "raw" memory word to tbre
+  // "raw" memory word to tbre
+  assign lsu_tbre_raw_rdata_o = DataMem65Bit ? data_rdata_i : cap_lsw_q;
 
   // output data address must be word aligned
   assign data_addr_w_aligned = {data_addr[31:2], 2'b00};
@@ -738,10 +821,10 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   assign data_addr_o   = data_addr_w_aligned;
 
   assign data_wdata_o  = data_wdata;
-  assign data_we_o     = lsu_we_i;
+  assign data_we_o     = lsu_we;
   assign data_be_o     = data_be;
 
-  assign data_is_cap_o = lsu_is_cap_i;
+  assign data_is_cap_o = lsu_is_cap;
 
   // output to ID stage: mtval + AGU for misaligned transactions
   assign addr_last_o   = addr_last_q;
