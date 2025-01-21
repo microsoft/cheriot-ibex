@@ -1408,8 +1408,11 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
     }
 
     cp_seal_bound_cases: coverpoint fcov_seal_bound_cases {
-      wildcard ignore_bins igonroe0 = {4'b??11};
-      wildcard ignore_bins igonroe1 = {4'b11??};
+      wildcard ignore_bins ignore0 = {4'b??11};
+      wildcard ignore_bins ignore1 = {4'b11??};
+      wildcard ignore_bins ignore2 = {4'b?1?1};
+      wildcard ignore_bins ignore3 = {4'b?11?};
+      wildcard ignore_bins ignore4 = {4'b1??1};
     }
 
     cp_clsc_addr_lsb: coverpoint g_cheri_ex.u_cheri_ex.cheri_ls_chkaddr[2:0];
