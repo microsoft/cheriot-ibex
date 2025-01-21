@@ -1710,7 +1710,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       bins bin1 = {1'b1};
     }
     
-    cheriot_instr_candperm_cross: cross cp_cs1_tag, cp_cs1_sealed, cp_cs1_perms, cp_rs2_perm_mask, cp_instr_csetaddr; 
+    cheriot_instr_candperm_cross: cross cp_cs1_tag, cp_cs1_sealed, cp_cs1_perms, cp_rs2_perm_mask, cp_instr_candperm;
 
     // CCLEARTAG
     cp_instr_ccleartag: coverpoint cheri_ops[CCLEAR_TAG]  iff (g_cheri_ex.u_cheri_ex.cheri_exec_id_i) {
