@@ -1895,7 +1895,23 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
     }
 
     cheriot_instr_cseal_cross0: cross cp_cs1_tag, cp_cs1_sealed,  cp_cs2_tag, cp_cs2_sealed, cp_instr_cseal; 
-    cheriot_instr_cseal_cross1: cross cp_cs1_perm_ex, cp_cs2_tag, cp_cs2_perm_se, cp_cs2_seal_type, cp_seal_bound_cases, cp_instr_cseal; 
+    cheriot_instr_cseal_cross1: cross cp_cs1_perm_ex, cp_cs2_tag, cp_cs2_perm_se, cp_cs2_seal_type, cp_seal_bound_cases, cp_instr_cseal {
+      // Tagged caps cannot have cursor below base
+      ignore_bins tagged_below = (binsof(cp_cs2_tag) intersect {1'b1}) with (cp_seal_bound_cases inside {4'b???1});
+
+      // If zero is in bounds, it is the base.
+      ignore_bins tagged_zero = (binsof(cp_cs2_tag) intersect {1'b1})
+                                && (binsof(cp_cs2_seal_type) intersect {32'b0})
+                                with (!cp_seal_bound_cases inside {4'b??1?});
+
+      // Regardless of the tag, zero cannot be...
+      //   ... below the base
+      //   ... above the top
+      //   ... strictly in bounds
+      //   ... equal to the top but not the base
+      ignore_bins zero_bounds = (binsof(cp_cs2_seal_type) intersect {32'b0})
+                                with (cp_seal_bound_cases inside {4'b???1, 4'b?1??, 4'b0000, 4'b1?0?});
+    }
     
     // CUnseal
     cp_instr_cunseal: coverpoint cheri_ops[CUNSEAL]  iff (g_cheri_ex.u_cheri_ex.cheri_exec_id_i) {
