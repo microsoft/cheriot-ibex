@@ -857,7 +857,9 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       bins bin[] = {[0:7]};    // including reserved values for coverage
     }
 
-    cp_cs1_sealed: coverpoint ((g_cheri_ex.u_cheri_ex.rf_fullcap_a.otype != 0) & (g_cheri_ex.u_cheri_ex.rf_fullcap_a.valid));
+    cp_cs1_sealed: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_a.otype != 0;
+
+    cp_cs1_sealed_tagged_cross: cross cp_cs1_tag, cp_cs1_sealed;
 
     cp_cs1_cor: coverpoint {g_cheri_ex.u_cheri_ex.rf_fullcap_a.base_cor,
                             g_cheri_ex.u_cheri_ex.rf_fullcap_a.top_cor} {
@@ -997,7 +999,9 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       bins bin[] = {[0:7]};    // including reserved values for coverage
     }
 
-    cp_cs2_sealed: coverpoint ((g_cheri_ex.u_cheri_ex.rf_fullcap_b.otype != 0) & (g_cheri_ex.u_cheri_ex.rf_fullcap_b.valid));
+    cp_cs2_sealed: coverpoint g_cheri_ex.u_cheri_ex.rf_fullcap_b.otype != 0;
+
+    cp_cs2_sealed_tagged_cross: cross cp_cs2_tag, cp_cs2_sealed;
 
     cp_cs2_cor: coverpoint {g_cheri_ex.u_cheri_ex.rf_fullcap_b.base_cor,
                             g_cheri_ex.u_cheri_ex.rf_fullcap_b.top_cor} {
