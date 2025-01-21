@@ -504,7 +504,7 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
   
   logic [3:0] fcov_seal_bound_cases;
   logic [8:0] tmp9;
-  assign tmp9 = bound_check_cases(g_cheri_ex.u_cheri_ex.rf_fullcap_b, g_cheri_ex.u_cheri_ex.cheri_ls_chkaddr); 
+  assign tmp9 = bound_check_cases(g_cheri_ex.u_cheri_ex.rf_fullcap_b, g_cheri_ex.u_cheri_ex.rf_rdata_b);
   
   assign fcov_seal_bound_cases = tmp9[3:0];
 
