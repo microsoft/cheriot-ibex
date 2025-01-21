@@ -1392,19 +1392,19 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
     }
 
     cp_cjal_target_bound_cases:  coverpoint fcov_cjal_target_bound_cases {
-      `bound_check_cases_ignore_bins()
+      `bound_check_cases_ignore_bins
     }
 
     cp_cjalr_target_bound_cases: coverpoint fcov_cjalr_target_bound_cases {
-      `bound_check_cases_ignore_bins()
+      `bound_check_cases_ignore_bins
     }
 
     cp_branch_target_bound_cases: coverpoint fcov_branch_target_bound_cases {
-      `bound_check_cases_ignore_bins()
+      `bound_check_cases_ignore_bins
     }
 
     cp_clsc_bound_cases: coverpoint fcov_clsc_bound_cases {
-      `bound_check_cases_ignore_bins()
+      `bound_check_cases_ignore_bins
     }
 
     cp_seal_bound_cases: coverpoint fcov_seal_bound_cases {

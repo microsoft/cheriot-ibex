@@ -122,7 +122,7 @@ package cheriot_dv_pkg;
     return result;
   endfunction
 
-  `define bound_check_cases_ignore_bins() \
+  `define bound_check_cases_ignore_bins \
       wildcard ignore_bins ignore_base    = {9'b?_????_??11}; \
       wildcard ignore_bins ignore_top     = {9'b?_????_11??}; \
       wildcard ignore_bins ignore_range_0 = {9'b?_????_?1?1}; \
