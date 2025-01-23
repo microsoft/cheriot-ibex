@@ -55,7 +55,7 @@ module cheri_trvk_stage #(
   logic  [2:1] range_ok_q;
 
 
-  assign base32    = get_bound33(in_cap_q.base, {2{in_cap_q.base_cor}}, in_cap_q.exp, in_data_q);
+  assign base32    = 32'(get_bound33(in_cap_q.base, {2{in_cap_q.base_cor}}, in_cap_q.exp, in_data_q));
   assign tsmap_ptr = (base32 - HeapBase) >> 3;
 
   assign tsmap_addr_o  = tsmap_ptr[15:5];

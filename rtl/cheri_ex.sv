@@ -305,7 +305,7 @@ module cheri_ex import cheri_pkg::*; #(
     unique case (1'b1)
       cheri_operator_i[CGET_PERM]:
         begin
-          result_data_o       = {19'h0, rf_fullcap_a.perms};
+          result_data_o       = {20'h0, rf_fullcap_a.perms};
           result_cap_o        = NULL_REG_CAP;   // zerout the cap msw
           cheri_rf_we_raw     = 1'b1;
           cheri_ex_valid_raw  = 1'b1;
