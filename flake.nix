@@ -42,22 +42,19 @@
     extra-trusted-public-keys = ["nix-cache.lowrisc.org-public-1:O6JLD0yXzaJDPiQW1meVu32JIDViuaPtGDfjlOopU7o="];
   };
 
-  outputs = inputs@{self, ...}:
-    let
+  outputs = inputs @ {self, ...}: let
+    # System types to support.
+    supportedSystems = with inputs.flake-utils.lib.system; [
+      x86_64-linux
+    ];
 
-      # System types to support.
-      supportedSystems = with inputs.flake-utils.lib.system; [
-        x86_64-linux
-      ];
-
-      # The .#formal shellHook always checks for jg on the path.
-      # Should we check for a given version of the tool as well?
-      check_jg_version = false;
-      expected_jaspergold_version = "2021.12 FCS 64 bits";
-
-    in inputs.flake-utils.lib.eachSystem supportedSystems (system:
-      let
-
+    # The .#formal shellHook always checks for jg on the path.
+    # Should we check for a given version of the tool as well?
+    check_jg_version = false;
+    expected_jaspergold_version = "2021.12 FCS 64 bits";
+  in
+    inputs.flake-utils.lib.eachSystem supportedSystems (
+      system: let
         pkgs = import inputs.nixpkgs {
           inherit system;
         };
@@ -72,10 +69,12 @@
         };
 
         # RISCV Sail model with changes for Ibex
-        lowrisc_cheriot_sail.src = (import ./nix/lowrisc_cheriot_sail.nix {
-          inherit pkgs;
-          src = inputs.lowrisc_cheriot_sail;
-        }).src;
+        lowrisc_cheriot_sail.src =
+          (import ./nix/lowrisc_cheriot_sail.nix {
+            inherit pkgs;
+            src = inputs.lowrisc_cheriot_sail;
+          })
+          .src;
 
         # Create a python package set suitable for the formal flow
         # - The file dv/formal/pyproject.toml defines the package set for this environment
@@ -93,33 +92,36 @@
               poetry2nix.defaultPoetryOverrides
             ];
           };
-
-        in {
-          packages = {
-            # Export the package for the lowrisc fork of the sail compiler. This allows us
-            # to re-use its build environment.
-            inherit lowrisc_sail;
-          };
-          devShells = rec {
-            formal = mkshell-minimal {
-              packages = [
+      in {
+        packages = {
+          # Export the package for the lowrisc fork of the sail compiler. This allows us
+          # to re-use its build environment.
+          inherit lowrisc_sail;
+        };
+        devShells = rec {
+          formal = mkshell-minimal {
+            packages =
+              [
                 inputs.psgen.packages.${system}.default
                 lowrisc_sail
                 formal_python_env
-              ] ++ (with pkgs; [
+              ]
+              ++ (with pkgs; [
                 gnumake
                 patch
               ]);
-              shellHook = let
-                # The formal environment has an untracked external requirement on Cadence JasperGold.
-                # Add a check here which will prevent launching the devShell if JasperGold is not found on the user's path.
-                # TODO: Is this robust? Do we want to check available features?
-                check_jg = ''
+            shellHook = let
+              # The formal environment has an untracked external requirement on Cadence JasperGold.
+              # Add a check here which will prevent launching the devShell if JasperGold is not found on the user's path.
+              # TODO: Is this robust? Do we want to check available features?
+              check_jg =
+                ''
                   if ! command -v jg &>/dev/null; then
                     echo "JasperGold not found on path. Not launching devShell."
                     exit 1
                   fi
-                '' + lib.optionalString check_jg_version ''
+                ''
+                + lib.optionalString check_jg_version ''
                   jg_version=$(jg -version -allow_unsupported_OS)
                   if [[ $jg_version != "${expected_jaspergold_version}" ]]; then
                     echo "Incorrect JasperGold version found on path."
@@ -128,18 +130,20 @@
                     exit 1
                   fi
                 '';
-              in ''
-                ${check_jg}
-                # The following environment variables are used by the formal build scripts to pick up the locations
-                # of the external source-file dependencies.
-                # The can be re-exported manually for development (see .#formal-dev)
-                export LOWRISC_SAIL_SRC=${lowrisc_sail.src}
-                export LOWRISC_CHERIOT_SAIL_SRC=${lowrisc_cheriot_sail.src}
-              '';
-            };
+            in ''
+              ${check_jg}
+              # The following environment variables are used by the formal build scripts to pick up the locations
+              # of the external source-file dependencies.
+              # The can be re-exported manually for development (see .#formal-dev)
+              export LOWRISC_SAIL_SRC=${lowrisc_sail.src}
+              export LOWRISC_CHERIOT_SAIL_SRC=${lowrisc_cheriot_sail.src}
+            '';
+          };
 
-            formal-dev = formal.overrideAttrs (prev: {
-              shellHook = prev.shellHook + ''
+          formal-dev = formal.overrideAttrs (prev: {
+            shellHook =
+              prev.shellHook
+              + ''
                 cat << EOF
                 ======================================================================================
                 This is a development shell, by default it is identical to the full formal shell.
@@ -152,8 +156,8 @@
                 ======================================================================================
                 EOF
               '';
-            });
-          };
-        }
+          });
+        };
+      }
     );
 }
