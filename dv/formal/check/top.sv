@@ -302,7 +302,7 @@ logic mem_resp_q; // We have had an rvalid for EX
 logic wbexc_mem_had_snd_req; // During ID/EX there was a second request
 
 logic lsu_had_first_resp;
-assign lsu_had_first_resp = (`LSU.ls_fsm_cs == `LSU.WAIT_GNT && `LSU.split_misaligned_access) || (`LSU.lsu_is_cap_i && `LSU.cap_rx_fsm_q == CRX_WAIT_RESP2);
+assign lsu_had_first_resp = (`LSU.ls_fsm_cs == `LSU.WAIT_GNT && `LSU.split_misaligned_access) || (`LSU.cpu_lsu_is_cap_i && `LSU.cap_rx_fsm_q == CRX_WAIT_RESP2);
 
 ////////////////////// Wrap signals //////////////////////
 

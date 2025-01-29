@@ -8,7 +8,7 @@ lemma mem
   MemNotWFI: have (wbexc_exists && wbexc_is_mem_instr |-> ~wbexc_is_wfi)
   MemFin: have (finishing_executed && wbexc_is_mem_instr && ~wbexc_err |-> data_rvalid_i)
 
-  RespWait: have (wbexc_exists && wbexc_is_mem_instr && ~wbexc_err && ~data_rvalid_i |-> `LSU.ls_fsm_cs == `LSU.IDLE && ~`LSU.lsu_req_i)
+  RespWait: have (wbexc_exists && wbexc_is_mem_instr && ~wbexc_err && ~data_rvalid_i |-> `LSU.ls_fsm_cs == `LSU.IDLE && ~`LSU.cpu_lsu_req_i)
 
   CapResp: have (`LSU.ls_fsm_cs != `LSU.IDLE || (outstanding_mem & ~wbexc_err) || data_rvalid_i |->
     ((wbexc_exists && ~wbexc_err && (`IS_LOADCAPIMM | `IS_STORECAPIMM)) || (`LSU.ls_fsm_cs != `LSU.IDLE && ex_is_mem_cap_instr)) == `LSU.resp_is_cap_q
@@ -17,11 +17,11 @@ lemma mem
   
   EarlyLSUCtrlMatch: have (
     `LSU.ls_fsm_cs != `LSU.IDLE & spec_post_wX_en & mem_gnt_fst_q |->
-    `LSU.rdata_offset_q == `LSU.data_offset && `LSU.data_type_q == `LSU.lsu_type_i && `LSU.data_sign_ext_q == `LSU.lsu_sign_ext_i && `LSU.data_we_q == `LSU.lsu_we_i
+    `LSU.rdata_offset_q == `LSU.data_offset && `LSU.data_type_q == `LSU.cpu_lsu_type_i && `LSU.data_sign_ext_q == `LSU.cpu_lsu_sign_ext_i && `LSU.data_we_q == `LSU.cpu_lsu_we_i
   )
 
-  HadSndReqCap: have (instr_will_progress & ex_is_mem_cap_instr & ~ex_err & ~`LSU.lsu_cheri_err_i |=> wbexc_mem_had_snd_req)
-  HadSndReqNotCap: have (instr_will_progress & ex_is_mem_instr & ~ex_is_mem_cap_instr & ~ex_err & ~`LSU.lsu_cheri_err_i |=> wbexc_mem_had_snd_req == $past(`LSU.split_misaligned_access))
+  HadSndReqCap: have (instr_will_progress & ex_is_mem_cap_instr & ~ex_err & ~`LSU.cpu_lsu_cheri_err_i |=> wbexc_mem_had_snd_req)
+  HadSndReqNotCap: have (instr_will_progress & ex_is_mem_instr & ~ex_is_mem_cap_instr & ~ex_err & ~`LSU.cpu_lsu_cheri_err_i |=> wbexc_mem_had_snd_req == $past(`LSU.split_misaligned_access))
 
   LateLSUCheriErr: have (wbexc_exists & wbexc_is_load_instr & ~wbexc_err & wbexc_post_wX_en |-> ~`LSU.cheri_err_q)
 
@@ -33,43 +33,43 @@ lemma mem
 
 
   CapFsm: graph_induction
-    cond (ex_is_mem_cap_instr && (`LSU.ls_fsm_cs != `LSU.IDLE || (`CR.lsu_req && ~`CR.lsu_cheri_err)))
+    cond (ex_is_mem_cap_instr && (`LSU.ls_fsm_cs != `LSU.IDLE || (`CR.cpu_lsu_req && ~`CR.cpu_lsu_cheri_err)))
 
-    entry (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.lsu_req && ~`CR.lsu_cheri_err) -> idle_active
+    entry (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.cpu_lsu_req && ~`CR.cpu_lsu_cheri_err) -> idle_active
 
-    node idle_active (`LSU.cap_rx_fsm_q == CRX_IDLE || (`LSU.cap_rx_fsm_q == CRX_WAIT_RESP2 && data_rvalid_i)) (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.lsu_req && ~`CR.lsu_cheri_err)
+    node idle_active (`LSU.cap_rx_fsm_q == CRX_IDLE || (`LSU.cap_rx_fsm_q == CRX_WAIT_RESP2 && data_rvalid_i)) (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.cpu_lsu_req && ~`CR.cpu_lsu_cheri_err)
     edge idle_active => wait_gnt1 wait_gnt2 wait_gnt2_done
 
-    node wait_gnt1 (`LSU.cap_rx_fsm_q == CRX_WAIT_RESP1 && ~`CR.lsu_cheri_err) (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_GNT1)
+    node wait_gnt1 (`LSU.cap_rx_fsm_q == CRX_WAIT_RESP1 && ~`CR.cpu_lsu_cheri_err) (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_GNT1)
     edge wait_gnt1 => wait_gnt1 wait_gnt2 wait_gnt2_done
 
-    node wait_gnt2 (~`CR.lsu_cheri_err) (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_GNT2 && `LSU.cap_rx_fsm_d == CRX_WAIT_RESP1)
+    node wait_gnt2 (~`CR.cpu_lsu_cheri_err) (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_GNT2 && `LSU.cap_rx_fsm_d == CRX_WAIT_RESP1)
     edge wait_gnt2 => wait_gnt2 wait_gnt2_done wait_resp
     edge wait_gnt2 -> step
 
     # waitgnt2done step is bound dependent (Hp (12))
-    node wait_gnt2_done (~`CR.lsu_cheri_err) (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_GNT2 && `LSU.cap_rx_fsm_d == CRX_WAIT_RESP2)
+    node wait_gnt2_done (~`CR.cpu_lsu_cheri_err) (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_GNT2 && `LSU.cap_rx_fsm_d == CRX_WAIT_RESP2)
     edge wait_gnt2_done => wait_gnt2_done
     edge wait_gnt2_done -> step
 
-    node wait_resp (~`CR.lsu_cheri_err && `LSU.cap_rx_fsm_q == CRX_WAIT_RESP1) (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_RESP)
+    node wait_resp (~`CR.cpu_lsu_cheri_err && `LSU.cap_rx_fsm_q == CRX_WAIT_RESP1) (`LSU.ls_fsm_cs == `LSU.CTX_WAIT_RESP)
     edge wait_resp => wait_resp
     edge wait_resp -> step
 
-    node step (`LSU.cap_rx_fsm_d == CRX_WAIT_RESP2) (`LSU.lsu_req_done_o && ~`CR.lsu_cheri_err) +exit
+    node step (`LSU.cap_rx_fsm_d == CRX_WAIT_RESP2) (`LSU.lsu_req_done_o && ~`CR.cpu_lsu_cheri_err) +exit
 
   MemSpec: graph_induction +rev
-    cond (ex_is_mem_instr && (`LSU.ls_fsm_cs != `LSU.IDLE || (`CR.lsu_req && ~`CR.lsu_cheri_err)))
+    cond (ex_is_mem_instr && (`LSU.ls_fsm_cs != `LSU.IDLE || (`CR.cpu_lsu_req && ~`CR.cpu_lsu_cheri_err)))
 
-    inv fst_req (mem_req_fst_d && fst_mem_cmp && ~mem_gnt_fst_q && ~`CR.lsu_cheri_err)
-    inv fst_req_1 (mem_req_fst_d && fst_mem_cmp && ~mem_gnt_fst_q && ~`CR.lsu_cheri_err && ~spec_mem_read_snd && ~spec_mem_write_snd)
-    inv fst_req_2 (mem_req_fst_d && fst_mem_cmp && ~mem_gnt_fst_q && ~`CR.lsu_cheri_err && (spec_mem_read_snd | spec_mem_write_snd))
-    inv snd_req (mem_req_snd_d && snd_mem_cmp && ~`CR.lsu_cheri_err && (spec_mem_read_snd | spec_mem_write_snd))
-    inv req_done (~data_req_o && ~`CR.lsu_cheri_err && mem_gnt_snd_q && (spec_mem_read_snd | spec_mem_write_snd))
+    inv fst_req (mem_req_fst_d && fst_mem_cmp && ~mem_gnt_fst_q && ~`CR.cpu_lsu_cheri_err)
+    inv fst_req_1 (mem_req_fst_d && fst_mem_cmp && ~mem_gnt_fst_q && ~`CR.cpu_lsu_cheri_err && ~spec_mem_read_snd && ~spec_mem_write_snd)
+    inv fst_req_2 (mem_req_fst_d && fst_mem_cmp && ~mem_gnt_fst_q && ~`CR.cpu_lsu_cheri_err && (spec_mem_read_snd | spec_mem_write_snd))
+    inv snd_req (mem_req_snd_d && snd_mem_cmp && ~`CR.cpu_lsu_cheri_err && (spec_mem_read_snd | spec_mem_write_snd))
+    inv req_done (~data_req_o && ~`CR.cpu_lsu_cheri_err && mem_gnt_snd_q && (spec_mem_read_snd | spec_mem_write_snd))
 
-    entry (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.lsu_req && ~`CR.lsu_cheri_err) -> idle_active
+    entry (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.cpu_lsu_req && ~`CR.cpu_lsu_cheri_err) -> idle_active
 
-    node idle_active fst_req (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.lsu_req && ~`CR.lsu_cheri_err)
+    node idle_active fst_req (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.cpu_lsu_req && ~`CR.cpu_lsu_cheri_err)
     edge idle_active => wait_rvalid_mis wait_gnt_mis wait_gnt wait_gnt1 wait_gnt2
     edge idle_active -> step
     
@@ -104,7 +104,7 @@ lemma mem
     edge wait_resp => wait_resp
     edge wait_resp -> step
 
-    node step (1) (`LSU.lsu_req_done_o && ~`CR.lsu_cheri_err) +exit
+    node step (1) (`LSU.lsu_req_done_o && ~`CR.cpu_lsu_cheri_err) +exit
   /
   LSULateRespFinishing: have (late_resp |-> wbexc_finishing || wbexc_err)
   LSUEarlyRequestSplit: have (early_resp |-> has_snd_req)
@@ -117,7 +117,7 @@ lemma mem
   NoMem: have (~ex_is_mem_instr & instr_will_progress |-> ~mem_gnt_fst_d)
 
   AltLSUVeryEarly: have (`LSU.ls_fsm_cs != `LSU.IDLE & spec_post_wX_en & ~lsu_had_first_resp |-> alas(spec_post_wX, revoke(alt_lsu_very_early_res, spec_mem_revoke_en & spec_mem_revoke)))
-  ExceptionMaintain: have (`LSU.lsu_req_i && ~spec_mem_read & ~spec_mem_write |-> instr_will_progress ##1 wbexc_err)
+  ExceptionMaintain: have (`LSU.cpu_lsu_req_i && ~spec_mem_read & ~spec_mem_write |-> instr_will_progress ##1 wbexc_err)
   FastErrSignalCap: have (finishing_executed & ~wbexc_illegal & wbexc_err & (`IS_LOADCAPIMM | `IS_STORECAPIMM) |->
     ($past(`CE.is_load_cap, 2) | $past(`CE.is_store_cap, 2)) & $past(`CE.cheri_lsu_err, 2) & $past(`CE.cheri_exec_id_i, 2)
   )

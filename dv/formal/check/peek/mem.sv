@@ -135,8 +135,8 @@ alt_lsu #(.CHERIoTEn(1'b1), .MemCapFmt(1'b0), .CheriTBRE(1'b0)) alt_lsu_very_ear
             {spec_mem_read_tag, spec_mem_read_snd_rdata}
     ),
     `ALT_LSU_STATE_COPY
-    .data_type_q(`LSU.lsu_type_i),
-    .data_sign_ext_q(`LSU.lsu_sign_ext_i),
+    .data_type_q(`LSU.cpu_lsu_type_i),
+    .data_sign_ext_q(`LSU.cpu_lsu_sign_ext_i),
     .rdata_offset_q(`LSU.data_offset),
     .rdata_q(spec_mem_read_fst_rdata[31:8]),
     .cap_lsw_q({spec_mem_read_tag, spec_mem_read_fst_rdata})
