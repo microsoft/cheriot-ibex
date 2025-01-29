@@ -138,7 +138,7 @@ lemma ibex
     LSUEnd: have (`LSU.lsu_req_done_o |-> instr_will_progress)
     LSUNotTRSV: have (`LSU.ls_fsm_cs != `LSU.IDLE |-> ~`ID.stall_cheri_trvk)
 
-  NoTBRE: have (~`CE.lsu_tbre_sel_i & ~`LSU.req_is_tbre_q & ~`LSU.tbre_req_good & ~`CR.tbre_lsu_req)
+  NoTBRE: have (~`CR.lsu_tbre_sel_i & ~`LSU.req_is_tbre_q & ~`LSU.tbre_req_good & ~`CR.tbre_lsu_req)
 
   /
 
@@ -155,40 +155,40 @@ lemma ibex
       (`LSU.cap_rx_fsm_q == CRX_IDLE || (`LSU.cap_rx_fsm_q == CRX_WAIT_RESP2 && data_rvalid_i))
     )
     inv wait_gnt_mis (
-      $stable(data_addr_o) && ~has_resp_waiting_q && ~`LSU.lsu_cheri_err_i &&
+      $stable(data_addr_o) && ~has_resp_waiting_q && ~`LSU.cpu_lsu_cheri_err_i &&
       `LSU.cap_rx_fsm_q == CRX_IDLE && ~ex_is_mem_cap_instr
     )
     inv wait_gnt (
-      $stable(data_addr_o) && ~has_resp_waiting_q && ~`LSU.lsu_cheri_err_i &&
+      $stable(data_addr_o) && ~has_resp_waiting_q && ~`LSU.cpu_lsu_cheri_err_i &&
       `LSU.cap_rx_fsm_q == CRX_IDLE && ~ex_is_mem_cap_instr
     )
     inv wait_rvalid_mis (
       ($stable(`LSU.ls_fsm_cs) -> $stable(data_addr_o)) &&
-      has_one_resp_waiting_q && ~`LSU.lsu_cheri_err_i &&
+      has_one_resp_waiting_q && ~`LSU.cpu_lsu_cheri_err_i &&
       `LSU.cap_rx_fsm_q == CRX_IDLE && ~ex_is_mem_cap_instr
     )
     inv wait_rvalid_mis_gnts_done (
       $stable(data_addr_o) &&
-      has_two_resp_waiting_q && ~`LSU.lsu_cheri_err_i &&
+      has_two_resp_waiting_q && ~`LSU.cpu_lsu_cheri_err_i &&
       `LSU.cap_rx_fsm_q == CRX_IDLE && ~ex_is_mem_cap_instr &&
       ~`LSU.handle_misaligned_q
     )
     inv wait_gnt1 (
-      $stable(data_addr_o) && ~has_resp_waiting_q && ~`LSU.lsu_cheri_err_i && `LSU.cap_rx_fsm_q == CRX_WAIT_RESP1 && ex_is_mem_cap_instr &&
+      $stable(data_addr_o) && ~has_resp_waiting_q && ~`LSU.cpu_lsu_cheri_err_i && `LSU.cap_rx_fsm_q == CRX_WAIT_RESP1 && ex_is_mem_cap_instr &&
       ~`LSU.handle_misaligned_q
     )
     inv wait_gnt2 (
       ($stable(`LSU.ls_fsm_cs) -> $stable(data_addr_o)) &&
-      has_one_resp_waiting_q && ~`LSU.lsu_cheri_err_i && `LSU.cap_rx_fsm_q == CRX_WAIT_RESP1 && ex_is_mem_cap_instr &&
+      has_one_resp_waiting_q && ~`LSU.cpu_lsu_cheri_err_i && `LSU.cap_rx_fsm_q == CRX_WAIT_RESP1 && ex_is_mem_cap_instr &&
       ~`LSU.handle_misaligned_q
     )
     inv wait_gnt2_direct (
       ($stable(`LSU.ls_fsm_cs) -> $stable(data_addr_o)) &&
-      ~has_resp_waiting_q && ~`LSU.lsu_cheri_err_i && `LSU.cap_rx_fsm_q == CRX_WAIT_RESP2 && ex_is_mem_cap_instr &&
+      ~has_resp_waiting_q && ~`LSU.cpu_lsu_cheri_err_i && `LSU.cap_rx_fsm_q == CRX_WAIT_RESP2 && ex_is_mem_cap_instr &&
       ~`LSU.handle_misaligned_q
     )
     inv wait_resp (
-      $stable(data_addr_o) && has_two_resp_waiting_q && ~`LSU.lsu_cheri_err_i && `LSU.cap_rx_fsm_q == CRX_WAIT_RESP1 && ex_is_mem_cap_instr &&
+      $stable(data_addr_o) && has_two_resp_waiting_q && ~`LSU.cpu_lsu_cheri_err_i && `LSU.cap_rx_fsm_q == CRX_WAIT_RESP1 && ex_is_mem_cap_instr &&
       ~`LSU.handle_misaligned_q
     )
 
@@ -201,7 +201,7 @@ lemma ibex
       ~`LSU.handle_misaligned_d
     )
     inv wait (
-      outstanding_mem && has_one_resp_waiting_q && ~`LSU.lsu_req_i && wbexc_exists &&
+      outstanding_mem && has_one_resp_waiting_q && ~`LSU.cpu_lsu_req_i && wbexc_exists &&
       (wbexc_is_mem_cap_instr -> (`LSU.cap_rx_fsm_q == CRX_WAIT_RESP2)) &&
       (~wbexc_is_mem_cap_instr -> (`LSU.cap_rx_fsm_q == CRX_IDLE)) &&
       ~`LSU.handle_misaligned_q && ~`LSU.cheri_err_q
@@ -219,7 +219,7 @@ lemma ibex
     edge idle => idle
     edge idle -> idle_active
     
-    node idle_active idle_active (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.lsu_req && ~`CR.lsu_cheri_err)
+    node idle_active idle_active (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.cpu_lsu_req && ~`CR.cpu_lsu_cheri_err)
     edge idle_active => wait_rvalid_mis wait_gnt_mis wait_gnt wait_gnt1 wait_gnt2
     edge idle_active -> step
     
@@ -254,7 +254,7 @@ lemma ibex
     edge wait_resp => wait_resp
     edge wait_resp -> step
 
-    node step step (`LSU.lsu_req_done_o & ~`LSU.lsu_cheri_err_i)
+    node step step (`LSU.lsu_req_done_o & ~`LSU.cpu_lsu_cheri_err_i)
     edge step => wait end
     
     node wait wait (has_resp_waiting_q && ~`CR.lsu_resp_valid && `LSU.ls_fsm_cs == `LSU.IDLE && ~instr_will_progress)
@@ -264,14 +264,14 @@ lemma ibex
     edge end -> idle
   /
   NoMemAccessNoRValid: have (`LSU.lsu_resp_valid_o -> outstanding_mem)
-  StallNoChangeA: have (`LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.lsu_req_i)) |-> $stable(`ID.rf_rdata_a_fwd) & $stable(`CE.rf_rcap_a))
-  StallNoChangeB: have (data_we_o && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.lsu_req_i)) |-> $stable(`ID.rf_rdata_b_fwd) & $stable(`CE.rf_rcap_a))
+  StallNoChangeA: have (`LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.cpu_lsu_req_i)) |-> $stable(`ID.rf_rdata_a_fwd) & $stable(`CE.rf_rcap_a))
+  StallNoChangeB: have (data_we_o && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.cpu_lsu_req_i)) |-> $stable(`ID.rf_rdata_b_fwd) & $stable(`CE.rf_rcap_a))
 
   BecameDecodeIsInstrStart: have (`IDC.ctrl_fsm_cs == `IDC.DECODE && !$stable(`IDC.ctrl_fsm_cs) |-> ~`ID.instr_valid_i | `CR.instr_new_id)
   BecameDecodeIsEmptyWbexc: have (`IDC.ctrl_fsm_cs == `IDC.DECODE && !$stable(`IDC.ctrl_fsm_cs) |-> ~wbexc_exists)
   FetchErrIsErr: have (wbexc_fetch_err & wbexc_exists |-> wbexc_err & `IDC.instr_fetch_err)
 
-  MemOpRequiresValid: have (`LSU.ls_fsm_cs != `LSU.IDLE || `CR.lsu_req |-> `ID.instr_valid_i)
+  MemOpRequiresValid: have (`LSU.ls_fsm_cs != `LSU.IDLE || `CR.cpu_lsu_req |-> `ID.instr_valid_i)
 
   MultEndState: have (instr_will_progress |=> `MULTG.mult_state_q == `MULTG.ALBL)
 
@@ -293,26 +293,26 @@ lemma ibex
   StallIdFSM2: have (`ID.instr_executing && ~instr_will_progress |=> `ID.instr_executing)
   NewIdFSM: have (`CR.instr_new_id |-> `ID.id_fsm_q == 0)
   PreNextPcMatch: have (instr_will_progress & ~ex_has_branched_d & ~`IDC.instr_fetch_err -> pre_nextpc == `CR.pc_if)
-  StallNoChangeLsuWData: have ((data_we_o && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.lsu_req_i)) |-> $stable(`LSU.lsu_wdata_i)))
+  StallNoChangeLsuWData: have ((data_we_o && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.cpu_lsu_req_i)) |-> $stable(`LSU.cpu_lsu_wdata_i)))
 
   # These properties take some time to prove, but do prove with low proof effort
-  SpecStableLoad: have (ex_is_load_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.lsu_req_i)) |-> $stable(spec_mem_read))
-  SpecStableLoadSnd: have (ex_is_load_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.lsu_req_i)) |-> $stable(spec_mem_read_snd))
-  SpecStableLoadAddr: have (ex_is_load_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.lsu_req_i)) |-> $stable(spec_mem_read_fst_addr))
-  SpecStableLoadSndAddr: have (ex_is_load_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.lsu_req_i)) |-> $stable(spec_mem_read_snd_addr))
+  SpecStableLoad: have (ex_is_load_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.cpu_lsu_req_i)) |-> $stable(spec_mem_read))
+  SpecStableLoadSnd: have (ex_is_load_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.cpu_lsu_req_i)) |-> $stable(spec_mem_read_snd))
+  SpecStableLoadAddr: have (ex_is_load_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.cpu_lsu_req_i)) |-> $stable(spec_mem_read_fst_addr))
+  SpecStableLoadSndAddr: have (ex_is_load_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.cpu_lsu_req_i)) |-> $stable(spec_mem_read_snd_addr))
 
-  SpecStableStore: have (ex_is_store_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.lsu_req_i)) |-> $stable(spec_mem_write))
-  SpecStableStoreSnd: have (ex_is_store_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.lsu_req_i)) |-> $stable(spec_mem_write_snd))
-  SpecStableStoreAddr: have (ex_is_store_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.lsu_req_i)) |-> $stable(spec_mem_write_fst_addr))
-  SpecStableStoreSndAddr: have (ex_is_store_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.lsu_req_i)) |-> $stable(spec_mem_write_snd_addr))
-  SpecStableStoreData: have (ex_is_store_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.lsu_req_i)) |-> $stable(spec_mem_write_fst_wdata))
-  SpecStableStoreSndData: have (ex_is_store_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.lsu_req_i)) |-> $stable(spec_mem_write_snd_wdata))
+  SpecStableStore: have (ex_is_store_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.cpu_lsu_req_i)) |-> $stable(spec_mem_write))
+  SpecStableStoreSnd: have (ex_is_store_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.cpu_lsu_req_i)) |-> $stable(spec_mem_write_snd))
+  SpecStableStoreAddr: have (ex_is_store_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.cpu_lsu_req_i)) |-> $stable(spec_mem_write_fst_addr))
+  SpecStableStoreSndAddr: have (ex_is_store_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.cpu_lsu_req_i)) |-> $stable(spec_mem_write_snd_addr))
+  SpecStableStoreData: have (ex_is_store_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.cpu_lsu_req_i)) |-> $stable(spec_mem_write_fst_wdata))
+  SpecStableStoreSndData: have (ex_is_store_instr && `LSU.ls_fsm_cs != `LSU.IDLE && ($past(`LSU.ls_fsm_cs) != `LSU.IDLE || $past(`LSU.cpu_lsu_req_i)) |-> $stable(spec_mem_write_snd_wdata))
 
   LoadNotSpecWrite: have (ex_is_load_instr |-> ~spec_mem_write)
   StoreNotSpecRead: have (ex_is_store_instr |-> ~spec_mem_read)
 
   FirstCycleNoGnt: have (`ID.instr_first_cycle |-> ~mem_gnt_fst_q)
-  MemStartFirstCycle: have (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.lsu_req |-> `ID.instr_first_cycle)
+  MemStartFirstCycle: have (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.cpu_lsu_req |-> `ID.instr_first_cycle)
   DivInstrStable: have (`MULT.md_state_q != `MULT.MD_IDLE |-> $stable(`CR.instr_rdata_id) && `CR.instr_valid_id && (~`ID.stall_multdiv -> `MULT.md_state_q == `MULT.MD_FINISH) && `MULTG.mult_state_q == `MULTG.ALBL && `MULT.div_en_internal && (~wbexc_exists | wbexc_finishing))
 
   InstrReqCount: have (
@@ -341,7 +341,7 @@ lemma ibex
   NoStallBranch: have (`ID.instr_valid_i & `ID.stall_id & ~`ID.branch_set_raw & ~`ID.jump_set_raw & ~`IDC.cheri_branch_req_i |-> ~ex_has_branched_d)
   FirstCycleHold: have (`ID.instr_valid_i & ~`ID.instr_executing |-> `ID.id_fsm_q == `ID.FIRST_CYCLE)
 
-  ReqNotOutstanding: have (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.lsu_req |-> ~`LSU.resp_wait)
+  ReqNotOutstanding: have (`LSU.ls_fsm_cs == `LSU.IDLE && `CR.cpu_lsu_req |-> ~`LSU.resp_wait)
   /
   SpecEnUnreach: have (spec_en |-> ~spec_int_err)
 
