@@ -28,6 +28,7 @@ module mem_obi_if import cheriot_dv_pkg::*; #(
   output mem_cmd_t      data_resp_info,  // loopback information for checking
 
   output logic          mem_cs,
+  output logic          mem_is_cap,
   output logic          mem_we,
   output logic [3:0]    mem_be,
   output logic [7:0]    mem_flag,     
@@ -148,7 +149,7 @@ module mem_obi_if import cheriot_dv_pkg::*; #(
   //    Response stage generate output signals
   //
 
-  assign data_rdata   = mem_rdata & {33{data_rvalid}}; 
+  assign data_rdata   = mem_rdata & {DW{data_rvalid}}; 
 
   always @(posedge clk_i, negedge rst_ni) begin
     if (~rst_ni) begin
@@ -172,6 +173,7 @@ module mem_obi_if import cheriot_dv_pkg::*; #(
   // memory signals (sampled @posedge clk_i)
   //
   assign mem_cs      = resp_valid;
+  assign mem_is_cap  = cur_rd_cmd.is_cap;
   assign mem_we      = cur_rd_cmd.we;
   assign mem_be      = cur_rd_cmd.be;
   assign mem_flag    = cur_rd_cmd.flag;

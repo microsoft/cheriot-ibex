@@ -40,6 +40,10 @@ module core_ibex_testrig_tb_top;
   logic [15:0] tsmap_addr;
   logic [31:0] tsmap_rdata;
 
+  logic [127:0] mmreg_corein;
+  logic [63:0]  mmreg_coreout;
+
+
 
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -93,8 +97,8 @@ module core_ibex_testrig_tb_top;
     .tsmap_addr_o         (tsmap_addr),
     .tsmap_rdata_i        (tsmap_rdata),
     .tsmap_rdata_intg_i   ('0),
-    .mmreg_corein_i       ('0),
-    .mmreg_coreout_o      (),
+    .mmreg_corein_i       (mmreg_corein),
+    .mmreg_coreout_o      (mmreg_coreout),
     .irq_software_i       ('0),
     .irq_timer_i          ('0),
     .irq_external_i       ('0),
@@ -113,19 +117,31 @@ module core_ibex_testrig_tb_top;
   data_mem_model u_data_mem (
     .clk             (clk        ), 
     .rst_n           (rst_n       ),
+    .ERR_RATE        (3'h0),
+    .GNT_WMAX        (4'h2),
+    .RESP_WMAX       (4'h2),
+    .err_enable      (1'b0),
+    .ignore_stkz     (1'b0),
     .data_req        (data_req     ),
     .data_we         (data_we      ),
     .data_be         (data_be      ),
     .data_is_cap     (data_is_cap  ),
     .data_addr       (data_addr    ),
     .data_wdata      (data_wdata   ),
+    .data_flag       (8'h0         ),
     .data_gnt        (data_gnt     ),
     .data_rvalid     (data_rvalid  ),
     .data_rdata      (data_rdata   ),
     .data_err        (data_err),
+    .data_resp_info  (),
     .tsmap_cs        (tsmap_cs),
     .tsmap_addr      (tsmap_addr),
-    .tsmap_rdata     (tsmap_rdata)
+    .tsmap_rdata     (tsmap_rdata),
+    .mmreg_corein    (mmreg_corein),
+    .mmreg_coreout   (mmreg_coreout),
+    .err_enable_vec  (),
+    .intr_ack        (),
+    .uart_stop_sim   ()
   );
 
 
