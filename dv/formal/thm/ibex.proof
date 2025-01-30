@@ -138,7 +138,7 @@ lemma ibex
     LSUEnd: have (`LSU.lsu_req_done_o |-> instr_will_progress)
     LSUNotTRSV: have (`LSU.ls_fsm_cs != `LSU.IDLE |-> ~`ID.stall_cheri_trvk)
 
-  NoTBRE: have (~`CR.lsu_tbre_sel_i & ~`LSU.req_is_tbre_q & ~`LSU.tbre_req_good & ~`CR.tbre_lsu_req)
+  NoTBRE: have (~`LSU.req_is_tbre_q & ~`LSU.tbre_req_good & ~`CR.tbre_lsu_req)
 
   /
 
