@@ -5,6 +5,13 @@
 `include "prim_assert.sv"
 `include "dv_fcov_macros.svh"
 
+// JG won't let us define the dv_ext module ports width using parameters, so let's do this..
+`ifdef DATAMEM65BIT
+  `define IBEXDW 65
+`else
+  `define IBEXDW 33
+`endif
+
 //
 // extend internal modules for SVA & FCOV signals
 //
@@ -330,15 +337,22 @@ endmodule
 module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; import cheriot_dv_pkg::*; (
   input  logic         clk_i,
   input  logic         rst_ni,
-  input  logic         lsu_req_i,
+  input  logic         cpu_lsu_req_i,
+  input  logic         cpu_lsu_we_i,
+  input  logic         cpu_lsu_is_cap_i,
+  input  logic [1:0]   cpu_lsu_type_i,
+  input  reg_cap_t     cpu_lsu_wcap_i,
+  input  logic [31:0]  cpu_lsu_addr_i,
   input  logic         data_req_o,
+  input  logic         data_we_o,
   input  logic         lsu_addr_incr_req_o,
   input  logic         data_rvalid_i,
-  input  logic [1:0]   lsu_type_i,
   input  logic [1:0]   data_offset,
   input  logic [1:0]   rdata_offset_q,
   input  logic [1:0]   data_type_q,
   input  logic [31:0]  data_addr_o,
+  input  logic [(`IBEXDW-1):0]  data_wdata_o,
+  input  logic [(`IBEXDW-1):0]  data_rdata_i,
   input  ls_fsm_e      ls_fsm_cs,
   input  logic         busy_o,
   input  logic         data_err_i,
@@ -351,11 +365,12 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; import cheriot_d
   input  cap_rx_fsm_t  cap_rx_fsm_q,
   input  logic         data_we_q,  
   input  logic         cap_lsw_err_q,
-  input  logic [32:0]  data_rdata_i,
   input  logic [32:0]  cap_lsw_q
 );
 
-  localparam MemCapFmt = load_store_unit_i.MemCapFmt;
+  localparam MemCapFmt   = load_store_unit_i.MemCapFmt;
+  localparam CheriCapIT8 = load_store_unit_i.CheriCapIT8;
+  localparam DataWidth   = load_store_unit_i.DataWidth;
 
   // Set when awaiting the response for the second half of a misaligned access
   logic fcov_mis_2_en_d, fcov_mis_2_en_q;
@@ -394,7 +409,7 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; import cheriot_d
   `DV_FCOV_SIGNAL(logic, ls_pmp_exception, (load_err_o | store_err_o) & pmp_err_q)
   `DV_FCOV_SIGNAL(logic, ls_cheri_exception, (load_err_o | store_err_o) & cheri_err_q)
 
-  `DV_FCOV_SIGNAL(logic, ls_first_req, lsu_req_i & (ls_fsm_cs == IDLE))
+  `DV_FCOV_SIGNAL(logic, ls_first_req, cpu_lsu_req_i & (ls_fsm_cs == IDLE))
   `DV_FCOV_SIGNAL(logic, ls_second_req,
     (ls_fsm_cs inside {WAIT_RVALID_MIS}) & data_req_o & lsu_addr_incr_req_o)
   `DV_FCOV_SIGNAL(logic, ls_mis_pmp_err_1,
@@ -445,8 +460,8 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; import cheriot_d
   ////////////////
 
   // Selectors must be known/valid.
-  `ASSERT(IbexDataTypeKnown, (lsu_req_i | busy_o) |-> !$isunknown(lsu_type_i))
-  `ASSERT(IbexDataOffsetKnown, (lsu_req_i | busy_o) |-> !$isunknown(data_offset))
+  `ASSERT(IbexDataTypeKnown, (cpu_lsu_req_i | busy_o) |-> !$isunknown(cpu_lsu_type_i))
+  `ASSERT(IbexDataOffsetKnown, (cpu_lsu_req_i | busy_o) |-> !$isunknown(data_offset))
   `ASSERT_KNOWN(IbexRDataOffsetQKnown, rdata_offset_q)
   `ASSERT_KNOWN(IbexDataTypeQKnown, data_type_q)
   `ASSERT(IbexLsuStateValid, ls_fsm_cs inside {
@@ -460,8 +475,12 @@ module ibex_lsu_dv_ext import ibex_pkg::*; import cheri_pkg::*; import cheriot_d
   // Address must be word aligned when request is sent.
   `ASSERT(IbexDataAddrUnaligned, data_req_o |-> (data_addr_o[1:0] == 2'b00))
 
-  `ASSERT(IbexLsuFsmIdle, (((ls_fsm_cs == IDLE) && lsu_req_i)  |->
+  `ASSERT(IbexLsuFsmIdle, (((ls_fsm_cs == IDLE) && cpu_lsu_req_i)  |->
           (cap_rx_fsm_q==CRX_IDLE) | (cap_rx_fsm_q==CRX_WAIT_RESP2)))
+
+  `ASSERT(IbexCapWr, (data_req_o && data_we_o && data_wdata_o[(`IBEXDW-1)])  |-> 
+                     (cpu_lsu_req_i && cpu_lsu_is_cap_i && cpu_lsu_we_i && cpu_lsu_wcap_i.valid &&
+                      (data_addr_o == cpu_lsu_addr_i)))
 
   // `ASSERT(IbexLsuMisc1, (req_is_tbre_q == resp_is_tbre_q))
 endmodule
@@ -759,7 +778,7 @@ module cheri_tbre_dv_ext (
   input  logic        tbre_lsu_we_o,
   input  logic        lsu_tbre_req_done_i,
   input  logic [31:0] tbre_lsu_addr_o,
-  input  logic [32:0] tbre_lsu_wdata_o,
+  input  logic [(`IBEXDW-1):0] tbre_lsu_raw_wdata_o,
   input  logic        snoop_lsu_req_i,
   input  logic        snoop_lsu_req_done_i,
   input  logic        snoop_lsu_we_i,
@@ -862,7 +881,7 @@ module cheri_tbre_dv_ext (
   // -- no change in address/control signals within the same request
   `ASSERT(TbreLsuReqStable1, (lsu_tbre_req_done_i |-> tbre_lsu_req_o));
   `ASSERT(TbreLsuCtrlStable, (outstanding_lsu_req |-> $stable(tbre_lsu_ctrls))); 
-  `ASSERT(TbreLsuWdataStable, (outstanding_lsu_req & tbre_lsu_we_o |-> $stable(tbre_lsu_wdata_o))); 
+  `ASSERT(TbreLsuWdataStable, (outstanding_lsu_req & tbre_lsu_we_o |-> $stable(tbre_lsu_raw_wdata_o))); 
   `ASSERT(TbreLsuAddrStable, (outstanding_lsu_req |-> $stable(tbre_lsu_start_addr)));
 
 endmodule
@@ -954,7 +973,7 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic        instr_fetch_err,
   input  logic        rf_we_id,
   input  logic        cheri_csr_op_en,
-  input  logic        lsu_req,
+  input  logic        cpu_lsu_req,
   input  logic        en_wb,
   input  logic        ready_wb,
   input  logic        ctrl_busy
@@ -1072,7 +1091,7 @@ module ibex_core_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
 
   // No regfile write or LSU request if instruction bad or faulted
   `ASSERT(FvxIbexRfWeNoIllegal, (rf_we_id |-> id_stage_i.instr_executing))
-  `ASSERT(FvxIbexLsuReqNoIllegal, (lsu_req |-> id_stage_i.instr_executing))
+  `ASSERT(FvxIbexLsuReqNoIllegal, (cpu_lsu_req |-> id_stage_i.instr_executing))
   `ASSERT(FvxIbexEnWbNoIllegal, (en_wb |-> id_stage_i.instr_executing))
 
   // No csr/scr write if instruction bad or faulted
@@ -1208,9 +1227,9 @@ module ibex_top_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic        data_we_o,
   input  logic [3:0]  data_be_o,
   input  logic [31:0] data_addr_o,
-  input  logic [32:0] data_wdata_o,
+  input  logic [(`IBEXDW-1):0] data_wdata_o,
   input  logic [6:0]  data_wdata_intg_o,
-  input  logic [32:0] data_rdata_i,
+  input  logic [(`IBEXDW-1):0] data_rdata_i,
   input  logic [6:0]  data_rdata_intg_i,
   input  logic        data_err_i,
   input  logic        debug_req_i,

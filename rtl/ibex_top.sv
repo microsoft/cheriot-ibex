@@ -49,8 +49,9 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   parameter bit          CheriSBND2       = 1'b0,
   parameter bit          CheriTBRE        = 1'b1,
   parameter bit          CheriStkZ        = 1'b1,
-  parameter int unsigned MMRegDinW         = 128,
-  parameter int unsigned MMRegDoutW        = 64
+  parameter int unsigned MMRegDinW        = 128,
+  parameter int unsigned MMRegDoutW       = 64,
+  parameter bit          CheriCapIT8      = 1'b0
 ) (
   // Clock and Reset
   input  logic                         clk_i,
@@ -142,8 +143,8 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
   output logic [31:0]                  rvfi_mem_addr,
   output logic [ 3:0]                  rvfi_mem_rmask,
   output logic [ 3:0]                  rvfi_mem_wmask,
-  output logic [DataWidth-1:0]         rvfi_mem_rdata,
-  output logic [DataWidth-1:0]         rvfi_mem_wdata,
+  output logic [31:0]                  rvfi_mem_rdata,
+  output logic [31:0]                  rvfi_mem_wdata,
   output logic                         rvfi_mem_is_cap,
   output reg_cap_t                     rvfi_mem_rcap,
   output reg_cap_t                     rvfi_mem_wcap,
@@ -308,7 +309,10 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .CheriPPLBC       (CheriPPLBC),
     .CheriSBND2       (CheriSBND2),
     .CheriTBRE        (CheriTBRE),
-    .CheriStkZ        (CheriStkZ)
+    .CheriStkZ        (CheriStkZ),
+    .MMRegDinW        (MMRegDinW),
+    .MMRegDoutW       (MMRegDoutW),
+    .CheriCapIT8      (CheriCapIT8)
   ) u_ibex_core (
     .clk_i(clk),
     .rst_ni,
@@ -383,6 +387,7 @@ module ibex_top import ibex_pkg::*; import cheri_pkg::*; #(
     .debug_req_i,
     .crash_dump_o,
     .double_fault_seen_o,
+    .cheri_fatal_err_o(),
 
 `ifdef RVFI
     .rvfi_valid,

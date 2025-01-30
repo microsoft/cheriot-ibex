@@ -1892,8 +1892,8 @@ interface core_ibex_fcov_if import ibex_pkg::*; import cheri_pkg::*; import cher
       ignore_bins tagged_below = (binsof(cp_cs2_tag) intersect {1'b1}) with (cp_seal_bound_cases inside {4'b???1});
 
       // If zero is in bounds, it is the base.
-      ignore_bins tagged_zero = (binsof(cp_cs2_tag) intersect {1'b1})
-                                && (binsof(cp_cs2_seal_type) intersect {32'b0})
+      ignore_bins tagged_zero = ((binsof(cp_cs2_tag) intersect {1'b1})
+                               && (binsof(cp_cs2_seal_type) intersect {32'b0}))
                                 with (!cp_seal_bound_cases inside {4'b??1?});
 
       // Regardless of the tag, zero cannot be...
