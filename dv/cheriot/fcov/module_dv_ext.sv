@@ -513,7 +513,7 @@ module cheri_ex_dv_ext import ibex_pkg::*; import cheri_pkg::*; (
   input  logic           lsu_req_o,   
   input  logic           lsu_req_done_i,   
   input  logic           cpu_lsu_we,
-  input  logic [32:0]    cpu_lsu_wdata,
+  input  logic [31:0]    cpu_lsu_wdata,
   input  logic           cpu_lsu_is_cap,
   input  logic [31:0]    cpu_lsu_addr,
   input  logic           addr_incr_req_i,

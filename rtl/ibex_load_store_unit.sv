@@ -49,7 +49,7 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   input  logic         cpu_lsu_is_cap_i,     // kliu
   input  logic         cpu_lsu_cheri_err_i,  // kliu
   input  logic [1:0]   cpu_lsu_type_i,       // data type: word, half word, byte -> from ID/EX
-  input  logic [32:0]  cpu_lsu_wdata_i,      // data to write to memory          -> from ID/EX
+  input  logic [31:0]  cpu_lsu_wdata_i,      // data to write to memory          -> from ID/EX
   input  reg_cap_t     cpu_lsu_wcap_i,       // kliu
   input  logic [3:0]   cpu_lsu_lc_clrperm_i,
   input  logic         cpu_lsu_sign_ext_i,   // sign extension                   -> from ID/EX
@@ -58,7 +58,7 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   input  logic         cpu_grant_to_stkz_i, 
 
   output reg_cap_t     lsu_rcap_o,           // kliu
-  output logic [32:0]  lsu_rdata_o,          // requested data                   -> to ID/EX
+  output logic [31:0]  lsu_rdata_o,          // requested data                   -> to ID/EX
   output logic         lsu_rdata_valid_o,
   input  logic         cpu_lsu_req_i,        // data request                     -> from ID/EX
 
@@ -123,9 +123,9 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   logic [3:0]   data_be;
   logic [DataWidth-1:0]   data_wdata;
 
-  logic [32:0]  data_rdata_ext;
+  logic [31:0]  data_rdata_ext;
 
-  logic [32:0]  rdata_w_ext; // word realignment for misaligned loads
+  logic [31:0]  rdata_w_ext; // word realignment for misaligned loads
   logic [31:0]  rdata_h_ext; // sign extension for half words
   logic [31:0]  rdata_b_ext; // sign extension for bytes
 
@@ -155,7 +155,7 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   logic         lsu_is_cap;   
   logic         lsu_cheri_err; 
   logic [1:0]   lsu_type;
-  logic [32:0]  lsu_wdata;
+  logic [32:0]  lsu_wdata33;
   reg_cap_t     lsu_wcap;     
   logic [3:0]   lsu_lc_clrperm;
   logic         lsu_sign_ext;
@@ -177,9 +177,9 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   assign lsu_addr        = ~lsu_tbre_sel ? cpu_lsu_addr_i       : tbre_lsu_addr_i;
 
   if (DataMem65Bit) begin
-    assign lsu_wdata     = cpu_lsu_wdata_i;    //  tbre wdata mux hanled later (wdata_o)
+    assign lsu_wdata33   = {1'b0, cpu_lsu_wdata_i};    //  tbre wdata mux hanled later (wdata_o)
   end else begin
-    assign lsu_wdata     = ~lsu_tbre_sel ? cpu_lsu_wdata_i      : tbre_lsu_raw_wdata_i[32:0];
+    assign lsu_wdata33   = ~lsu_tbre_sel ? {cpu_lsu_wcap_i.valid, cpu_lsu_wdata_i} : tbre_lsu_raw_wdata_i;
   end
 
   assign lsu_is_cap      = ~lsu_tbre_sel ? cpu_lsu_is_cap_i     : tbre_lsu_is_cap_i;
@@ -194,7 +194,7 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
 
   always_comb begin
     if (CHERIoTEn & cheri_pmode_i & lsu_is_cap)
-      data_be = {DataWidth{1'b1}};        // caps are always word aligned
+      data_be = 4'b1111;                  // caps are always word aligned
     else begin
       unique case (lsu_type) // Data type 00 Word, 01 Half word, 11,10 byte
         2'b00: begin // Writing a word
@@ -256,11 +256,11 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   logic [32:0] wdata_int;
   always_comb begin
      unique case (data_offset)
-       2'b00:   wdata_int = lsu_wdata[32:0];
-       2'b01:   wdata_int = {1'b0, lsu_wdata[23:0], lsu_wdata[31:24]};
-       2'b10:   wdata_int = {1'b0, lsu_wdata[15:0], lsu_wdata[31:16]};
-       2'b11:   wdata_int = {1'b0, lsu_wdata[ 7:0], lsu_wdata[31: 8]};
-       default: wdata_int = lsu_wdata[32:0];
+       2'b00:   wdata_int = lsu_wdata33[32:0];
+       2'b01:   wdata_int = {1'b0, lsu_wdata33[23:0], lsu_wdata33[31:24]};
+       2'b10:   wdata_int = {1'b0, lsu_wdata33[15:0], lsu_wdata33[31:16]};
+       2'b11:   wdata_int = {1'b0, lsu_wdata33[ 7:0], lsu_wdata33[31: 8]};
+       default: wdata_int = lsu_wdata33[32:0];
      endcase // case (data_offset)
    end
 
@@ -271,7 +271,7 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
       if (CHERIoTEn & cheri_pmode_i & lsu_is_cap & ~lsu_tbre_sel) begin
         data_wdata[DataWidth-1:32] = CheriCapIT8 ? reg2memcap_it8_fmt0(lsu_wcap) : 
                                      reg2memcap_fmt0(lsu_wcap);
-        data_wdata[31:0] = lsu_wdata[31:0];
+        data_wdata[31:0] = lsu_wdata33[31:0];
       end else if (CHERIoTEn & cheri_pmode_i & lsu_is_cap) begin
         data_wdata = tbre_lsu_raw_wdata_i;
       end else begin
@@ -284,14 +284,14 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
         data_wdata = CheriCapIT8 ? reg2memcap_it8_fmt0(lsu_wcap): 
                                    reg2memcap_fmt0(lsu_wcap);
       else if (CHERIoTEn & cheri_pmode_i & lsu_is_cap)
-        data_wdata = lsu_wdata;
+        data_wdata = lsu_wdata33;
       else 
         data_wdata = wdata_int;
     end
   end else begin : gen_memcap_wr_fmt1
     logic [65:0] mem_capaddr;
-    assign mem_capaddr = CheriCapIT8 ? reg2mem_it8_fmt1(lsu_wcap, lsu_wdata) : 
-                                       reg2mem_fmt1(lsu_wcap, lsu_wdata);
+    assign mem_capaddr = CheriCapIT8 ? reg2mem_it8_fmt1(lsu_wcap, lsu_wdata33) : 
+                                       reg2mem_fmt1(lsu_wcap, lsu_wdata33);
 
     always_comb begin
       if (CHERIoTEn & lsu_is_cap && (ls_fsm_cs == CTX_WAIT_GNT2))
@@ -347,11 +347,11 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   // take care of misaligned words
   always_comb begin
     unique case (rdata_offset_q)
-      2'b00:   rdata_w_ext =  data_rdata_i[32:0];
-      2'b01:   rdata_w_ext = {1'b0, data_rdata_i[ 7:0], rdata_q[31:8]};
-      2'b10:   rdata_w_ext = {1'b0, data_rdata_i[15:0], rdata_q[31:16]};
-      2'b11:   rdata_w_ext = {1'b0, data_rdata_i[23:0], rdata_q[31:24]};
-      default: rdata_w_ext =  data_rdata_i[32:0];
+      2'b00:   rdata_w_ext = CHERIoTEn ? data_rdata_i[31:0] : data_rdata_i[31:0];
+      2'b01:   rdata_w_ext = {data_rdata_i[ 7:0], rdata_q[31:8]};
+      2'b10:   rdata_w_ext = {data_rdata_i[15:0], rdata_q[31:16]};
+      2'b11:   rdata_w_ext = {data_rdata_i[23:0], rdata_q[31:24]};
+      default: rdata_w_ext = data_rdata_i[31:0];
     endcase
   end
 
@@ -441,8 +441,8 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   always_comb begin
     unique case (data_type_q)
       2'b00:       data_rdata_ext = rdata_w_ext;
-      2'b01:       data_rdata_ext = {1'b0, rdata_h_ext};
-      2'b10,2'b11: data_rdata_ext = {1'b0, rdata_b_ext};
+      2'b01:       data_rdata_ext = rdata_h_ext;
+      2'b10,2'b11: data_rdata_ext = rdata_b_ext;
       default:     data_rdata_ext = rdata_w_ext;
     endcase // case (data_type_q)
   end
@@ -784,7 +784,6 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
                               (~cheri_pmode_i | (~resp_is_tbre));
 
   // output to register file
-  
   if (CHERIoTEn & DataMem65Bit) begin : gen_memcap_rd_65bit
     logic [32:0] rdata_msw, rdata_lsw;
     assign       rdata_msw = data_rdata_i[DataWidth-1:32];
@@ -796,12 +795,12 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
                                         mem2regcap_fmt0(rdata_msw, rdata_lsw, resp_lc_clrperm_q)) : NULL_REG_CAP;
 
   end else if (CHERIoTEn & ~MemCapFmt) begin : gen_memcap_rd_fmt0
-    assign lsu_rdata_o = (cheri_pmode_i & resp_is_cap_q) ? cap_lsw_q : data_rdata_ext;
+    assign lsu_rdata_o = (cheri_pmode_i & resp_is_cap_q) ? cap_lsw_q[31:0] : data_rdata_ext;
     assign lsu_rcap_o  = (resp_is_cap_q && data_rvalid_i && (cap_rx_fsm_q == CRX_WAIT_RESP2) && (~data_or_pmp_err)) ?
                          (CheriCapIT8 ? mem2regcap_it8_fmt0(data_rdata_i, cap_lsw_q, resp_lc_clrperm_q) :
                                         mem2regcap_fmt0(data_rdata_i, cap_lsw_q, resp_lc_clrperm_q)) : NULL_REG_CAP;
   end else if (CHERIoTEn) begin : gen_memcap_rd_fmt1
-    assign lsu_rdata_o = (cheri_pmode_i & resp_is_cap_q) ? mem2regaddr_fmt1(data_rdata_ext, cap_lsw_q, lsu_rcap_o): data_rdata_ext;
+    assign lsu_rdata_o = (cheri_pmode_i & resp_is_cap_q) ? mem2regaddr_fmt1(data_rdata_i, cap_lsw_q, lsu_rcap_o): data_rdata_ext;
     assign lsu_rcap_o  = (resp_is_cap_q && data_rvalid_i && (cap_rx_fsm_q == CRX_WAIT_RESP2) && (~data_or_pmp_err)) ?
                          (CheriCapIT8 ?  mem2regcap_it8_fmt1(data_rdata_i, cap_lsw_q, resp_lc_clrperm_q) :
                                          mem2regcap_fmt1(data_rdata_i, cap_lsw_q, resp_lc_clrperm_q)) : NULL_REG_CAP;

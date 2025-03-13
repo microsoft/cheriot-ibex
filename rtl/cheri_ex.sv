@@ -82,7 +82,7 @@ module cheri_ex import cheri_pkg::*; #(
   output logic          lsu_we_o,
   output logic [31:0]   lsu_addr_o,
   output logic [1:0]    lsu_type_o,
-  output logic [32:0]   lsu_wdata_o,
+  output logic [31:0]   lsu_wdata_o,
   output reg_cap_t      lsu_wcap_o,
   output logic          lsu_sign_ext_o,
   output logic          cpu_stall_by_stkz_o,
@@ -91,7 +91,6 @@ module cheri_ex import cheri_pkg::*; #(
   input  logic          addr_incr_req_i,
   input  logic [31:0]   addr_last_i,
   input  logic          lsu_req_done_i,
-  input  logic [32:0]   lsu_rdata_i,
   input  reg_cap_t      lsu_rcap_i,
 
   // LSU interface to the existing core (muxed)
@@ -145,7 +144,7 @@ module cheri_ex import cheri_pkg::*; #(
   logic          cheri_lsu_req;
   logic          cheri_lsu_we;
   logic [31:0]   cheri_lsu_addr;
-  logic [32:0]   cheri_lsu_wdata;
+  logic [31:0]   cheri_lsu_wdata;
   reg_cap_t      cheri_lsu_wcap;
   logic          cheri_lsu_err;
   logic          cheri_lsu_is_cap;
@@ -193,7 +192,7 @@ module cheri_ex import cheri_pkg::*; #(
 
   logic   [4:0]  cheri_err_cause, rv32_err_cause;
   logic   [31:0] cpu_lsu_addr;
-  logic   [32:0] cpu_lsu_wdata;
+  logic   [31:0] cpu_lsu_wdata;
   logic          cpu_lsu_we;
   logic          cpu_lsu_cheri_err, cpu_lsu_is_cap;
 
@@ -636,7 +635,7 @@ module cheri_ex import cheri_pkg::*; #(
   assign cheri_lsu_addr     = cs1_addr_plusimm + {29'h0, addr_incr_req_i, 2'b00};
   assign cheri_lsu_is_cap   = is_cap;
 
-  assign cheri_lsu_wdata    = is_store_cap ? {csc_wcap.valid, rf_rdata_b} : 33'h0;
+  assign cheri_lsu_wdata    = is_store_cap ? rf_rdata_b : 33'h0;
   assign cheri_lsu_wcap     = is_store_cap  ? csc_wcap : NULL_REG_CAP;
 
   // RS1/CS1+offset is
@@ -1044,7 +1043,7 @@ module cheri_ex import cheri_pkg::*; #(
   assign cpu_lsu_cheri_err = instr_is_cheri_i ? cheri_lsu_err : rv32_lsu_err; 
   assign cpu_lsu_addr      = instr_is_cheri_i ? cheri_lsu_addr : rv32_lsu_addr_i;
   assign cpu_lsu_we        = instr_is_cheri_i ? cheri_lsu_we : rv32_lsu_we_i;
-  assign cpu_lsu_wdata     = instr_is_cheri_i ? cheri_lsu_wdata : {1'b0, rv32_lsu_wdata_i};
+  assign cpu_lsu_wdata     = instr_is_cheri_i ? cheri_lsu_wdata : rv32_lsu_wdata_i;
   assign cpu_lsu_is_cap    = instr_is_cheri_i & cheri_lsu_is_cap;
 
   // muxing tbre ctrl inputs and CPU ctrl inputs

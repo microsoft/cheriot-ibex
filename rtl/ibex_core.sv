@@ -281,7 +281,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
 
   reg_cap_t    rf_wcap_fwd_wb;
 
-  logic [32:0] rf_wdata_lsu;
+  logic [31:0] rf_wdata_lsu;
   reg_cap_t    rf_wcap_lsu;
   logic        rf_we_wb;
   logic        rf_we_lsu;
@@ -331,7 +331,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
   logic [1:0]  cpu_lsu_type;
   logic        cpu_lsu_sign_ext;
   logic        cpu_lsu_req;
-  logic [32:0] cpu_lsu_wdata;
+  logic [31:0] cpu_lsu_wdata;
   reg_cap_t    cpu_lsu_wcap;
   logic        lsu_req_done;
 
@@ -939,7 +939,6 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
       .addr_incr_req_i      (lsu_addr_incr_req),
       .addr_last_i          (lsu_addr_last),
       .lsu_req_done_i       (lsu_req_done),
-      .lsu_rdata_i          (rf_wdata_lsu),
       .lsu_rcap_i           (rf_wcap_lsu),
       .rv32_lsu_req_i       (rv32_lsu_req),
       .rv32_lsu_we_i        (rv32_lsu_we),
@@ -1043,7 +1042,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .rf_trsv_addr_i    (rf_trsv_addr_o  ),
     .lsu_resp_valid_i  (lsu_resp_valid  ),
     .lsu_load_err_i    (lsu_load_err    ),
-    .rf_wdata_lsu_i    (rf_wdata_lsu[31:0]),
+    .rf_wdata_lsu_i    (rf_wdata_lsu    ),
     .rf_wcap_lsu_i     (rf_wcap_lsu     ),
     .lsu_resp_is_wr_i  (lsu_resp_is_wr),
     .lsu_tbre_resp_valid_i (lsu_tbre_resp_valid),
@@ -1238,7 +1237,7 @@ module ibex_core import ibex_pkg::*; import cheri_pkg::*; #(
     .cheri_rf_wdata_i (cheri_result_data),
     .cheri_rf_wcap_i  (cheri_result_cap),
 
-    .rf_wdata_lsu_i(rf_wdata_lsu[31:0]),
+    .rf_wdata_lsu_i(rf_wdata_lsu),
     .rf_wcap_lsu_i(rf_wcap_lsu),
     .rf_we_lsu_i   (rf_we_lsu),
 
