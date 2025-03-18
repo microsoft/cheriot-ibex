@@ -347,7 +347,7 @@ module ibex_load_store_unit import ibex_pkg::*; import cheri_pkg::*; #(
   // take care of misaligned words
   always_comb begin
     unique case (rdata_offset_q)
-      2'b00:   rdata_w_ext = CHERIoTEn ? data_rdata_i[31:0] : data_rdata_i[31:0];
+      2'b00:   rdata_w_ext = data_rdata_i[31:0];
       2'b01:   rdata_w_ext = {data_rdata_i[ 7:0], rdata_q[31:8]};
       2'b10:   rdata_w_ext = {data_rdata_i[15:0], rdata_q[31:16]};
       2'b11:   rdata_w_ext = {data_rdata_i[23:0], rdata_q[31:24]};
