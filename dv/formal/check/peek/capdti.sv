@@ -85,7 +85,6 @@ assign ex_in_sats =
   regCapSatsDTI(`CE.fwd_wcap_i, `CE.fwd_wdata_i) &&
   regCapSatsDTI(`CE.rf_rcap_a_i, `CE.rf_rdata_a_i) &&
   regCapSatsDTI(`CE.rf_rcap_b_i, `CE.rf_rdata_b_i) &&
-  regCapSatsDTI(`CE.lsu_rcap_i, `CE.lsu_rdata_i[31:0]) &&
   regCapSatsDTI(`CE.csr_rcap_i, `CE.csr_rdata_i) &&
   pccCapSatsDTI(`CE.pcc_cap_i, pcc_address_q);
 
