@@ -7,7 +7,6 @@ module cheri_ex import cheri_pkg::*; #(
   parameter bit          MemCapFmt      = 1'b0,
   parameter int unsigned HeapBase       = 32'h2001_0000,
   parameter int unsigned TSMapBase      = 32'h2002_f000,
-  parameter int unsigned TSMapSize      = 1024,
   parameter bit          CheriPPLBC     = 1'b1,
   parameter bit          CheriSBND2     = 1'b0,
   parameter bit          CheriStkZ      = 1'b1,
@@ -91,7 +90,6 @@ module cheri_ex import cheri_pkg::*; #(
   input  logic          addr_incr_req_i,
   input  logic [31:0]   addr_last_i,
   input  logic          lsu_req_done_i,
-  input  reg_cap_t      lsu_rcap_i,
 
   // LSU interface to the existing core (muxed)
   input  logic          rv32_lsu_req_i,
@@ -138,8 +136,6 @@ module cheri_ex import cheri_pkg::*; #(
   // debug feature
   input  logic          csr_dbg_tclr_fault_i
 );
-
-  localparam int unsigned TSMapTop = TSMapBase+TSMapSize*4;
 
   logic          cheri_lsu_req;
   logic          cheri_lsu_we;
