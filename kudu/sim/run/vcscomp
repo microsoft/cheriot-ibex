@@ -1,0 +1,6 @@
+export rtlRoot=../../rtl
+export primRoot=../../prim
+export dvutilsRoot=../../dv_utils
+export verifRoot=..
+
+vcs -full64 -sverilog -xlrm uniq_prior_final +systemverilogext+sv +lint=TFIPC-L +define+CHERIoT -timescale=1ns/1ps -debug_acc+all -f kudu.vcs.f $*
