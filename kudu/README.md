@@ -28,10 +28,8 @@ cheriot-kudu is 32-bit RISC-V microcontroller currently under development at Mic
  - CHERIoT extension (same as cheriot-ibex)
  - Backward compatibility mode (same as cheriot-ibex)
 
-cheriot-ibex provides a backward-compatibility mode which is enabled by setting the input cheri_pmode_i = 0. In this mode, all CHERIoT features are disabled. The cheriot-ibex core is logically equivalent to the non-CHERIoT ibex core and runs unmodified RV32IMC binaries.
-
 ## Build the design for simulation and emulation
-See the filelist (sim/run/kudu.vcs.f) and testbench files in sim/ directory.
+- For VCS simulation, wee the filelist (sim/run/kudu.vcs.f) and testbench files in sim/ directory.
 
 In addition, [cheriot-safe](https://github.com/microsoft/cheriot-safe) provides an open-source FPGA platform for emulation and prototyping, which is on the branch "kudu". 
 
