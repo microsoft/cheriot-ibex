@@ -119,7 +119,7 @@ module ibex_compressed_decoder # (
         unique case (instr_i[15:13])
           3'b000: begin
             // c.addi -> addi rd, rd, nzimm
-            // c.nop now maps to NOP in CHERIoT mode
+            // c.hint now maps to NOP in CHERIoT mode
             logic [4:0] rd_dec;
             logic [5:0] nzimm;
             nzimm   = {instr_i[12], instr_i[6:2]};
