@@ -28,6 +28,11 @@ cheriot-kudu is 32-bit RISC-V microcontroller currently under development at Mic
  - CHERIoT extension (same as cheriot-ibex)
  - Backward compatibility mode (same as cheriot-ibex)
 
+See the following block diagram for an overview of cheriot-kudu hardwared design.
+<br><br>
+
+![image](https://github.com/user-attachments/assets/d8337308-39fc-4907-abe5-26536c4ff03e)
+<br>
 ## Build the design for simulation and emulation
 - For VCS simulation, wee the filelist (sim/run/kudu.vcs.f) and testbench files in sim/ directory.
 
