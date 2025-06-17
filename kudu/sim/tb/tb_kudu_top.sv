@@ -155,6 +155,12 @@ module tb_kudu_top;
     .EarlyLoad   (1'b1),
     .TwoStageIR  (1'b1),
     .DCacheEn    (1'b0),
+    .NoMult      (1'b0),
+  `ifdef USE_DW
+    .UseDWMult   (1'b1),
+  `else
+    .UseDWMult   (1'b0),
+  `endif
     .HeapBase    (32'h8000_0000),
     .TSMapSize   (1024)
   ) dut (

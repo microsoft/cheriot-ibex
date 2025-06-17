@@ -11,6 +11,7 @@ module kudu_top import super_pkg::*;  #(
   parameter bit          InstrBufEn     = 1'b1,
   parameter bit          LoadFiltEn     = 1'b1,
   parameter bit          NoMult         = 1'b0,
+  parameter bit          UseDWMult      = 1'b0,
   parameter bit          UnalignedFetch = 1'b0,
   parameter int unsigned HeapBase  = 32'h2001_0000,
   parameter int unsigned TSMapSize = 1024
@@ -74,6 +75,7 @@ module kudu_top import super_pkg::*;  #(
   logic           ex_pc_set;
   logic [31:0]    ex_pc_target;            // Not-taken branch address in ID/EX
                                             // vectorized interrupt lines
+  logic           ex_bp_init;         
   ex_bp_info_t    ex_bp_info;         
                   
   logic [1:0]     ir_rdy;
@@ -190,6 +192,7 @@ module kudu_top import super_pkg::*;  #(
     .cheri_pmode_i           (cheri_pmode_i           ),
     .req_i                   (fetch_req               ),       
     .debug_mode_i            (1'b0                    ),
+    .boot_addr_i             (boot_addr_i             ),
     .instr_req_o             (instr_req_o             ),
     .instr_addr_o            (instr_addr_o            ),
     .instr_gnt_i             (instr_gnt_i             ),
@@ -202,6 +205,7 @@ module kudu_top import super_pkg::*;  #(
     .if_valid_o              (if_valid                ),
     .ex_pc_set_i             (ex_pc_set               ),   
     .ex_pc_target_i          (ex_pc_target            ),   
+    .ex_bp_init_i            (ex_bp_init              ),
     .ex_bp_info_i            (ex_bp_info              ),
     .if_busy_o               (                        )
   );                        
@@ -293,6 +297,7 @@ module kudu_top import super_pkg::*;  #(
     .fetch_req_o               (fetch_req               ),
     .pc_set_o                  (ex_pc_set               ),
     .pc_target_o               (ex_pc_target            ),   
+    .ex_bp_init_o              (ex_bp_init              ),
     .ex_bp_info_o              (ex_bp_info              ),
     .irq_pending_i             (irq_pending             ),
     .irqs_i                    (irqs                    ),
@@ -429,7 +434,11 @@ module kudu_top import super_pkg::*;  #(
     .csr_lsu_addr_o     (csr_lsu_addr      )
   );
 
-  mult_pipeline # (.CHERIoTEn(CHERIoTEn), .NoMult (NoMult)) mult_pipeline_i (
+  mult_pipeline # (
+    .CHERIoTEn  (CHERIoTEn), 
+    .NoMult     (NoMult), 
+    .UseDWMult  (UseDWMult)
+  ) mult_pipeline_i (
     .clk_i              (clk_i            ),
     .rst_ni             (rst_ni           ),
     .cheri_pmode_i      (cheri_pmode_i    ),

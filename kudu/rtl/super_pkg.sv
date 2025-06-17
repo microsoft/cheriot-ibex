@@ -39,6 +39,9 @@ package super_pkg;
     logic [31:0] pc;
     ir_errs_t    errs;             
     logic        is_comp;          // instr is compressed 
+    logic        is_branch;
+    logic        is_jal;
+    logic        is_jalr;
     logic [15:0] c_insn;           // for trace only
     logic        ptaken;
     logic [31:0] ptarget;

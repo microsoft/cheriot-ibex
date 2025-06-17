@@ -771,9 +771,6 @@ module cs_registers import super_pkg ::*; import csr_pkg::*; import cheri_pkg::*
   assign csr_rdata_o = csr_addr_is_cheri ? (cheri_pmode_i ? csr_rdata_cheri : csr_rdata_cheri[31:0]) : csr_rdata32;
 
 
-  assign csr_mshwm_o  = mshwm_q;
-  assign csr_mshwmb_o = mshwmb_q;
-
   assign csr_mstatus_mie_o   = mstatus_q.mie;
   assign csr_mstatus_tw_o    = mstatus_q.tw;
   assign debug_single_step_o = dcsr_q.step;

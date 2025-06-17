@@ -23,12 +23,14 @@ module if_stage import super_pkg::*; #(
   parameter bit          CompDecEn         = 1'b1,
   parameter bit          UnalignedFetch    = 1'b1
 ) (
-  input  logic                         clk_i,
-  input  logic                         rst_ni,
+  input  logic                        clk_i,
+  input  logic                        rst_ni,
 
-  input  logic                         cheri_pmode_i,
-  input  logic                         req_i,                    // instruction request control
-  input  logic                         debug_mode_i,
+  input  logic                        cheri_pmode_i,
+  input  logic                        req_i,                    // instruction request control
+  input  logic                        debug_mode_i,
+
+  input  logic [31:0]                 boot_addr_i,
 
   // instruction cache interface
   output logic                        instr_req_o,
@@ -48,6 +50,7 @@ module if_stage import super_pkg::*; #(
   input  logic                        ex_pc_set_i,              // set the PC to a new value
   input  logic [31:0]                 ex_pc_target_i,           // Not-taken branch address in ID/EX
                                                                 // vectorized interrupt lines
+  input  logic                        ex_bp_init_i, 
   input  ex_bp_info_t                 ex_bp_info_i, 
 
   // misc signals
@@ -100,6 +103,9 @@ module if_stage import super_pkg::*; #(
   branch_predict #(.InstrBufEn (InstrBufEn)) branch_predict_i (
     .clk_i               (clk_i            ),
     .rst_ni              (rst_ni           ),
+    .pdt_en_i            (1'b1             ),
+    .tbl_rst_val_i       (boot_addr_i      ),
+    .ex_bp_init_i        (ex_bp_init_i     ), 
     .ex_bp_info_i        (ex_bp_info_i     ), 
     .instr_gnt_i         (instr_gnt_i      ),
     .instr_rvalid_i      (instr_rvalid_i   ),

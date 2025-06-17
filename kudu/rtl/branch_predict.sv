@@ -13,7 +13,11 @@ module branch_predict import super_pkg::*; #(
   input  logic                clk_i,
   input  logic                rst_ni,
 
+  input  logic                pdt_en_i,
+  input  logic [31:0]         tbl_rst_val_i,
+
   // control signals
+  input  logic                ex_bp_init_i,
   input  ex_bp_info_t         ex_bp_info_i, 
 
   // from instr mem interface
@@ -117,11 +121,15 @@ module branch_predict import super_pkg::*; #(
   assign jtb_index1_spec0 = instr1_pc_spec0_i[JtbAW:1];
   assign jtb_index1_spec1 = instr1_pc_spec1_i[JtbAW:1];
 
-  assign is_branch[0] = dec_branch(fetch_instr0_i);
-  assign is_branch[1] = dec_branch(fetch_instr1_i);
+//  assign is_branch[0] = dec_branch(fetch_instr0_i);
+//  assign is_branch[1] = dec_branch(fetch_instr1_i);
+  assign is_branch[0] = fetch_instr0_i.is_branch;
+  assign is_branch[1] = fetch_instr1_i.is_branch;
 
-  assign is_jal[0] = dec_jal(fetch_instr0_i);
-  assign is_jal[1] = dec_jal(fetch_instr1_i);
+//  assign is_jal[0] = dec_jal(fetch_instr0_i);
+//  assign is_jal[1] = dec_jal(fetch_instr1_i);
+  assign is_jal[0] = fetch_instr0_i.is_jal;
+  assign is_jal[1] = fetch_instr1_i.is_jal;
 
   // update bht table and btb buffer based on information from EX stage only
   for (genvar i = 0; i < BhtSize; i++) begin : gen_bht
@@ -140,7 +148,9 @@ module branch_predict import super_pkg::*; #(
         bht[i] <= WeakT;
         btb[i] <= '{0, 0};
       end else begin
-        if (|bht_entry_sel) begin 
+        if (ex_bp_init_i) begin
+          btb[i] <= '{0, tbl_rst_val_i};
+        end else if (|bht_entry_sel) begin 
           bht[i] <= update_bht(bht[i], ex_branch_taken_muxed);
           if (ex_branch_taken_muxed) btb[i] <= '{1'b1, ex_branch_target_muxed};
         end
@@ -162,7 +172,10 @@ module branch_predict import super_pkg::*; #(
       if (!rst_ni) begin
         jtb[i] <= '{0, 0};
       end else begin
-        if (|jtb_entry_sel) jtb[i] <= '{1'b1, ex_jump_target_muxed};
+        if (ex_bp_init_i) 
+          jtb[i] <= '{0, tbl_rst_val_i};
+        else if (|jtb_entry_sel) 
+          jtb[i] <= '{1'b1, ex_jump_target_muxed};
       end
     end
 
@@ -193,23 +206,29 @@ module branch_predict import super_pkg::*; #(
   assign jtb_rdata[0] = jtb[jtb_index0];
   assign jtb_rdata[1] = fetch_instr0_i.is_comp ? jtb[jtb_index1_spec0] : jtb[jtb_index1_spec1];
 
-  assign pdt_branch_go[0] = is_branch[0] && ~bht_rdata[0][1] && btb_rdata[0].valid;
-  assign pdt_branch_go[1] = is_branch[1] && ~bht_rdata[1][1] && btb_rdata[1].valid;
+  // QQQ probably don't need the valid flag in BTB here
+  // assign pdt_branch_go[0] = is_branch[0] && ~bht_rdata[0][1] && btb_rdata[0].valid;
+  // assign pdt_branch_go[1] = is_branch[1] && ~bht_rdata[1][1] && btb_rdata[1].valid;
+  assign pdt_branch_go[0] = is_branch[0] && ~bht_rdata[0][1];
+  assign pdt_branch_go[1] = is_branch[1] && ~bht_rdata[1][1];
 
-  assign pdt_jal_go[0] = is_jal[0] && jtb_rdata[0].valid;
-  assign pdt_jal_go[1] = is_jal[1] && jtb_rdata[1].valid;
+  // assign pdt_jal_go[0] = is_jal[0] && jtb_rdata[0].valid;
+  // assign pdt_jal_go[1] = is_jal[1] && jtb_rdata[1].valid;
+  assign pdt_jal_go[0] = is_jal[0];
+  assign pdt_jal_go[1] = is_jal[1];
 
-  assign predict_pc_set_o = (fetch_valid_i[0] & ds_rdy_i[0] & (pdt_branch_go[0] | pdt_jal_go[0])) ||
-                            (fetch_valid_i[1] & ds_rdy_i[1] & (pdt_branch_go[1] | pdt_jal_go[1])) ;
+  assign predict_pc_set_o = pdt_en_i &
+                            ((fetch_valid_i[0] & ds_rdy_i[0] & (pdt_branch_go[0] | pdt_jal_go[0])) ||
+                             (fetch_valid_i[1] & ds_rdy_i[1] & (pdt_branch_go[1] | pdt_jal_go[1]))); 
 
   assign pdt_valid_o[0] = fetch_valid_i[0];
-  //assign pdt_valid_o[1] = fetch_valid_i[1] & ~((pdt_branch_go[0] & ~use_ibuf) | pdt_jal_go[0]);
-  assign pdt_valid_o[1] = use_ibuf | (fetch_valid_i[1] & ~(pdt_branch_go[0]| pdt_jal_go[0]));
+  assign pdt_valid_o[1] = pdt_en_i ? (use_ibuf | (fetch_valid_i[1] & ~(pdt_branch_go[0]| pdt_jal_go[0]))) :
+                          fetch_valid_i[1];
 
   // can only select ibuf_pc_nxt if downstream is ready to accept instr1
-  assign predict_pc_target_o = (use_ibuf & ds_rdy_i[1])? ibuf_pc_nxt : predict_target ;
-  assign pdt_instr0_o        = pdt_instr0;
-  assign pdt_instr1_o        = use_ibuf ? ibuf_instr : pdt_instr1;
+  assign predict_pc_target_o = pdt_en_i ? ((use_ibuf & ds_rdy_i[1])? ibuf_pc_nxt : predict_target) : 32'h0;
+  assign pdt_instr0_o        = pdt_en_i ? pdt_instr0 : fetch_instr0_i;
+  assign pdt_instr1_o        = pdt_en_i ? (use_ibuf ? ibuf_instr : pdt_instr1) : fetch_instr1_i;
 
   // generate output based on valdi/rdy status and pass on to next pipe stages
   always_comb begin
@@ -222,22 +241,27 @@ module branch_predict import super_pkg::*; #(
     pdt_instr1.ptaken  = 1'b0;
     pdt_instr1.ptarget = 32'h0;
 
-    predict_target = btb_rdata[0].target;
+    // predict_target = btb_rdata[0].target;
+
+    if (pdt_branch_go[0])
+      predict_target     = btb_rdata[0].target;
+    else if (pdt_jal_go[0]) 
+      predict_target     = jtb_rdata[0].target;
+    else if (pdt_branch_go[1])
+      predict_target     = btb_rdata[1].target;
+    else
+      predict_target     = jtb_rdata[1].target;
 
     if (pdt_branch_go[0]) begin
-      predict_target     = btb_rdata[0].target;
       pdt_instr0.ptaken  = 1'b1;
       pdt_instr0.ptarget = btb_rdata[0].target;
     end else if (pdt_jal_go[0]) begin
-      predict_target     = jtb_rdata[0].target;
       pdt_instr0.ptaken  = 1'b1;
       pdt_instr0.ptarget = jtb_rdata[0].target;
     end else if (pdt_branch_go[1]) begin
-      predict_target     = btb_rdata[1].target;
       pdt_instr1.ptaken  = 1'b1;
       pdt_instr1.ptarget = btb_rdata[1].target;
-    end else if (pdt_jal_go[1]) begin
-      predict_target     = jtb_rdata[1].target;
+    end else if (pdt_jal_go[1]) begin 
       pdt_instr1.ptaken  = 1'b1;
       pdt_instr1.ptarget = jtb_rdata[1].target;
     end

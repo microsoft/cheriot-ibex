@@ -18,7 +18,7 @@
 
 //`include "prim_assert.sv"
 
-module multdiv32 (
+module multdiv32 # (parameter bit UseDWMult = 1'b0) (
   input  logic              clk_i,
   input  logic              rst_ni,
   input  logic              mult_en_i,  // dynamic enable signal, for FSM control
@@ -82,41 +82,55 @@ module multdiv32 (
   
   // The 2-staged pipelined multipler 
   //  (if you can't use a DW component like dw_mult_pipe)
-
-  logic signed [16:0] mult_a0, mult_a1;
-  logic signed [8:0]  mult_b0, mult_b1, mult_b2, mult_b3;
-  logic signed [25:0] mult_im0, mult_im1, mult_im2, mult_im3;
-  logic signed [25:0] mult_im4, mult_im5, mult_im6, mult_im7;
-  logic signed [63:0] mult_result, mult_result0, mult_result1;
-  
+  logic signed [65:0] mult_result;
   logic               mult_sign_a, mult_sign_b;
   md_op_e             mult_op;
-
   assign mult_sign_a  = op_a_i[31] & signed_mode_i[0];
   assign mult_sign_b  = op_b_i[31] & signed_mode_i[1];
 
-  assign mult_a0 = {1'b0, op_a_i[15:0]};
-  assign mult_a1 = {mult_sign_a, op_a_i[31:16]};
+  if (UseDWMult) begin : gen_dw_mult
+    DW_mult_pipe #(
+      .a_width   (33),
+      .b_width   (33),
+      .num_stages(2),
+      .stall_mode(1),    // allow stalling
+      .rst_mode  (1)     // async reset
+    ) dw_mut_pipe_i (
+      .clk   (clk_i),
+      .rst_n (rst_ni),
+      .en    (mult_en_i),
+      .tc    (1'b1),     // 0: unsigned mode, 1: signed mode
+      .a     ({mult_sign_a, op_a_i}),
+      .b     ({mult_sign_b, op_b_i}),
+      .product (mult_result)
+    );
+  end else begin : gen_no_dw_mult
+    logic signed [16:0] mult_a0, mult_a1;
+    logic signed [8:0]  mult_b0, mult_b1, mult_b2, mult_b3;
+    logic signed [25:0] mult_im0, mult_im1, mult_im2, mult_im3;
+    logic signed [25:0] mult_im4, mult_im5, mult_im6, mult_im7;
+    logic signed [63:0] mult_result0, mult_result1;
+    
+    assign mult_a0 = {1'b0, op_a_i[15:0]};
+    assign mult_a1 = {mult_sign_a, op_a_i[31:16]};
 
-  assign mult_b0 = {1'b0, op_b_i[7:0]};
-  assign mult_b1 = {1'b0, op_b_i[15:8]};
-  assign mult_b2 = {1'b0, op_b_i[23:16]};
-  assign mult_b3 = {mult_sign_b, op_b_i[31:24]};
+    assign mult_b0 = {1'b0, op_b_i[7:0]};
+    assign mult_b1 = {1'b0, op_b_i[15:8]};
+    assign mult_b2 = {1'b0, op_b_i[23:16]};
+    assign mult_b3 = {mult_sign_b, op_b_i[31:24]};
 
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (~rst_ni) begin
-      mult_im0     <= 0;
-      mult_im1     <= 0;
-      mult_im2     <= 0;
-      mult_im3     <= 0;
-      mult_im4     <= 0;
-      mult_im5     <= 0;
-      mult_im6     <= 0;
-      mult_im7     <= 0;
-      mult_op      <= MD_OP_MULL;
-      mult_valid_o <= 1'b0;
-    end else begin 
-      if (mult_en_i) begin
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (~rst_ni) begin
+        mult_im0     <= 0;
+        mult_im1     <= 0;
+        mult_im2     <= 0;
+        mult_im3     <= 0;
+        mult_im4     <= 0;
+        mult_im5     <= 0;
+        mult_im6     <= 0;
+        mult_im7     <= 0;
+      end else if (mult_en_i) begin
         mult_im0 <= mult_a0 * mult_b0;
         mult_im1 <= mult_a0 * mult_b1;
         mult_im2 <= mult_a0 * mult_b2;
@@ -125,18 +139,26 @@ module multdiv32 (
         mult_im5 <= mult_a1 * mult_b1;
         mult_im6 <= mult_a1 * mult_b2;
         mult_im7 <= mult_a1 * mult_b3;
-        mult_op  <= operator_i;
       end
+    end 
 
+    assign mult_result0 = {{40{mult_im0[25]}}, mult_im0} + {{32{mult_im1[25]}}, mult_im1, 8'h0} + 
+                          {{24{mult_im2[25]}}, mult_im2, 16'h0} + {{16{mult_im3[25]}}, mult_im3, 24'h0};
+    assign mult_result1 = {{24{mult_im4[25]}}, mult_im4, 16'h0} + {{16{mult_im5[25]}}, mult_im5, 24'h0} +  
+                          {{8{mult_im6[25]}},  mult_im6, 32'h0} + {mult_im7, 40'h0};
+    assign mult_result  = mult_result0 + mult_result1;
+
+  end // gen_no_dw_mult
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (~rst_ni) begin
+      mult_op      <= MD_OP_MULL;
+      mult_valid_o <= 1'b0;
+    end else begin 
+      if (mult_en_i) mult_op  <= operator_i;
       mult_valid_o <= mult_en_i;
     end
-  end 
-
-  assign mult_result0 = {{40{mult_im0[25]}}, mult_im0} + {{32{mult_im1[25]}}, mult_im1, 8'h0} + 
-                        {{24{mult_im2[25]}}, mult_im2, 16'h0} + {{16{mult_im3[25]}}, mult_im3, 24'h0};
-  assign mult_result1 = {{24{mult_im4[25]}}, mult_im4, 16'h0} + {{16{mult_im5[25]}}, mult_im5, 24'h0} +  
-                        {{8{mult_im6[25]}},  mult_im6, 32'h0} + {mult_im7, 40'h0};
-  assign mult_result  = mult_result0 + mult_result1;
+  end
 
   assign mult_result_o = (mult_op == MD_OP_MULL) ? mult_result[31:0] :  mult_result[63:32]; 
 

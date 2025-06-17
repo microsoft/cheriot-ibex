@@ -146,7 +146,7 @@ module tracer import super_pkg::*; import tracer_pkg::*; import cheri_pkg::*; (
     logic [32:0] tmp33;
 
     if (file_handle == 32'h0) begin
-      string file_name_base = "trace_super";
+      string file_name_base = "trace_core";
       void'($value$plusargs("ibex_tracer_file_base=%s", file_name_base));
       $sformat(file_name, "%s_%h.log", file_name_base, hart_id_i);
 

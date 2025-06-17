@@ -77,6 +77,7 @@ module issuer import super_pkg::*; import cheri_pkg::*; import csr_pkg::*; # (
   output logic             fetch_req_o,
   output logic             pc_set_o,          // flushing prefetched instructions and move PC
   output logic [31:0]      pc_target_o,
+  output logic             ex_bp_init_o,      // to branch predictor
   output ex_bp_info_t      ex_bp_info_o,      // to branch predictor
                            
   // CSR interface         
@@ -505,7 +506,7 @@ module issuer import super_pkg::*; import cheri_pkg::*; import csr_pkg::*; # (
       end
 
       ctrl_fsm_cs[CSM_SLEEP]: begin
-        if (handle_irq) 
+        if (irq_pending_i)                 // don't look at MIE in sleep state
           ctrl_fsm_ns = 1 << CSM_DECODE;   // QQQ should we clear IF after exiting sleep? don't really see why..
       end
       
@@ -742,9 +743,12 @@ module issuer import super_pkg::*; import cheri_pkg::*; import csr_pkg::*; # (
 
     // QQQ add mcause and mtval later
   end
+
   //
   // feedback information to branch predictor
   //
+  assign ex_bp_init_o = ctrl_fsm_cs[CSM_BOOT_SET];
+
   assign ex_bp_info_o.is_branch  = {ir1_dec.is_branch, ir0_dec.is_branch} & {ir1_issued, ir0_issued};
   assign ex_bp_info_o.is_jal     = {ir1_dec.is_jal, ir0_dec.is_jal} & {ir1_issued, ir0_issued};
   assign ex_bp_info_o.taken      = branch_info_i.branch_taken;

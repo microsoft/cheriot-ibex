@@ -43,6 +43,33 @@ module fetch_fifo64 import super_pkg::*; #(
 
   localparam int unsigned DEPTH = NUM_REQS+1;
 
+  function automatic logic dec_branch(logic [15:0] insn16);
+    logic result;
+ 
+    if ((insn16[1:0] == 2'b01) && (insn16[15:14] == 2'b11))
+      result = 1'b1;         // C1, c.beqz, c.bnez
+    else if (insn16[6:0] == OPCODE_BRANCH)
+      result = 1'b1;
+    else
+      result = 1'b0;
+ 
+    return result;
+  endfunction
+
+  function automatic logic dec_jal(logic [15:0] insn16);
+    logic result;
+
+    if ((insn16[1:0] == 2'b01) && (insn16[14:13] == 2'b01))
+      result = 1'b1;          // C1, c.jal, c.j
+    else if (insn16[6:0] == OPCODE_JAL)
+      result = 1'b1;
+    else
+      result = 1'b0;
+
+    return result;
+  endfunction
+
+
   // index 0 is used for output
   logic [DEPTH-1:0] [64:0]  rdata_d,   rdata_q;
   logic [DEPTH-1:0]         err_d,     err_q;
@@ -61,11 +88,11 @@ module fetch_fifo64 import super_pkg::*; #(
   logic                     unused_addr_in;
 
   logic [1:0]   instr_xfr;
-  logic [7:0]   comp_flag;
+  logic [7:0]   comp_flag, branch_flag, jal_flag;
   logic [1:0]   instr_addr16;
   logic [127:0] rdata128;
   logic [2:0]   addr16_incr0, addr16_incr1;
-  logic [1:0]   out_is_comp;
+  logic [1:0]   out_is_comp, out_is_branch, out_is_jal;
   logic [31:0]  out_addr0;
   logic [31:0]  out_rdata0;
   logic [31:0]  out_addr1;
@@ -76,21 +103,25 @@ module fetch_fifo64 import super_pkg::*; #(
   /////////////////
   // Output port //
   /////////////////
-  assign out_instr0_o.insn    = out_rdata0;
-  assign out_instr0_o.pc      = out_addr0;
-  assign out_instr0_o.is_comp = out_is_comp[0];
-  assign out_instr0_o.errs    = ir_errs_t'({4'h0, fetch_err[0]});
+  assign out_instr0_o.insn      = out_rdata0;
+  assign out_instr0_o.pc        = out_addr0;
+  assign out_instr0_o.is_comp   = out_is_comp[0];
+  assign out_instr0_o.is_branch = out_is_branch[0];
+  assign out_instr0_o.is_jal    = out_is_jal[0];
+  assign out_instr0_o.errs      = ir_errs_t'({4'h0, fetch_err[0]});
 
-  assign out_instr0_o.ptaken  = 1'b0;
-  assign out_instr0_o.ptarget = 32'h0;
+  assign out_instr0_o.ptaken    = 1'b0;
+  assign out_instr0_o.ptarget   = 32'h0;
 
-  assign out_instr1_o.insn    = out_rdata1;
-  assign out_instr1_o.pc      = out_addr1;
-  assign out_instr1_o.is_comp = out_is_comp[1];
-  assign out_instr1_o.errs    = ir_errs_t'({4'h0, fetch_err[1]});
+  assign out_instr1_o.insn      = out_rdata1;
+  assign out_instr1_o.pc        = out_addr1;
+  assign out_instr1_o.is_comp   = out_is_comp[1];
+  assign out_instr1_o.is_branch = out_is_branch[1];
+  assign out_instr1_o.is_jal    = out_is_jal[1];
+  assign out_instr1_o.errs      = ir_errs_t'({4'h0, fetch_err[1]});
 
-  assign out_instr1_o.ptaken  = 1'b0;
-  assign out_instr1_o.ptarget = 32'h0;
+  assign out_instr1_o.ptaken    = 1'b0;
+  assign out_instr1_o.ptarget   = 32'h0;
 
 
   // QQQ fix this later
@@ -115,6 +146,8 @@ module fetch_fifo64 import super_pkg::*; #(
   
   for (genvar i = 0; i < 8; i++) begin : gen_comp_flag
     assign comp_flag[i]   = (rdata128[i*16+:2] != 2'b11);
+    assign branch_flag[i] = dec_branch(rdata128[i*16+:16]);  // pre-decode to help timing
+    assign jal_flag[i]    = dec_jal(rdata128[i*16+:16]);
   end
 
   // rdata 128 can be either
@@ -183,21 +216,29 @@ module fetch_fifo64 import super_pkg::*; #(
     end
 
     if (instr_addr16 == 2'h0) begin
-      out_rdata0 = rdata128[31:0];
-      out_rdata1 = comp_flag[0] ? rdata128[47:16] : rdata128[63:32]; 
+      out_rdata0    = rdata128[31:0];
+      out_rdata1    = comp_flag[0] ? rdata128[47:16] : rdata128[63:32]; 
       out_is_comp   = {(comp_flag[0] ? comp_flag[1] : comp_flag[2]), comp_flag[0]};
+      out_is_branch = {(comp_flag[0] ? branch_flag[1] : branch_flag[2]), branch_flag[0]};
+      out_is_jal    = {(comp_flag[0] ? jal_flag[1] : jal_flag[2]), jal_flag[0]};
     end else if (instr_addr16 == 2'h1) begin
-      out_rdata0 = rdata128[47:16];
-      out_rdata1 = comp_flag[1] ? rdata128[63:32] : rdata128[79:48];
+      out_rdata0    = rdata128[47:16];
+      out_rdata1    = comp_flag[1] ? rdata128[63:32] : rdata128[79:48];
       out_is_comp   = {(comp_flag[1] ? comp_flag[2] : comp_flag[3]), comp_flag[1]};
+      out_is_branch = {(comp_flag[1] ? branch_flag[2] : branch_flag[3]), branch_flag[1]};
+      out_is_jal    = {(comp_flag[1] ? jal_flag[2] : jal_flag[3]), jal_flag[1]};
     end else if (instr_addr16 == 2'h2) begin
-      out_rdata0 = rdata128[63:32];
-      out_rdata1 = comp_flag[2] ? rdata128[79:48] : rdata128[95:64];
+      out_rdata0    = rdata128[63:32];
+      out_rdata1    = comp_flag[2] ? rdata128[79:48] : rdata128[95:64];
       out_is_comp   = {(comp_flag[2] ? comp_flag[3] : comp_flag[4]), comp_flag[2]};
+      out_is_branch = {(comp_flag[2] ? branch_flag[3] : branch_flag[4]), branch_flag[2]};
+      out_is_jal    = {(comp_flag[2] ? jal_flag[3] : jal_flag[4]), jal_flag[2]};
     end else begin
-      out_rdata0 = rdata128[79:48];
-      out_rdata1 = comp_flag[3] ? rdata128[95:64] : rdata128[111:80];
+      out_rdata0    = rdata128[79:48];
+      out_rdata1    = comp_flag[3] ? rdata128[95:64] : rdata128[111:80];
       out_is_comp   = {(comp_flag[3] ? comp_flag[4] : comp_flag[5]), comp_flag[3]};
+      out_is_branch = {(comp_flag[3] ? branch_flag[4] : branch_flag[5]), branch_flag[3]};
+      out_is_jal    = {(comp_flag[3] ? jal_flag[4] : jal_flag[5]), jal_flag[3]};
     end
 
     // only increase outgoing pc if instruction transferred (valid & ready)

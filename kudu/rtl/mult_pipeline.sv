@@ -12,7 +12,8 @@
 
 module mult_pipeline import super_pkg::*; import cheri_pkg::*; import csr_pkg::*; # (
   parameter bit NoMult    = 1'b0,
-  parameter bit CHERIoTEn = 1'b0
+  parameter bit CHERIoTEn = 1'b0,
+  parameter bit UseDWMult = 1'b0
 ) (
   input  logic                 clk_i,
   input  logic                 rst_ni,
@@ -535,7 +536,7 @@ module mult_pipeline import super_pkg::*; import cheri_pkg::*; import csr_pkg::*
   //
 
   if (!NoMult) begin
-    multdiv32 multdiv32_i (
+    multdiv32 #(.UseDWMult(UseDWMult))  multdiv32_i (
       .clk_i               (clk_i              ),
       .rst_ni              (rst_ni             ),
       .mult_en_i           (md_mult_en         ),
