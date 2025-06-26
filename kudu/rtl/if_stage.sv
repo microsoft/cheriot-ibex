@@ -108,7 +108,6 @@ module if_stage import super_pkg::*; #(
     .ex_bp_init_i        (ex_bp_init_i     ), 
     .ex_bp_info_i        (ex_bp_info_i     ), 
     .instr_gnt_i         (instr_gnt_i      ),
-    .instr_rvalid_i      (instr_rvalid_i   ),
     .predict_pc_set_o    (predict_pc_set   ),
     .predict_pc_target_o (predict_pc_target),
     .fetch_valid_i       (fetch_valid      ),

@@ -283,6 +283,7 @@ module kudu_top import super_pkg::*;  #(
     .cmt_regwr_i               (cmt_regwr               ),
     .cmt_flush_o               (cmt_flush               ),    
     .sbdfifo_rd_valid_i        (sbdfifo_rd_valid        ),
+    .sbdfifo_wr_rdy_i          (sbdfifo_wr_rdy          ),  
     .sbdfifo_wr_valid_o        (sbdfifo_wr_valid        ),  
     .sbdfifo_wdata0_o          (sbdfifo_wdata0          ),  
     .sbdfifo_wdata1_o          (sbdfifo_wdata1          ),  

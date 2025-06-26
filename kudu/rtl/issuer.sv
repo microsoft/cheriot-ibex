@@ -59,6 +59,7 @@ module issuer import super_pkg::*; import cheri_pkg::*; import csr_pkg::*; # (
   input  logic [31:0]      cmt_regwr_i,
   output logic             cmt_flush_o,      
   input  logic [1:0]       sbdfifo_rd_valid_i,
+  input  logic [1:0]       sbdfifo_wr_rdy_i,
   output logic [1:0]       sbdfifo_wr_valid_o,
   output sbd_fifo_t        sbdfifo_wdata0_o,  
   output sbd_fifo_t        sbdfifo_wdata1_o,  
@@ -595,11 +596,14 @@ module issuer import super_pkg::*; import cheri_pkg::*; import csr_pkg::*; # (
   assign handle_irq     = irq_pending_i  & csr_mstatus_mie_i;
   assign handle_special = (ir_valid_i[0] & (ir_any_err[0] | ir_sysctl[0])) || handle_irq;
 
-  // instruction can't be issued for IRQ or exception case 
-  assign ex_enable[0] = (ctrl_fsm_cs[CSM_DECODE] & ~(handle_special | cmt_err_i)) |
-                        (ctrl_fsm_cs[CSM_ISSUE_SPECIAL] & (special_case_q == SYSCTL));
-  assign ex_enable[1] = ctrl_fsm_cs[CSM_DECODE] & ~(handle_special | cmt_err_i) & 
-                        ~(ir_any_err[1] | ir_sysctl[1]);
+  // instruction can't be issued for IRQ or exception case
+  // don't issue if sbdfifo goes full 
+  assign ex_enable[0] = sbdfifo_wr_rdy_i[0] &
+                        ((ctrl_fsm_cs[CSM_DECODE] & ~(handle_special | cmt_err_i)) |
+                         (ctrl_fsm_cs[CSM_ISSUE_SPECIAL] & (special_case_q == SYSCTL)));
+  assign ex_enable[1] = sbdfifo_wr_rdy_i[1] & 
+                        (ctrl_fsm_cs[CSM_DECODE] & ~(handle_special | cmt_err_i) & 
+                         ~(ir_any_err[1] | ir_sysctl[1]));
 
   //
   // Handling special instructions and IRQ
@@ -862,4 +866,3 @@ module issuer import super_pkg::*; import cheri_pkg::*; import csr_pkg::*; # (
 `endif
 
 endmodule     
-

@@ -22,7 +22,6 @@ module branch_predict import super_pkg::*; #(
 
   // from instr mem interface
   input  logic                instr_gnt_i,          
-  input  logic                instr_rvalid_i,          
 
   // to IF
   output logic                predict_pc_set_o,

@@ -6,6 +6,7 @@ $rtlRoot/super_pkg.sv
 $rtlRoot/dual_fifo.sv
 $rtlRoot/stage_fifo.sv
 $rtlRoot/wt_fifo.sv
+$rtlRoot/waw_tracking_fifo.sv
 $rtlRoot/regfile.sv
 $rtlRoot/ir_decoder.sv
 $rtlRoot/ir_stage.sv

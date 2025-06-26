@@ -169,6 +169,7 @@ module tracer_wrapper import super_pkg::*; import tracer_pkg::*; import cheri_pk
   logic [MemW-1:0] mem_wdata;
   logic [RegW-1:0] mem_rdata;
   logic [2:0]      rf_we_vec;
+  logic            load_waddr_conflict;
 
   assign cmt_pl0     = `TOP_PATH.sbdfifo_rdata0.pl;
   assign cmt_pl1     = `TOP_PATH.sbdfifo_rdata1.pl;
@@ -186,6 +187,8 @@ module tracer_wrapper import super_pkg::*; import tracer_pkg::*; import cheri_pk
   assign mem_wdata   = is_load ? 0 : `TOP_PATH.ls_pipeline_i.rvfi_mem_wdata;
   assign mem_rdata   = is_load ? `TOP_PATH.lspl_output.wdata : 0;
   assign rf_we_vec   = {`COMMITTER_PATH.rf_we2_o, `COMMITTER_PATH.rf_we1_o, `COMMITTER_PATH.rf_we0_o};
+
+  assign load_waddr_conflict = `COMMITTER_PATH.load_waddr_conflict;
 
   initial begin
     int         i;
@@ -246,7 +249,10 @@ module tracer_wrapper import super_pkg::*; import tracer_pkg::*; import cheri_pk
 
             // figure out the rf_we status for instr_b
             // RVFI requires to set rd_addr to 0 if rf_we is deasserted (trap, etc)
-            rf_we = instr_b.pl[3] ? rf_we_vec[2] : 
+            // if there is a load address conflict (load result over written by a subsequent isntr 
+            // commmited in the same cycle), display the trace as if the reg write from the load
+            // actually happened
+            rf_we = instr_b.pl[3] ? (rf_we_vec[2] | load_waddr_conflict) : 
                                    ((ex_pop_cnt == 0) ? rf_we_vec[0] : rf_we_vec[1]);
 
             // fill EX instruction info using pipeline outputs

@@ -46,7 +46,7 @@ module lsu_if import super_pkg::*; import cheri_pkg::*; # (
 
   // req only considered valid if not otherwise blocked
   assign valid_new_req = us_valid_i & lsif_rdy_o;
-  assign is_early_load = us_valid_i & lsu_req_dec_i.rf_we; // QQQ addr decoding
+  assign is_early_load = us_valid_i & lsu_req_dec_i.early_load;
 
   if (CHERIoTEn) begin : gen_req_check
     logic [7:0] cheri_check_result;

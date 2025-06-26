@@ -20,8 +20,9 @@
 //   
 //
 module dual_fifo # (
-  parameter int unsigned Depth   = 2,   // must be power of 2
-  parameter int unsigned Width   = 32
+  parameter int unsigned Depth        = 2,    // must be power of 2
+  parameter int unsigned Width        = 32,
+  parameter bit          PipelineRead = 1'b0  
 ) (
   input  logic              clk_i,
   input  logic              rst_ni,
@@ -65,7 +66,7 @@ module dual_fifo # (
   assign rd_ptr_p1 = rd_ptr_q + 1;
   assign rd_ptr_p2 = rd_ptr_q + 2;
 
-  assign cur_wr_depth  = wr_ptr_q - rd_ptr_nxt;  
+  assign cur_wr_depth  = PipelineRead ? (wr_ptr_q - rd_ptr_nxt) : (wr_ptr_q - rd_ptr_q);  
   assign cur_rd_depth  = wr_ptr_q - rd_ptr_q;
 
   // actual FIFO storage addresses

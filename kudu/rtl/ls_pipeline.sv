@@ -150,6 +150,10 @@ module ls_pipeline import super_pkg::*; import cheri_pkg::*; import csr_pkg::*; 
     lsu_req_dec.rs1        = instr_dec.rs1;
     lsu_req_dec.rd         = instr_dec.rd;
 
+    // QQQ will change to configurable value
+    lsu_req_dec.early_load = lsu_req_dec.rf_we && (lsu_req_dec.addr[31:24] == 8'h80);
+    lsu_req_dec.cache_ok   = (lsu_req_dec.addr[31:24] == 8'h80);
+
     if (cheri_pmode) lsu_req_dec.lschk_info =  build_lschk_info(cs1_fcap, cs2_fcap);
   end
 
@@ -241,10 +245,7 @@ module ls_pipeline import super_pkg::*; import cheri_pkg::*; import csr_pkg::*; 
     .wr_rdy_o    (wb_fifo_rdy   ), 
     .rd_rdy_i    (ds_rdy_i      ),
     .rd_valid_o  (lspl_valid    ),
-    .rd_data_o   (wb_fifo_rdata ),
-    .waw_req_i   (2'b00         ),
-    .waw_addr0_i (5'h0          ),
-    .waw_addr1_i (5'h0          )
+    .rd_data_o   (wb_fifo_rdata )
     );
 
   //
@@ -255,29 +256,25 @@ module ls_pipeline import super_pkg::*; import cheri_pkg::*; import csr_pkg::*; 
   assign waw_fifo_wvalid = us_valid_i & lspl_rdy_o;
   assign waw_fifo_wdata  = {1'b1, instr_dec.rd};
 
-  wt_fifo # (.Depth(8), .Width(6), .WaWTracking(1'b1)) waw_fifo_i (
-    .clk_i       (clk_i          ),
-    .rst_ni      (rst_ni         ),
-    .flush_i     (flush_i        ),
-    .wr_valid_i  (waw_fifo_wvalid),
-    .wr_data_i   (waw_fifo_wdata ),
-    .wr_rdy_o    (), 
-    .rd_rdy_i    (ds_rdy_i       ),
-    .rd_valid_o  (),
-    .rd_data_o   (waw_fifo_rdata ),
-    .waw_req_i   (waw_act_i.valid),
-    .waw_addr0_i (waw_act_i.rd0  ),
-    .waw_addr1_i (waw_act_i.rd1  )
+  waw_tracking_fifo # (.Depth(8)) waw_fifo_i (
+    .clk_i         (clk_i          ),
+    .rst_ni        (rst_ni         ),
+    .flush_i       (flush_i        ),
+    .wr_valid_i    (waw_fifo_wvalid),
+    .wr_data_i     (waw_fifo_wdata ),
+    .wr_rdy_o      (), 
+    .rd_rdy_i      (ds_rdy_i       ),
+    .rd_valid_o    (),
+    .rd_data_o     (waw_fifo_rdata ),
+    .waw_req_i     (waw_act_i.valid),
+    .waw_addr0_i   (waw_act_i.rd0  ),
+    .waw_addr1_i   (waw_act_i.rd1  )
     );
-
-  //
-  // WAW status tracking FIFO 
 
   //
   // Data Cache
   // 
   
-  // QQQ, keep this for now till we can modify dcache
   logic load_err, store_err;
 
   assign load_err  = lsu_resp_err & lsu_resp_info.we;
@@ -287,10 +284,13 @@ module ls_pipeline import super_pkg::*; import cheri_pkg::*; import csr_pkg::*; 
     dcache dcache_i (
       .clk_i            (clk_i           ),            
       .rst_ni           (rst_ni          ),
-      .instr_i          (instr_dec       ),
+      .flush_i          (flush_i         ),
+      .us_valid_i       (us_valid_i      ),
+      .lspl_rdy_i       (lspl_rdy_o      ),
+      .lsu_req_dec_i    (lsu_req_dec     ), 
       .lsu_req_i        (lsu_req         ),
       .lsu_req_info_i   (lsu_req_info    ),
-      .lsu_rdy_i        (lsu_req_done    ),
+      .lsu_req_done_i   (lsu_req_done    ),
       .lsu_resp_valid_i (lsu_resp_valid  ),
       .load_err_i       (load_err        ),
       .store_err_i      (store_err       ),
@@ -358,10 +358,7 @@ module ls_pipeline import super_pkg::*; import cheri_pkg::*; import csr_pkg::*; 
     .wr_rdy_o    (), 
     .rd_rdy_i    (ds_rdy_i       ),
     .rd_valid_o  (),
-    .rd_data_o   (rvfi_fifo_rdata ),
-    .waw_req_i   (2'b00         ),
-    .waw_addr0_i (5'h0          ),
-    .waw_addr1_i (5'h0          )
+    .rd_data_o   (rvfi_fifo_rdata )
     );
 
    assign rvfi_mem_addr  = rvfi_fifo_rdata[31:0];

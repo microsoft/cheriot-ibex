@@ -188,6 +188,8 @@ package super_pkg;
     logic [4:0]        rs1;
     logic [4:0]        rd;
     logic [31:0]       pc;
+    logic              early_load;
+    logic              cache_ok;
     cheri_lschk_info_t lschk_info;
   } lsu_req_info_t;
 

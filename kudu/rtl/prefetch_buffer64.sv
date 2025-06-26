@@ -14,7 +14,8 @@
  * paths to the instruction cache.
  */
 module prefetch_buffer64 import super_pkg::*; #(
-  parameter bit UnalignedFetch = 1'b1
+  parameter bit UnalignedFetch = 1'b1,
+  parameter bit RdataBypass    = 1'b1
 ) (
   input  logic        clk_i,
   input  logic        rst_ni,
@@ -69,11 +70,33 @@ module prefetch_buffer64 import super_pkg::*; #(
 
   logic                in_rdata_align64;
 
+  logic [63:0]         instr_rdata_in;
+  logic                instr_err_in;
+  logic                instr_rvalid_in;
+
   ////////////////////////////
   // Prefetch buffer status //
   ////////////////////////////
 
   assign busy_o = (|rdata_outstanding_q) | instr_req_o;
+
+  if (RdataBypass) begin : gen_rdata_bypass
+    assign instr_rdata_in  = instr_rdata_i;
+    assign instr_rvalid_in = instr_rvalid_i;
+    assign instr_err_in    = instr_err_i;
+  end else begin : gen_no_rdata_bypass
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+      if (!rst_ni) begin
+        instr_rdata_in  <= 64'h0;
+        instr_rvalid_in <= 1'b0;
+        instr_err_in    <= 1'b0;
+      end else begin
+        instr_rdata_in  <= instr_rdata_i;
+        instr_rvalid_in <= instr_rvalid_i;
+        instr_err_in    <= instr_err_i;
+      end
+    end
+  end
 
   //////////////////////////////////////////////
   // Fetch fifo - consumes addresses and data //
@@ -118,8 +141,8 @@ module prefetch_buffer64 import super_pkg::*; #(
 
       .in_valid_i            ( fifo_valid        ),
       .in_addr_i             ( fifo_addr         ),
-      .in_rdata_i            ( instr_rdata_i     ),
-      .in_err_i              ( instr_err_i       ),
+      .in_rdata_i            ( instr_rdata_in     ),
+      .in_err_i              ( instr_err_in       ),
       .in_rdata_align64_i    ( in_rdata_align64  ),
 
       .out_valid_o           ( valid_raw         ),
@@ -244,14 +267,14 @@ module prefetch_buffer64 import super_pkg::*; #(
     end
   end
 
-  // Shift the entries down on each instr_rvalid_i
-  assign rdata_outstanding_s = instr_rvalid_i ? {1'b0,rdata_outstanding_n[NUM_REQS-1:1]} :
+  // Shift the entries down on each instr_rvalid_in
+  assign rdata_outstanding_s = instr_rvalid_in ? {1'b0,rdata_outstanding_n[NUM_REQS-1:1]} :
                                                 rdata_outstanding_n;
-  assign branch_discard_s    = instr_rvalid_i ? {1'b0,branch_discard_n[NUM_REQS-1:1]} :
+  assign branch_discard_s    = instr_rvalid_in ? {1'b0,branch_discard_n[NUM_REQS-1:1]} :
                                                 branch_discard_n;
 
   // Push a new entry to the FIFO once complete (and not cancelled by a branch)
-  assign fifo_valid = instr_rvalid_i & ~branch_discard_q[0];
+  assign fifo_valid = instr_rvalid_in & ~branch_discard_q[0];
 
   assign fifo_addr = addr_i;
 
