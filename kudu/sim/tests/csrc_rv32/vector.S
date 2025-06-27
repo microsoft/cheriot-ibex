@@ -1,0 +1,34 @@
+.section .text
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+   j default_handler
+

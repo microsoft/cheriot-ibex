@@ -154,7 +154,7 @@ module tb_kudu_top;
     .DualIssue   (1'b1),
     .EarlyLoad   (1'b1),
     .TwoStageIR  (1'b1),
-    .DCacheEn    (1'b0),
+    .DCacheEn    (1'b1),
     .NoMult      (1'b0),
   `ifdef USE_DW
     .UseDWMult   (1'b1),

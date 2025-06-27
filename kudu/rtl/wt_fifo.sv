@@ -10,8 +10,7 @@
 //
 module wt_fifo # (
   parameter int unsigned Depth       = 2,    // must be power of 2
-  parameter int unsigned Width       = 32,
-  parameter bit          WaWTracking = 1'b0
+  parameter int unsigned Width       = 32
 ) (
   input  logic              clk_i,
   input  logic              rst_ni,
@@ -24,11 +23,7 @@ module wt_fifo # (
 
   input  logic              rd_rdy_i,
   output logic              rd_valid_o,
-  output logic [Width-1:0]  rd_data_o,
-
-  input  logic [1:0]        waw_req_i,
-  input  logic [4:0]        waw_addr0_i,
-  input  logic [4:0]        waw_addr1_i
+  output logic [Width-1:0]  rd_data_o
   );
 
   localparam int unsigned      PtrW    = $clog2(Depth)+1;
@@ -42,7 +37,6 @@ module wt_fifo # (
   logic [PtrW-2:0] rd_mem_addr;
 
   logic [Width-1:0] fifo_mem[Depth];
-  logic [Width-1:0] waw_mask; 
 
   logic wr_rdy, rd_valid;
   logic wr_data_en;
@@ -104,7 +98,6 @@ module wt_fifo # (
   // Generate storage flops and write enable logic
   // Tracking regWr requests to maintain WaW status  
 
-  assign waw_mask = WaWTracking ? 6'h20 : Width'(0);
 
   for (genvar i=0; i < Depth; i++) begin : gen_fifo_mem
     always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -112,9 +105,6 @@ module wt_fifo # (
         fifo_mem[i] <= 0;
       end else if (wr_data_en && (i == wr_mem_addr)) begin
         fifo_mem[i] <= wr_data_i;
-      end else if (WaWTracking & ((waw_req_i[0] && (fifo_mem[i][4:0] == waw_addr0_i)) ||
-                                  (waw_req_i[1] && (fifo_mem[i][4:0] == waw_addr1_i)))) begin
-        fifo_mem[i] <= fifo_mem[i] & (~waw_mask);
       end
     end
   end

@@ -1,0 +1,34 @@
+.section .text
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+   j mtvec
+
