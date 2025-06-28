@@ -14,10 +14,15 @@ _start:
         li x11, 0x8001fff0       # setup sp
         csetaddr csp, c3, x11
 
-        
+#ifndef NEW_COMPILER        
         # cspecialr ct0, mtcc    
 1:      auipcc  ct1, %cheri_compartment_pccrel_hi(mtvec)
         cincoffset ct1, ct1, %cheri_compartment_pccrel_lo(1b)
+#else
+1:      auipcc  ct1, %cheriot_compartment_hi(mtvec)
+        cincoffset ct1, ct1, %cheriot_compartment_lo_i(1b)
+#endif
+
 
         #csetaddr ct0, ct0, t1
         #cspecialw mtcc, ct0       
