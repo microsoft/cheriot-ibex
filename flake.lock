@@ -71,11 +71,11 @@
     "lowrisc_cheriot_sail": {
       "flake": false,
       "locked": {
-        "lastModified": 1736265471,
-        "narHash": "sha256-suOmvnFPpdH2fA/UpdMNVfE3GJh8yNzcekMy0Xv4aEA=",
+        "lastModified": 1751378461,
+        "narHash": "sha256-UWu5fPr+1ScxhxvBKSBe9AY54bfjTXLxsCErg45z/yI=",
         "ref": "formal",
-        "rev": "7bc3904957cd20337973ea7b63af3838eae4d93c",
-        "revCount": 471,
+        "rev": "ac58b3f809656a4ad8ffe876c279e95bb0898362",
+        "revCount": 472,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/lowrisc/cheriot-sail"
