@@ -254,7 +254,7 @@ module ibex_controller #(
   assign illegal_insn_d = illegal_insn_i | illegal_dret | illegal_umode;
   assign cheri_ex_err_d = cheri_pmode_i & cheri_ex_err & (ctrl_fsm_cs != FLUSH);
 
-  assign cheri_asr_err_d = (~illegal_insn_i & csr_cheri_asr_err) | mret_cheri_asr_err;
+  assign cheri_asr_err_d = ~debug_mode_q & (~illegal_insn_i & csr_cheri_asr_err) | mret_cheri_asr_err;
 
   // exception requests
   // requests are flopped in exc_req_q.  This is cleared when controller is in
