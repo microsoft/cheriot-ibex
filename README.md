@@ -21,13 +21,13 @@ Use of Microsoft trademarks or logos in modified versions of this project must n
 Any use of third-party trademarks or logos are subject to those third-party's policies.
 
 ## Introduction
-cheriot-ibex is 32-bit RISC-V microcontroller which implements the CHERIoT ISA extension in addition to RV32IMCB. Same as the original ibex core, the design can be configured either with a 2-stage or a 3-stage pipeline. It has passed preliminary simulation, formal verification and FPGA validation, and is currently under further verification at Microsoft.
+cheriot-ibex is 32-bit RISC-V microcontroller which implements the CHERIoT ISA extension in addition to RV32IMCB. Same as the original ibex core, the design can be configured either with a 2-stage or a 3-stage pipeline. It has passed simulation, formal verification, FPGA validation at Microsoft and our partners. Recently SCI Semiconductors has released the [ICENI SoC device](https://www.scisemi.com/products/iceni-device-family/) which incorporates cheriot-ibex as its MCU core.
 
 ![image](https://github.com/microsoft/cheriot-ibex/assets/116126768/51b768f5-a528-4d93-bce4-392ac2fe1488)
 
 ## CHERIoT ISA support
 
-cheriot-ibex supports all instructions listed in the [CHERIoT ISA specification](https://github.com/microsoft/cheriot-sail/tree/main/archdoc), including
+Cheriot-ibex supports all instructions listed in the [CHERIoT ISA specification](https://github.com/microsoft/cheriot-sail/tree/main/archdoc), including
 
 - To query or test capabilities: cgetaddr, cgetbase, cgethigh, cgetlen, cgetperm, cgettag, cgettop, cgettype, ctestsubset, csetequalexact, csub, csethigh
 - To modify or derive capabilities: auicgp, auipcc, candperm, ccleartag, cincaddr, cincaddrimm, cmove, cram, crrl, csetaddr, csetbounds, csetboundsexact, csetboundsimm, cseal, cunseal
@@ -39,11 +39,11 @@ Certain compressed instructions are also extended for capabilities, for example 
 
 ## Register file
 
-cheriot-ibex contains a register file implementation (cheri_regfile.sv) which extends a configurable number of the general purpose registers into CherIoT capabilities.
+Cheriot-ibex contains a register file implementation (cheri_regfile.sv) which extends a configurable number of the general purpose registers into CherIoT capabilities.
 
 ## Load-store unit
 
-cheriot-ibex extends its data bus to 33-bit, where the MSB 1-bit is used as a valid tag to differentiate between capabilities and normal integer data. The load-store unit is modified to support atomic capability load and store transactions according to the CherIoT ISA specification.
+Cheriot-ibex extends its data bus to 33-bit, where the MSB 1-bit is used as a valid tag to differentiate between capabilities and normal integer data. The load-store unit is modified to support atomic capability load and store transactions according to the CherIoT ISA specification.
 
 ## Configuration and status registers
 
@@ -63,7 +63,7 @@ The PC capability register (PCC) is also implemented as part of the CSR module.
 
 ## CherIoT memory access rule checking
 
-cheriot-ibex performs capability-based memory access rule checking including
+Cheriot-ibex performs capability-based memory access rule checking including
 - data load/store accesses
 - capability load/store accesses
 - Instruction fetch (PCC-based)
@@ -88,29 +88,24 @@ Note that the main CPU pipeline, TBRE and STKZ all use the load-store unit to ac
 
 ## Backward compatibility
 
-cheriot-ibex provides a backward-compatibility mode which is enabled by setting the input cheri_pmode_i = 0. In this mode, all CHERIoT features are disabled. The cheriot-ibex core is logically equivalent to the non-CHERIoT ibex core and runs unmodified RV32IMC binaries.
+Cheriot-ibex provides a backward-compatibility mode which is enabled by setting the input cheri_pmode_i = 0. In this mode, all CHERIoT features are disabled. The cheriot-ibex core is logically equivalent to the non-CHERIoT ibex core and runs unmodified RV32IMC binaries.
 
 ## Design configuration parameters
 
-cheriot-ibex design added the following configuration parameters,
+Cheriot-ibex design added the following configuration parameters,
 
 | Parameter | Description |
 | ----------- | ----------- |
 | CHERIoTEn  | Master enable of CHERIoT features. <br /> 0: disabes CHERIoT functionality <br /> 1: Enables CHERIoT functionality. |
-| DataWidth  | Data bus width for load/store interface. <br /> Use 32 when CHERIoTEn = 0, 33 when CHERIoTEn = 1. |
-| CheriPPLBC | Configures pipelined implementation of load-barrier CLC. <br />  0: non-pipelined implementation <br />  1: pipelined implementation (better performance but needs a separate memory read interface).|
-| CheriSBND2 | Selects number of cycles taken by csetbounds* instructions. <br /> 0: csetbounds* takes 1 cycle. <br /> 1: csetbounds* takes 2 cycle (better fmax timing). |
+| DataWidth  | Data bus width for load/store interface. <br /> Use 32 when CHERIoTEn = 0, 33 or 65 when CHERIoTEn = 1. |
 | CheriTBRE | Configures the TBRE and STKZ. <br /> 0: Disables TBRE/STKZ. <br /> 1: Enables TBRE/STKZ.
-| MemCapFmt | Selects the format used to store capabilities in memory. <br /> 0: use canonical memory capbility format. <br /> 1: use the alternative memory capability format (better memory access timing). |
 |HeapBase|32-bit starting address of the system heap memory. <br /> only capabilities whose base pointing to an address in the heap space are subject to load-barrier checks during CLC.|
-|TSMapSize|size of the shadow bits memory (in 32-bit words) used by the load-barrier operation. <br /> e.g., 1024 = 32k bits which covers 256kB heap memory. <br />This parameter is only used when CheriPPLSBC == 1.|
 |TSMapBase|Starting address of the shadow bits memory <br /> This parameter is only used when CheriPPLSBC == 0.|
-|TSMapTop|Ending address of the shadow bits memory <br /> This parameter is only used when CheriPPLSBC == 0.|
-
+|TSMapSize|size of the shadow bits memory (in 32-bit words) used by the load-barrier operation. <br /> e.g., 1024 = 32k bits which covers 256kB heap memory. <br />This parameter is only used when CheriPPLSBC == 1.|
 
 ## Debug support
 
-cheriot-ibex supports cheri-aware RISC-V debugging via JTAG interface. The debug module is published separately at (link). General-purpose capability registers and SCR's can both be accessed via the JTAG interface. SBA accesses are supported as well.
+Cheriot-ibex supports cheri-aware RISC-V debugging via JTAG interface. The debug module is published separately at (link). General-purpose capability registers and SCR's can both be accessed via the JTAG interface. SBA accesses are supported as well.
 
 To debug capability-related software issues, cheriot-ibex also provides a debug feature which when enabled, escalates tag-clearing events defined in the CherIoT ISA spec (e.g, csetbounds length violations) into exceptions. Writing a 0x1 to the CDBGCTRL SCR (address 27) to enable this feature.
 
@@ -118,7 +113,7 @@ To debug capability-related software issues, cheriot-ibex also provides a debug 
 
 A PPA study conducted at Microsoft shows that cheriot-ibex is similar to the original ibex design in terms of area and power, however with moderate increase in area. 
 
-cheriot-ibex (configured as 3-stage pipeline) has been synthesized successfully using Synopsys DC-topo at 250MHz using TSMC 28nm (28LP) libraries (ss 1.03v) and 550MHz using TSMC 5nm (N5) libraries (ss 0.6v). Timing is mostly limited by TCM read access time (which approaches 1.6ns in the N5 case). 
+Cheriot-ibex (configured as 3-stage pipeline) has been synthesized successfully using Synopsys DC-topo at 250MHz using TSMC 28nm (28LP) libraries (ss 1.03v) and 550MHz using TSMC 5nm (N5) libraries (ss 0.6v). Timing is mostly limited by TCM read access time (which approaches 1.6ns in the N5 case). 
 
 The design area is ~60k gate equivalents. Both dynamic and leakage power are shown as similar to the original ibex design.
 
@@ -126,5 +121,5 @@ The design area is ~60k gate equivalents. Both dynamic and leakage power are sho
 ## Build the design for simulation and emulation
 See [README-CHERI.md](https://github.com/microsoft/cheriot-ibex/blob/main/README-CHERI.md) for the list of RTL files need to compile/simulate/synthesize the cheriot_ibex design.
 
-In addition, [cheriot-safe](https://github.com/microsoft/cheriot-safe) provides an open-source FPGA platform for emulation and prototyping. 
+In addition, The [Microsoft cheriot-safe platform](https://github.com/microsoft/cheriot-safe) and the [lowRISC Sonata platform](https://lowrisc.github.io/sonata-system/) are both open-source FPGA platforms that are designed to provide emulation and prototyping support for cheriot-ibex. 
 
