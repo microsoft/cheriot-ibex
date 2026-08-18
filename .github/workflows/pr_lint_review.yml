@@ -13,14 +13,14 @@ jobs:
   review_triggered:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@0717577d45739eb3c851188b29f50ed6c0b2194e # v2.8.0
 
       # this workflow does not run in a PR context
       # download 'event.json' file from a PR-tiggered workflow
       # to mock the PR context and make a review
       - name: 'Download artifact'
         id: get-artifacts
-        uses: actions/github-script@v3.1.0
+        uses: actions/github-script@47f7cf65b5ced0830a325f705cad64f2f58dddf7 # v3.1.0
         with:
           script: |
             var artifacts = await github.actions.listWorkflowRunArtifacts({
