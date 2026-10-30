@@ -1093,7 +1093,11 @@ module cheri_ex import cheri_pkg::*; #(
   if (CheriStkZ) begin
     logic lsu_addr_in_stkz_range, stkz_stall_q;
 
-    assign lsu_addr_in_stkz_range = cpu_lsu_dec_o && (cpu_lsu_addr[31:4] >= stkz_base_i[31:4]) && 
+    // The LSU consults the stall only before an access's first request, so an
+    // unaligned access whose first word is the word below the base, and whose
+    // second word is the base (zeroed last), must stall on its first word.
+    assign lsu_addr_in_stkz_range = cpu_lsu_dec_o && ((cpu_lsu_addr[31:4] >= stkz_base_i[31:4]) ||
+                                    (cpu_lsu_addr[31:2] + 30'd1 == stkz_base_i[31:2])) &&
                                     (cpu_lsu_addr[31:2] < stkz_ptr_i[31:2]);
 
     // cpu_lsu_dec_o is meant to be an early hint to help LSU to generate mux selects for 
