@@ -1743,17 +1743,17 @@ end
   assign rvfi_mem_rcap  = rvfi_stage_mem_rcap[RVFI_STAGES-1];
   assign rvfi_mem_wcap  = rvfi_stage_mem_wcap[RVFI_STAGES-1];
 
-  // for HINT instructions like c.srai64/c.slli64, force rvfi_rd_addr output to 0 to match sail implementation
+  // for HINT instructions like c.srai64/c.srli64, force rvfi_rd_addr output to 0 to match sail implementation
   assign rvfi_rd_addr   = insn_c_hint ? 0 : rvfi_stage_rd_addr [RVFI_STAGES-1];
 
   always_comb begin
     if ((rvfi_insn[1:0] == 2'b01) && (rvfi_insn[15:13] == 3'b100) && (rvfi_insn[11:10] == 2'b00) &&      // c.srli64
        ({rvfi_insn[12], rvfi_insn[6:2]} == 6'h0) &&
-        (rvfi_rs1_addr == rvfi_rd_addr) && (rvfi_rs1_rdata == rvfi_rd_wdata))
+        (rvfi_rs1_addr == rvfi_stage_rd_addr[RVFI_STAGES-1]) && (rvfi_rs1_rdata == rvfi_rd_wdata))
       insn_c_hint = 1'b1;
     else if ((rvfi_insn[1:0] == 2'b01) && (rvfi_insn[15:13] == 3'b100) && (rvfi_insn[11:10] == 2'b01) && // c.srai64
        ({rvfi_insn[12], rvfi_insn[6:2]} == 6'h0) &&
-        (rvfi_rs1_addr == rvfi_rd_addr) && (rvfi_rs1_rdata == rvfi_rd_wdata))
+        (rvfi_rs1_addr == rvfi_stage_rd_addr[RVFI_STAGES-1]) && (rvfi_rs1_rdata == rvfi_rd_wdata))
       insn_c_hint = 1'b1;
     else 
       insn_c_hint = 1'b0;
