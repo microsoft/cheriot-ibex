@@ -119,13 +119,13 @@ module ibex_compressed_decoder # (
         unique case (instr_i[15:13])
           3'b000: begin
             // c.addi -> addi rd, rd, nzimm
-            // c.hint now maps to NOP in CHERIoT mode
+            // c.addi hint (nzimm == 0) maps to NOP (rs1 also zeroed so that x16-x31 do not trap)
             logic [4:0] rd_dec;
             logic [5:0] nzimm;
             nzimm   = {instr_i[12], instr_i[6:2]};
-            rd_dec  = (CHERIoTEn & cheri_pmode_i && (nzimm == 6'h0)) ? 5'h0 : instr_i[11:7];
+            rd_dec  = (nzimm == 6'h0) ? 5'h0 : instr_i[11:7];
             instr_o = {{6 {instr_i[12]}}, instr_i[12], instr_i[6:2],
-                       instr_i[11:7], 3'b0, rd_dec, {OPCODE_OP_IMM}};
+                       rd_dec, 3'b0, rd_dec, {OPCODE_OP_IMM}};
           end
 
           3'b001, 3'b101: begin
@@ -167,9 +167,11 @@ module ibex_compressed_decoder # (
               2'b01: begin
                 // 00: c.srli -> srli rd, rd, shamt
                 // 01: c.srai -> srai rd, rd, shamt
-                // (c.srli/c.srai hints are translated into a srli/srai hint)
-                instr_o = {1'b0, instr_i[10], 5'b0, instr_i[6:2], 2'b01, instr_i[9:7],
-                           3'b101, 2'b01, instr_i[9:7], {OPCODE_OP_IMM}};
+                // (c.srli/c.srai hints (shamt == 0) map to NOP so that rd and its tag are unchanged)
+                logic [4:0] rd_dec;
+                rd_dec  = ({instr_i[12], instr_i[6:2]} == 6'h0) ? 5'h0 : {2'b01, instr_i[9:7]};
+                instr_o = {1'b0, instr_i[10], 5'b0, instr_i[6:2], rd_dec,
+                           3'b101, rd_dec, {OPCODE_OP_IMM}};
                 if (instr_i[12] == 1'b1)  illegal_instr_o = 1'b1;
               end
 
@@ -249,8 +251,10 @@ module ibex_compressed_decoder # (
         unique case (instr_i[15:13])
           3'b000: begin
             // c.slli -> slli rd, rd, shamt
-            // (c.ssli hints are translated into a slli hint)
-            instr_o = {7'b0, instr_i[6:2], instr_i[11:7], 3'b001, instr_i[11:7], {OPCODE_OP_IMM}};
+            // (c.slli hints (shamt == 0) map to NOP so that rd (and its tag) is unchanged)
+            logic [4:0] rd_dec;
+            rd_dec  = ({instr_i[12], instr_i[6:2]} == 6'h0) ? 5'h0 : instr_i[11:7];
+            instr_o = {7'b0, instr_i[6:2], rd_dec, 3'b001, rd_dec, {OPCODE_OP_IMM}};
             if (instr_i[12] == 1'b1)  illegal_instr_o = 1'b1; // reserved for custom extensions
           end
 
@@ -277,8 +281,10 @@ module ibex_compressed_decoder # (
             if (instr_i[12] == 1'b0) begin
               if (instr_i[6:2] != 5'b0) begin
                 // c.mv -> add rd/rs1, x0, rs2
-                // (c.mv hints are translated into an add hint)
-                instr_o = {7'b0, instr_i[6:2], 5'b0, 3'b0, instr_i[11:7], {OPCODE_OP}};
+                // (c.mv hints (rd == 0) map to NOP; rs2 zeroed so that x16-x31 do not trap)
+                logic [4:0] rs2_dec;
+                rs2_dec = (instr_i[11:7] == 5'h0) ? 5'h0 : instr_i[6:2];
+                instr_o = {7'b0, rs2_dec, 5'b0, 3'b0, instr_i[11:7], {OPCODE_OP}};
               end else begin
                 // c.jr -> jalr x0, rd/rs1, 0
                 instr_o = {12'b0, instr_i[11:7], 3'b0, 5'b0, {OPCODE_JALR}};
@@ -287,8 +293,10 @@ module ibex_compressed_decoder # (
             end else begin
               if (instr_i[6:2] != 5'b0) begin
                 // c.add -> add rd, rd, rs2
-                // (c.add hints are translated into an add hint)
-                instr_o = {7'b0, instr_i[6:2], instr_i[11:7], 3'b0, instr_i[11:7], {OPCODE_OP}};
+                // (c.add hints (rd == 0) map to NOP; rs2 zeroed so that x16-x31 do not trap)
+                logic [4:0] rs2_dec;
+                rs2_dec = (instr_i[11:7] == 5'h0) ? 5'h0 : instr_i[6:2];
+                instr_o = {7'b0, rs2_dec, instr_i[11:7], 3'b0, instr_i[11:7], {OPCODE_OP}};
               end else begin
                 if (instr_i[11:7] == 5'b0) begin
                   // c.ebreak -> ebreak
